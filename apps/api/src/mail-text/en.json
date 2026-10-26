@@ -12,11 +12,21 @@
     "subject": "You are invited to Tela",
     "heading": "You are invited to Tela"
   },
+  "joining": {
+    "subject": "Welcome to Tela",
+    "heading": "Welcome to Tela"
+  },
   "reset": {
     "subject": "Reset your Tela password",
     "heading": "Reset your Tela password",
     "intro": "Enter this code to choose a new password. It expires in one hour, and choosing one signs you out everywhere.",
     "outro": "If you did not ask for this, you can ignore this email: your password stays as it is."
+  },
+  "closeAccount": {
+    "subject": "Your code to delete your Tela account",
+    "heading": "Delete your Tela account",
+    "intro": "Enter this code in Settings to delete your account. It expires in one hour, and a deleted account cannot be brought back.",
+    "outro": "If you did not ask for this, someone may be signed in as you: your account stays as it is, and Sign out everywhere in Settings → Account ends their session."
   },
   "notice": {
     "ifYou": "If that was you, there is nothing to do.",

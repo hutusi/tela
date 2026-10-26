@@ -91,6 +91,27 @@ everything so far sits under `[Unreleased]`.
 
 ### Added
 
+- **Ready to open to everyone** (ADRs 0056–0063). Sign-up can open to anyone and close again from
+  the console, with no deploy and a daily cap on new accounts; the operator's limits and budgets
+  are settings, changed and undone there or with `bun run admin set`. Members can delete their
+  account from Settings with a mailed code (what others see goes at once, the rest within
+  minutes, the handle is retired and every device signs out), release a claimed blog, and export
+  more of their data (claims, invite codes, reading history, their picture). Ordinary accounts get
+  20 new translations a day, 20 blogs new to Tela a day (the rest of an import arrives on the days
+  after) and 300 subscriptions; a translation past the day's count, or past the site's 10 million
+  tokens, waits for the next UTC day instead of failing, and titles take the newest posts first.
+  The operator is mailed when the day's budget runs low, sign-ups surge or reports wait. Members
+  can report a profile, blogroll, blog or note, and the console has a Reports queue and can suspend
+  or delete an account. Privacy and Terms say all of it, with a contact address.
+- **Findable in four languages** (ADRs 0060–0062). Every public page can be pinned to a language
+  with `?hl=`, with canonical and hreflang links, share cards and structured data; robots.txt
+  welcomes search engines and AI answer tools but keeps training crawlers to Tela's own copy;
+  sitemaps and `/llms.txt`; profiles and blogs are indexed only once time or an operator vouches
+  for them. A public blogroll and Discover are RSS and OPML too. For writers is a page in four
+  languages on how Tela reads a blog, how to claim one and how to opt out: a writer can choose
+  "Only use what my feed provides", and Tela's page fetches obey robots.txt.
+- **A restore drill**: `bun run restore-drill` restores the newest nightly export into a scratch
+  database and checks it; the first run, on 2026-10-25, brought back all 76,330 rows.
 - **Blogrolls** (ADR 0050). A member keeps named lists of blogs to share, each blog with a note,
   private until they make one public. A public blogroll has a page of its own at `/l/<id>`,
   rendered for visitors too, a place on its owner's profile, and, from three blogs, a place in

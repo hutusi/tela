@@ -589,4 +589,34 @@ describe('the app-shell service worker', () => {
       expect([path, answered]).toEqual([path, false])
     }
   })
+
+  test('a navigation to a file (a feed, robots.txt) is the network, never the shell', async () => {
+    live = build('A')
+    const sw = await start()
+    await visit(sw)
+    expect(await caches.file('/')).toEqual(shellOf(live))
+    for (const path of [
+      '/l/abcdefABCDEF.rss',
+      '/l/abcdefABCDEF.opml?hl=fr',
+      '/discover.opml',
+      '/discover/articles.rss?topic=tech',
+      '/robots.txt',
+    ]) {
+      let answered = false
+      sw.handlers.get('fetch')?.({
+        request: request(path, 'navigate'),
+        respondWith: () => {
+          answered = true
+        },
+        waitUntil: () => undefined,
+      })
+      expect([path, answered]).toEqual([path, false])
+    }
+    // The pages around them still get the shell.
+    for (const path of ['/l/abcdefABCDEF', '/discover/articles', '/@reader_1']) {
+      const nav = dispatch(sw, request(path, 'navigate'))
+      expect([path, await (await nav.response).text()]).toEqual([path, live.html])
+      await nav.settled()
+    }
+  })
 })

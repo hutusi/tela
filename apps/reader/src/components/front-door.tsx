@@ -9,8 +9,9 @@
  * - The sheet is a native modal `<dialog>`, as `AvatarCrop` is: the browser traps focus and Esc
  *   cancels it.
  *
- * Google and GitHub are offered only once tela-api says they are configured
- * (`/api/v1/public/auth`, remembered on the device so the next sheet shows them at once).
+ * Google and GitHub are offered only once tela-api says they are configured, and the invite code
+ * is asked for only while joining needs one (`lib/door-config.ts`, ADR 0056): while sign-up is
+ * open it is optional, shown when a link brought one, or while today's places are taken.
  *
  * A claim (For writers) is a join or a log-in that makes the visitor's card on the way in
  * (`lib/claim-card.ts`). Where signing in outlives the sheet (Google's or GitHub's round trip, a
@@ -21,6 +22,7 @@ import { createContext, useCallback, useContext, useEffect, useId, useRef, useSt
 import { Link, Navigate, useLocation, useNavigate } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { type CardClaim, claimPath, finishCard, takeClaim } from '../lib/claim-card'
+import { askDoorConfig, nextUtcMidnight, useDoorConfig } from '../lib/door-config'
 import {
   type DoorMode,
   doorRoutes,
@@ -28,7 +30,6 @@ import {
   type MailLink,
   PASSWORD_MAX,
   PASSWORD_MIN,
-  PROVIDERS,
   type Provider,
   providerError,
   type SignInError,
@@ -106,50 +107,6 @@ export function opensSheet(e: React.MouseEvent): boolean {
   )
 }
 
-/** The providers tela-api offers, as last heard on this device. */
-const PROVIDERS_KEY = 'tela.auth-providers'
-
-function heardProviders(): Provider[] {
-  try {
-    const kept: unknown = JSON.parse(localStorage.getItem(PROVIDERS_KEY) ?? '[]')
-    return PROVIDERS.filter((p) => Array.isArray(kept) && kept.includes(p))
-  } catch {
-    return []
-  }
-}
-
-/**
- * Google and GitHub, when tela-api has them: a 404 is a tela-api that predates the endpoint, and
- * offers neither. Anything else that fails keeps what the device last heard.
- */
-function useProviders(): Provider[] {
-  const [providers, setProviders] = useState<Provider[]>(heardProviders)
-  useEffect(() => {
-    let live = true
-    fetch('/api/v1/public/auth', { credentials: 'same-origin' })
-      .then(async (res) => {
-        if (res.status === 404) return []
-        if (!res.ok) return null
-        const flags = (await res.json()) as Partial<Record<Provider, unknown>>
-        return PROVIDERS.filter((p) => flags[p] === true)
-      })
-      .then((heard) => {
-        if (!live || heard === null) return
-        setProviders(heard)
-        try {
-          localStorage.setItem(PROVIDERS_KEY, JSON.stringify(heard))
-        } catch {
-          // Not remembered: the next sheet asks again before it shows them.
-        }
-      })
-      .catch(() => {})
-    return () => {
-      live = false
-    }
-  }, [])
-  return providers
-}
-
 const FIELD =
   'h-11 w-full rounded-[10px] border border-thumb px-3.5 text-[15px] text-ink outline-none placeholder:text-muted focus:border-ink'
 const PRIMARY =
@@ -192,6 +149,14 @@ export type DoorFormProps = {
   claim?: CardClaim | undefined
 }
 
+/**
+ * The words for an error. While sign-up is open a code that is no code is something to put right
+ * or leave out, which the invite-only words do not say.
+ */
+export function errorKey(error: SignInError, open: boolean): string {
+  return open && error === 'invalid_code' ? 'invalid_code_optional' : error
+}
+
 export function DoorForm(props: DoorFormProps) {
   const t = useTranslations('door')
   const { mode, place } = props
@@ -206,17 +171,39 @@ export function DoorForm(props: DoorFormProps) {
     onDone: props.onDone,
     claim: props.claim,
   })
-  const providers = useProviders()
+  const { providers, signup } = useDoorConfig()
+  // Joining needs an invite code unless sign-up is open (ADR 0056). A device that has not heard
+  // yet asks for one, as an invite-only Tela does, and lets go of it when the answer comes.
+  const open = signup?.mode === 'open'
+  const paused = open && signup.paused
   const [email, setEmail] = useState(props.link?.email ?? '')
   const [password, setPassword] = useState('')
   // Log in opens on the password (ADR 0043); the code is one press away.
   const [usePassword, setUsePassword] = useState(true)
   const [invite, setInvite] = useState(props.invite ?? '')
+  // While open, the code field stays for a code to claim (a link's, or one typed before the answer
+  // came), and while today's places are taken, since only a code joins then.
+  const [keepCode, setKeepCode] = useState(Boolean(props.invite))
   const [otp, setOtp] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const { step, busy, connecting } = door
   const form = useRef<HTMLFormElement>(null)
   const sentId = useId()
+  const askCode = !open || paused || keepCode
+  const codeShown = mode === 'join' && step.kind === 'start' && askCode
+  // The code field comes and goes as the switch is heard, not as a step changes: one that went
+  // with the focus in it hands the focus on to the address, where the sheet would have put it, and
+  // one that came (a refusal said a code is needed after all) takes it.
+  const hadCode = useRef(askCode)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: on each change of the switch alone; a step's own focus is the effect below's
+  useEffect(() => {
+    const had = hadCode.current
+    hadCode.current = askCode
+    if (had === askCode || mode !== 'join' || step.kind !== 'start') return
+    const lost = document.activeElement === null || document.activeElement === document.body
+    if (askCode) form.current?.querySelector<HTMLElement>('[name="invite"]')?.focus()
+    else if (lost) form.current?.querySelector<HTMLElement>('[name="email"]')?.focus()
+  }, [askCode])
   // A new step starts with its own fields empty.
   // biome-ignore lint/correctness/useExhaustiveDependencies: on each change of step, by its kind
   useEffect(() => {
@@ -259,7 +246,7 @@ export function DoorForm(props: DoorFormProps) {
       void door.verify(step.email, otp, step.joining ? newPassword : '')
     else if (step.kind === 'reset') void door.reset(step.email, otp, newPassword)
     else if (step.kind === 'unsaved') door.goOn()
-    else if (joining) void door.join(invite, email)
+    else if (joining) void door.join(invite, email, open)
     else if (usePassword) void door.logIn(email, password)
     else void door.sendCode(email)
   }
@@ -340,17 +327,25 @@ export function DoorForm(props: DoorFormProps) {
       <form ref={form} onSubmit={submit} className="flex flex-col gap-3" data-testid="login-form">
         {step.kind === 'start' ? (
           <>
-            {joining ? (
+            {joining && paused ? (
+              <p className="text-sm leading-relaxed text-ink-2" data-testid="door-paused">
+                {t('paused', { at: new Date(nextUtcMidnight(Date.now())) })}
+              </p>
+            ) : null}
+            {codeShown ? (
               <input
                 name="invite"
                 autoComplete="off"
                 autoCapitalize="characters"
                 spellCheck={false}
-                required
+                required={!open}
                 value={invite}
-                onChange={(e) => setInvite(e.target.value)}
-                placeholder={t('invite')}
-                aria-label={t('invite')}
+                onChange={(e) => {
+                  setInvite(e.target.value)
+                  if (e.target.value) setKeepCode(true)
+                }}
+                placeholder={t(open ? 'inviteOptional' : 'invite')}
+                aria-label={t(open ? 'inviteOptional' : 'invite')}
                 data-testid="join-code"
                 {...(invite ? {} : { 'data-autofocus': true })}
                 className={`${field} font-mono tracking-wider`}
@@ -390,7 +385,7 @@ export function DoorForm(props: DoorFormProps) {
               placeholder={t('emailPlaceholder')}
               aria-label={t('email')}
               data-testid="login-email"
-              {...(joining && !invite ? {} : { 'data-autofocus': true })}
+              {...(codeShown && !invite ? {} : { 'data-autofocus': true })}
               className={field}
             />
             {usePassword && !joining ? (
@@ -421,10 +416,13 @@ export function DoorForm(props: DoorFormProps) {
           </>
         ) : step.kind === 'code' ? (
           <>
-            {/* A join always mails a code; a log-in mails one only to an account or an invitation,
-                and says nothing of which. */}
+            {/* A join always mails a code, and so does a log-in while sign-up is open and the day
+                has room; otherwise a log-in mails one only to an account or an invitation, and
+                says nothing of which. */}
             <p id={sentId} className="text-sm text-ink-2">
-              {t(step.joining ? 'joinSent' : 'codeSent', { email: step.email })}
+              {t(step.joining || (open && !paused) ? 'joinSent' : 'codeSent', {
+                email: step.email,
+              })}
             </p>
             {codeField}
             {step.joining ? joinPassword : null}
@@ -471,7 +469,10 @@ export function DoorForm(props: DoorFormProps) {
           </p>
         ) : door.error ? (
           <p role="alert" className="text-[13px] text-danger" data-testid="door-error">
-            {t(`errors.${door.error}`, { min: PASSWORD_MIN })}
+            {t(`errors.${errorKey(door.error, open)}`, {
+              min: PASSWORD_MIN,
+              at: new Date(nextUtcMidnight(Date.now())),
+            })}
           </p>
         ) : null}
         <button
@@ -507,7 +508,9 @@ export function DoorForm(props: DoorFormProps) {
       </form>
       {step.kind === 'start' && joining ? (
         <div className="flex flex-col gap-1.5 text-[13px] leading-relaxed text-muted">
-          <p>{t('noCode')}</p>
+          {/* Only once this device has heard that joining needs a code: while sign-up is open
+              nothing says Tela is invite-only, not even for the moment before the answer. */}
+          {signup?.mode === 'invite' ? <p>{t('noCode')}</p> : null}
           <p>
             {/* In a tab of their own: the sheet, and the invite code in it, stay where they are. */}
             {t.rich('agree', {
@@ -667,6 +670,11 @@ export function FrontDoorProvider({ children }: { children: React.ReactNode }) {
   here.current = location.pathname
   const opened = useRef(0)
   const [request, setRequest] = useState<Opened | null>(null)
+  // Asked as the app starts, so a sheet opened later shows the switch as it is, not as this
+  // device last heard it; each sheet asks again as it opens.
+  useEffect(() => {
+    void askDoorConfig()
+  }, [])
   // Whether the open sheet's form is carrying a sign-in through (`DoorForm`'s `onCarrying`).
   const [carrying, setCarrying] = useState(false)
   const open = useCallback((next: DoorRequest) => {

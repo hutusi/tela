@@ -23,7 +23,7 @@ import {
   utcDay,
 } from '@tela/data'
 import type { Blobs } from '@tela/platform'
-import { MAX_ARTICLE_TRANSLATION_TOKENS } from '@tela/shared'
+import { bodySpendFor, MAX_ARTICLE_TRANSLATION_TOKENS } from '@tela/shared'
 import {
   ADMIN_LIST_LIMIT,
   type AdminFilter,
@@ -163,8 +163,11 @@ async function systemList(
   }
 }
 
+// `siteBudget` came with ADR 0057, which made a budget of 0 mean paused and null none: a tick from
+// before it reported 0 for no limit, and is read as no config at all rather than as a pause.
 const RUNNING_CONFIG_KEYS = [
   'backgroundBudget',
+  'siteBudget',
   'maxArticleTokens',
   'translator',
   'relay',
@@ -177,8 +180,10 @@ export function configOf(info: Record<string, unknown> | undefined): AdminHeartb
   const config = info?.config as Record<string, unknown> | undefined
   if (!config || typeof config !== 'object') return null
   if (!RUNNING_CONFIG_KEYS.every((k) => k in config)) return null
+  const budget = (v: unknown) => (v === null || v === undefined ? null : Number(v))
   return {
-    backgroundBudget: Number(config.backgroundBudget),
+    backgroundBudget: budget(config.backgroundBudget),
+    siteBudget: budget(config.siteBudget),
     maxArticleTokens: Number(config.maxArticleTokens),
     translator: config.translator === true,
     relay: config.relay === true,
@@ -261,21 +266,24 @@ async function systemDetail(
 /**
  * What a body retried may spend, and the budget it is held to. A body retried runs as background
  * work (no member reserved it), and nothing on its way checks the budget the titles are held to,
- * so it reserves its tokens there itself, as a member's request reserves on theirs: the post's
- * ceiling, which the job caps it at. The budget and the ceiling are the ones tela-jobs reported
- * with its last tick; a budget of none, or 0, is no limit.
+ * so it reserves its tokens there itself, as a member's request reserves on theirs: the whole
+ * spend of a post at the ceiling (`bodySpendFor`), whose source tokens the job caps it at. The
+ * budget and the ceiling are the ones tela-jobs reported with its last tick (ADR 0057): null is no
+ * limit, 0 paused. A tick from before that reported no `siteBudget`, and its 0 meant no limit.
  */
-async function bodyAllowance(db: TelaDb): Promise<{ reserve: number; budget: number }> {
-  const row = await first<{ budget: number | null; ceiling: number | null }>(
+async function bodyAllowance(db: TelaDb): Promise<{ reserve: number; budget: number | null }> {
+  const row = await first<{ budget: number | null; site: unknown; ceiling: number | null }>(
     db,
     sql`select json_extract(info, '$.config.backgroundBudget') as budget,
+      json_type(info, '$.config.siteBudget') as site,
       json_extract(info, '$.config.maxArticleTokens') as ceiling
       from ops_heartbeats where name = 'tick'`,
   )
   const ceiling = Number(row?.ceiling ?? 0)
+  const budget = row?.budget === null || row?.budget === undefined ? null : Number(row.budget)
   return {
-    reserve: ceiling > 0 ? ceiling : MAX_ARTICLE_TRANSLATION_TOKENS,
-    budget: Number(row?.budget ?? 0),
+    reserve: bodySpendFor(ceiling > 0 ? ceiling : MAX_ARTICLE_TRANSLATION_TOKENS),
+    budget: row?.site === null || row?.site === undefined ? budget || null : budget,
   }
 }
 
@@ -302,7 +310,7 @@ const retryDead: ActHandler = async (ctx, id) => {
   })
   // In the batch, so each retry of a bulk sees the tokens the ones before it reserved.
   const overBudget =
-    body && body.budget > 0
+    body && body.budget !== null
       ? [
           db.run(sql`
             insert into lease_fence (x) select null

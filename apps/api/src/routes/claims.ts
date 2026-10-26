@@ -7,13 +7,25 @@
  * nothing exists until the member asks for the check, and a `pending` claim is always one they
  * asked for: the verify sweep claims `pending` rows, and a row made at "start" would be checked
  * before the token could be on the page.
+ *
+ * A claimant may also let their blog go (`POST /:siteId/release`, ADR 0058), as an operator's
+ * removal does, keeping what they chose for it.
  */
-import { bumpSeq, claimDue, consumeLimit, currentSeq, dueClaims, first } from '@tela/data'
+import {
+  bumpSeq,
+  claimDue,
+  consumeLimit,
+  currentSeq,
+  dueClaims,
+  first,
+  releaseClaim,
+} from '@tela/data'
 import { claimReason, describeClaimError } from '@tela/shared'
 import { sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import type { ApiEnv } from '../app'
 import type { ApiDeps } from '../deps'
+import { feedLimitAnswer } from './feeds'
 
 const CLAIM_TTL_MS = 4 * 60_000
 const META_NAME = 'tela-site-verification'
@@ -111,8 +123,18 @@ export function claimRoutes(deps: ApiDeps) {
     if (!(await consumeLimit(db, 'claimStart', member.id, deps.clock.now())).allowed) {
       return c.json({ error: 'rate_limited' }, 429)
     }
-    const started = await deps.ingest.startClaim({ url: body.url, actorId: member.id })
-    if ('error' in started) return c.json(started, started.error === 'invalid_url' ? 400 : 422)
+    // A claim that brings a feed new to Tela counts against the member's day (ADR 0063).
+    const started = await deps.ingest.startClaim({
+      url: body.url,
+      actorId: member.id,
+      withinDay: true,
+    })
+    if ('error' in started) {
+      if (started.error === 'feed_limit') {
+        return c.json(await feedLimitAnswer(db, deps.clock.now()), 429)
+      }
+      return c.json(started, started.error === 'invalid_url' ? 400 : 422)
+    }
     return c.json(await standing(started.siteId, member.id))
   })
 
@@ -152,6 +174,24 @@ export function claimRoutes(deps: ApiDeps) {
     const claimId = rows[0]?.id
     if (claimId !== undefined) await checkClaimSoon(deps, claimId, now)
     return c.json(await standing(siteId, member.id))
+  })
+
+  /**
+   * Let the member's own blog go (ADR 0058): the claim fails as released, and the blog loses its
+   * owner, the feeds it declared and a listing only the claim opened, as an operator's removal
+   * does (`releaseClaim`). Its opt-outs stay as the writer set them. 404 `not_owner` for a blog
+   * that is not the member's. The member may claim it again, by any proof.
+   */
+  routes.post('/:siteId/release', async (c) => {
+    const member = c.get('member')
+    const siteId = Number(c.req.param('siteId'))
+    if (!Number.isSafeInteger(siteId)) return c.json({ error: 'not_owner' }, 404)
+    const [, released] = (await db.batch([
+      bumpSeq(db),
+      ...releaseClaim(db, { siteId, userId: member.id, by: 'member', now: deps.clock.now() }),
+    ] as never)) as unknown as [unknown, { id: number }[]]
+    if (released.length === 0) return c.json({ error: 'not_owner' }, 404)
+    return c.json({ released: true })
   })
 
   return routes

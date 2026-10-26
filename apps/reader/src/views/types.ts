@@ -47,6 +47,8 @@ export type FrontPost = {
     homeUrl: string
     faviconKey: string | null
     primaryLang: string | null
+    /** An operator listed it: the post's link is followed (ADR 0060). Absent: `ugc nofollow`. */
+    vouched?: boolean
   }
   claimant: { handle: string; displayName: string | null } | null
 }
@@ -87,12 +89,22 @@ export type SiteData = {
     claimant: (PersonRef & { bio: string | null }) | null
     /** Null when the answering tela-api does not say (one from before ADR 0031). */
     postsLast30d: number | null
+    /** Search engines may index its page: an operator listed it (ADR 0060). Absent: no. */
+    indexable?: boolean
   }
   feeds: { id: number; feedUrl: string; title: string | null }[]
   posts: PublicArticle[]
   topics: string[]
-  /** Recent recommendations of its posts that came with a note. */
-  notes: { note: string; createdAt: number; person: PersonRef; article: PublicArticle }[]
+  /**
+   * Recent recommendations of its posts that came with a note, each by a person whose account id
+   * is what a report of the note names (absent from a tela-api before ADR 0059).
+   */
+  notes: {
+    note: string
+    createdAt: number
+    person: PersonRef & { id?: string }
+    article: PublicArticle
+  }[]
 }
 
 /** A post on a profile: the article, its blog, and whether that blog has a public page. */
@@ -101,6 +113,8 @@ type ProfilePost = {
   siteTitle: string | null
   homeUrl: string
   listed: boolean
+  /** An operator listed the blog: the post's link is followed (ADR 0060). Absent: `ugc nofollow`. */
+  vouched?: boolean
   article: PublicArticle
 }
 
@@ -123,6 +137,8 @@ export type ProfileData = {
     /** Their picture's address, while they show one (ADR 0032). */
     avatar?: string | null
     memberSince: number
+    /** Search engines may index it: the account is a week old, in good standing (ADR 0060). */
+    indexable?: boolean
   }
   /** Null from a tela-api before follows (ADR 0031), which counts nothing: shown as absent, never 0. */
   counts: ProfileCounts | null
@@ -168,7 +184,14 @@ export type BlogrollBlog = {
 
 /** A public blogroll's page (`/api/v1/public/blogrolls/:id`): its blogs in the order added. */
 export type BlogrollData = {
-  blogroll: { id: string; name: string; description: string; updatedAt: number }
+  blogroll: {
+    id: string
+    name: string
+    description: string
+    updatedAt: number
+    /** Search engines may index it: Discover shows it (ADR 0060). Absent: no. */
+    indexable?: boolean
+  }
   owner: Person
   blogs: BlogrollBlog[]
 }
@@ -214,6 +237,8 @@ export type PostSite = {
   faviconKey: string | null
   primaryLang: string | null
   claimed: boolean
+  /** An operator listed it: the post's link is followed (ADR 0060). Absent: `ugc nofollow`. */
+  vouched?: boolean
 }
 
 /**

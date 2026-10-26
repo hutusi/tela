@@ -166,6 +166,41 @@ export async function signOutEverywhere(): Promise<Outcome> {
 }
 
 /**
+ * Why deleting the account did not go ahead (ADR 0058): `admin` for an account that runs the
+ * console, which is ungranted first; `bad_code` for a code that is wrong, used up or expired;
+ * `rate_limited` for too many codes or tries at the address; `failed` for anything else.
+ */
+export type DeleteError = 'admin' | 'bad_code' | 'rate_limited' | 'failed'
+
+function deleteError(status: number): DeleteError {
+  if (status === 403) return 'admin'
+  if (status === 400) return 'bad_code'
+  if (status === 429) return 'rate_limited'
+  return 'failed'
+}
+
+/** Mail the member a code to delete their account with. */
+export async function requestDeleteCode(): Promise<DeleteError | null> {
+  const { status } = await apiJson<unknown>('/api/v1/account/delete/code', {
+    method: 'POST',
+    body: {},
+  })
+  return status === 200 ? null : deleteError(status)
+}
+
+/**
+ * Delete the account with the mailed code. On success tela-api has ended the session and cleared
+ * this browser's cookies; the tab then forgets its copy (`Session.closed`).
+ */
+export async function deleteAccount(code: string): Promise<DeleteError | null> {
+  const { status } = await apiJson<unknown>('/api/v1/account/delete', {
+    method: 'POST',
+    body: { code },
+  })
+  return status === 200 ? null : deleteError(status)
+}
+
+/**
  * Whether a page's query is a link's return from Google or GitHub: tela-api fixes where that is,
  * `/settings?linked=<provider>`, or `/settings?error=<code>` when it did not work, and it is the
  * Account section's to show.

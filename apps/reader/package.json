@@ -10,11 +10,13 @@
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.json && tsc -p test/tsconfig.json",
     "icons": "bun scripts/generate-icons.ts",
+    "share-cards": "bun scripts/generate-share-cards.ts",
     "i18n:hant": "bun scripts/hant.ts"
   },
   "dependencies": {
     "@fontsource/eb-garamond": "^5.3.0",
     "@fontsource/figtree": "^5.3.0",
+    "@tela/content": "workspace:*",
     "@tela/ingest": "workspace:*",
     "@tela/platform": "workspace:*",
     "@tela/shared": "workspace:*",
@@ -39,6 +41,7 @@
     "@vitejs/plugin-react": "^6.1.1",
     "drizzle-orm": "^0.45.2",
     "fake-indexeddb": "^6.2.5",
+    "fast-xml-parser": "~5.10.0",
     "tailwindcss": "^4.3.3",
     "vite": "^8.3.1",
     "wrangler": "^4.143.0"

@@ -4,7 +4,16 @@
  * `exhausted`), checks the sweep no longer finds it, and then that `REDUE` brings it back.
  */
 import { beforeEach, describe, expect, test } from 'bun:test'
-import { bumpSeq, first, LEASE_KINDS, type LeaseKind, REDUE, redue, type TelaDb } from '@tela/data'
+import {
+  bumpSeq,
+  deadLetter,
+  first,
+  LEASE_KINDS,
+  type LeaseKind,
+  REDUE,
+  redue,
+  type TelaDb,
+} from '@tela/data'
 import { addTestUser, createTestDb } from '@tela/data/testing'
 import { sql } from 'drizzle-orm'
 import { KINDS, type WorkContext } from '../src/kinds'
@@ -17,9 +26,13 @@ let db: TelaDb
 beforeEach(async () => {
   db = (await createTestDb()).db
   await addTestUser(db, 'u1')
+  await addTestUser(db, 'u2')
   await db.batch([
     db.run(sql`insert into profiles (user_id, handle, created_at, updated_at)
       values ('u1', 'reader_one', 0, 0)`),
+    // A closed account, its erasure due (ADR 0058).
+    db.run(sql`insert into profiles (user_id, handle, deleted_at, created_at, updated_at)
+      values ('u2', 'closed_one', ${NOW - HOUR}, 0, 0)`),
     db.run(sql`insert into sites (id, home_url, created_at, updated_at)
       values (1, 'https://a.example', 0, 0)`),
     db.run(sql`insert into feeds (id, site_id, feed_url, host, next_fetch_at, hub_url, created_at,
@@ -41,6 +54,9 @@ beforeEach(async () => {
     db.run(sql`insert into body_translations (content_key, lang, state, request_id, requested_by,
         reserved_tokens, reserved_day, updated_at)
       values ('ck1', 'fr', 'requested', 'r1', 'u1', 5000, '2026-10-05', ${NOW - HOUR})`),
+    // An import's feed new to Tela, waiting for a day with room (ADR 0063).
+    db.run(sql`insert into pending_feeds (user_id, feed_url, queued_at)
+      values ('u1', 'https://new.example/feed', ${NOW - HOUR})`),
   ] as never)
 })
 
@@ -55,6 +71,8 @@ const KEYS: Record<LeaseKind, string> = {
   'site.claim': '1',
   'websub.subscribe': '1',
   'member.gravatar': 'u1',
+  'member.pendingFeeds': 'u1',
+  'member.erase': 'u2',
 }
 
 const ctx = { backgroundBudget: 0 } as WorkContext
@@ -69,15 +87,27 @@ async function isDue(kind: LeaseKind, now: number): Promise<boolean> {
   return (row?.n ?? 0) > 0
 }
 
+/** As tela-jobs retires an item: its dead letter, and the kind's own `exhausted`. */
 async function exhaust(kind: LeaseKind, now: number) {
   const spec = KINDS[kind]
   if (!spec) throw new Error(`no kind ${kind}`)
-  await db.batch([bumpSeq(db), ...spec.exhausted(db, KEYS[kind], now)] as never)
+  const lease = { kind, key: KEYS[kind], owner: 'w' }
+  await db.batch([
+    bumpSeq(db),
+    ...deadLetter(db, lease, spec.backoff.maxAttempts, 'kept failing', now),
+    ...spec.exhausted(db, KEYS[kind], now),
+  ] as never)
 }
 
+/** As the console retries one: the kind's `REDUE`, and the dead letter resolved, in one batch. */
 async function retry(kind: LeaseKind, now: number) {
   const { synced, statements } = redue(db, kind, KEYS[kind], now)
-  await db.batch([...(synced ? [bumpSeq(db)] : []), ...statements] as never)
+  await db.batch([
+    ...(synced ? [bumpSeq(db)] : []),
+    ...statements,
+    db.run(sql`update dead_letters set resolved_at = ${now}, resolution = 'retried'
+      where kind = ${kind} and key = ${KEYS[kind]} and resolved_at is null`),
+  ] as never)
 }
 
 describe('a retried dead item', () => {

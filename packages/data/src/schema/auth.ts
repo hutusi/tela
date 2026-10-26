@@ -163,6 +163,18 @@ export const profiles = sqliteTable(
      */
     avatarVersion: integer().notNull().default(0),
     isAdmin: integer({ mode: 'boolean' }).notNull().default(false),
+    /**
+     * When an operator suspended the account (ADR 0059): it cannot sign in, and its profile,
+     * notes and blogrolls are not shown. Null in good standing.
+     */
+    suspendedAt: ms(),
+    /**
+     * When the account was closed (ADR 0058). The row stays, emptied, for good: it keeps the
+     * handle from being taken by someone else, and other members' rows that name it valid.
+     */
+    deletedAt: ms(),
+    /** When `member.erase` finished removing what the account's own devices held. */
+    erasedAt: ms(),
     createdAt: ms().notNull(),
     updatedAt: ms().notNull(),
     seq: seq(),
@@ -173,6 +185,8 @@ export const profiles = sqliteTable(
       sql`length(${t.handle}) between 3 and 30 and ${t.handle} not glob '*[^a-z0-9_]*'`,
     ),
     check('profiles_bio_check', sql`${t.bio} is null or length(${t.bio}) <= 280`),
+    // The day's new accounts (ADR 0056) are counted by when their profile was made.
+    index('profiles_created_idx').on(t.createdAt),
   ],
 )
 

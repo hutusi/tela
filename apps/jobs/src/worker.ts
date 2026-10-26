@@ -19,12 +19,12 @@ import { createHttpClient } from '@tela/ingest/http'
 import { createIngest, type Ingest as IngestApi } from '@tela/ingest/pipeline'
 import { createRelayClient } from '@tela/ingest/relay'
 import { configFromEnv, createTranslator, isAccidentalMock, type Translator } from '@tela/llm'
-import { memoryJobs, resendMail, systemClock } from '@tela/platform'
+import { memoryJobs, systemClock } from '@tela/platform'
 import { d1Db, queueJobs, r2Blobs } from '@tela/platform/cloudflare'
 import { sql } from 'drizzle-orm'
 import type { Env } from './env'
 import type { JobMessage, JobQueues } from './kinds'
-import { checkHealth, nightly, weekly } from './ops'
+import { checkAlerts, checkHealth, nightly, outboxFrom, weekly } from './ops'
 import { settle } from './portable'
 import { type JobsContext, runJob, tick } from './runner'
 
@@ -152,7 +152,14 @@ export default {
       const now = Date.now()
       if (Math.floor(now / 60_000) % DEADMAN_EVERY_MINUTES !== 0) return Response.json({ report })
       const h = await checkHealth(ctx.db, ctx.blobs, now, env.DEADMAN_URL)
-      return Response.json({ report, health: h })
+      // Beside the health check, on its schedule: what needs the owner before Monday (ADR 0063).
+      const alerts = await checkAlerts(ctx.db, now, outboxFrom(env), ctx.publicUrl).catch(
+        (err: unknown) => {
+          console.error('alerts failed', err)
+          return null
+        },
+      )
+      return Response.json({ report, health: h, alerts })
     }
     if (request.method === 'POST' && url.pathname === '/jobs/daily') {
       const ctx = context(env)
@@ -160,17 +167,9 @@ export default {
     }
     if (request.method === 'POST' && url.pathname === '/jobs/digest') {
       const ctx = context(env)
-      const outbox =
-        env.DIGEST_TO && env.RESEND_API_KEY
-          ? {
-              mail: resendMail({
-                apiKey: env.RESEND_API_KEY,
-                from: env.MAIL_FROM ?? 'Tela <noreply@telaread.com>',
-              }),
-              to: env.DIGEST_TO,
-            }
-          : undefined
-      return Response.json(await weekly(ctx.db, ctx.blobs, Date.now(), outbox, ctx.publicUrl))
+      return Response.json(
+        await weekly(ctx.db, ctx.blobs, Date.now(), outboxFrom(env), ctx.publicUrl),
+      )
     }
     if (request.method === 'POST' && url.pathname === '/jobs/run') {
       const message = (await request.json()) as JobMessage

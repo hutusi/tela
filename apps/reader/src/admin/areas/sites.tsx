@@ -321,6 +321,18 @@ function SiteRecord({ row, detail, act, open, busy }: RecordProps<AdminSiteRow, 
       </RecordLink>
     </span>
   )
+  // Whether Tela may fetch the blog's pages (ADR 0061), as its writer can say on the Dashboard.
+  const pages = (
+    <span className="flex flex-wrap items-baseline gap-x-3">
+      {site.feedOnly ? t('kv.feedOnly') : t('kv.feedAll')}
+      <RecordLink
+        disabled={busy}
+        onClick={() => act(site.feedOnly ? 'site.feedAll' : 'site.feedOnly', [row.id])}
+      >
+        {shell(site.feedOnly ? 'actions.site.feedAll.label' : 'actions.site.feedOnly.label')}
+      </RecordLink>
+    </span>
+  )
   return (
     <div className="flex flex-col gap-5">
       <KeyValues
@@ -338,6 +350,7 @@ function SiteRecord({ row, detail, act, open, busy }: RecordProps<AdminSiteRow, 
           [t('kv.readers'), count(site.readerCount, locale)],
           [t('kv.language'), languageOf(t, site.primaryLang, locale)],
           [t('kv.translation'), translation],
+          [t('kv.pages'), pages],
           [t('kv.tokens'), detail ? count(detail.tokens30d, locale) : null],
           [t('kv.added'), when(site.createdAt)],
           [t('kv.about'), detail?.description ?? null],

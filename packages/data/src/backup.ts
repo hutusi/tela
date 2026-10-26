@@ -39,6 +39,8 @@ const SKIPPED = new Set([
   'rate_limit',
   'action_limits',
   'ops_heartbeats',
+  'ops_alerts',
+  'robots_rules',
   'verification',
   'session',
 ])

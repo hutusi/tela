@@ -9,9 +9,13 @@
  *   ADMIN_TOKEN=… bun run admin curate                   # the curated blogs (curated-sites.ts), the marked few featured
  *   ADMIN_TOKEN=… bun run admin grant you@example.com    # open the admin console to a member
  *   ADMIN_TOKEN=… bun run admin ungrant you@example.com  # and close it (ADR 0039)
+ *   ADMIN_TOKEN=… bun run admin settings                 # every runtime setting (ADR 0056)
+ *   ADMIN_TOKEN=… bun run admin set signup.mode invite   # change one, audited
+ *   ADMIN_TOKEN=… bun run admin closures                 # after a restore: close again what was closed (ADR 0058)
  *   TELA_URL=http://localhost:8787 ADMIN_TOKEN=… bun run admin invite a@b.c
  */
 import { parseArgs } from 'node:util'
+import { isSettingKey, parseSettingText } from '@tela/shared'
 import { CURATED_SITES, type CuratedSite } from './curated-sites'
 
 const [command, ...args] = process.argv.slice(2)
@@ -27,6 +31,9 @@ function usage(): never {
       '       bun run admin revoke <TEXT>',
       '       bun run admin curate',
       '       bun run admin grant|ungrant <email>',
+      '       bun run admin settings',
+      '       bun run admin set <key> <value>   (a number, null for no limit, a word, or JSON)',
+      '       bun run admin closures   (after a restore)',
       '(needs ADMIN_TOKEN; TELA_URL optional)',
     ].join('\n'),
   )
@@ -180,6 +187,46 @@ if (command === 'invite') {
     json.changed
       ? `${email} ${verb} the admin console (${base}/admin)`
       : `${email} already ${admin_ ? 'could' : 'could not'} open the admin console`,
+  )
+} else if (command === 'closures') {
+  const { res, text, json } = await admin('POST', 'closures', {})
+  if (!res.ok) failed('closures', res, text)
+  console.log(`${json.closures} closures read; ${json.closed} accounts closed again`)
+} else if (command === 'settings') {
+  const { res, text, json } = await admin('GET', 'settings')
+  if (!res.ok) failed('settings', res, text)
+  const rows = (json.settings ?? []) as {
+    key: string
+    value: unknown
+    default: unknown
+    stored: boolean
+  }[]
+  const width = Math.max(...rows.map((r) => r.key.length))
+  for (const r of rows) {
+    const value = JSON.stringify(r.value)
+    console.log(
+      `${r.key.padEnd(width)}  ${value}${r.stored ? `  (default ${JSON.stringify(r.default)})` : ''}`,
+    )
+  }
+} else if (command === 'set') {
+  const [key, ...rest] = args
+  const raw = rest.join(' ')
+  if (!key || raw === '') usage()
+  if (!isSettingKey(key)) {
+    console.error(`no setting ${key}; \`bun run admin settings\` lists them`)
+    process.exit(2)
+  }
+  const parsed = parseSettingText(key, raw)
+  if (!parsed.ok) {
+    console.error(`${key} takes ${parsed.error}`)
+    process.exit(2)
+  }
+  const { res, text, json } = await admin('POST', 'settings', { key, value: parsed.value })
+  if (!res.ok) failed('set', res, text)
+  console.log(
+    json.changed
+      ? `${key} is now ${JSON.stringify(parsed.value)}`
+      : `${key} was already ${JSON.stringify(parsed.value)}`,
   )
 } else {
   usage()

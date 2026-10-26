@@ -6,7 +6,7 @@
  * first page is asked for again behind it. The readers it suggests are Discover's (ADR 0044): the
  * public pool, matched on the device by the same rule.
  */
-import { languageBadge } from '@tela/shared'
+import { languageBadge, recommendationKey } from '@tela/shared'
 import type { ArticleRow } from '@tela/sync'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
@@ -15,6 +15,7 @@ import { FollowButton } from '../components/follow-button'
 import { GlyphCount } from '../components/glyph-count'
 import { PersonAvatar } from '../components/person-avatar'
 import { ReasonDot, useReasonText } from '../components/reader-card'
+import { ReportLink } from '../components/report-link'
 import { SiteAvatar } from '../components/site-avatar'
 import { Swatch } from '../components/swatch'
 import { READERS_PATH } from '../lib/discover-href'
@@ -419,6 +420,19 @@ function Activity({
           </Link>
           <span className="text-ink-2">{verb}</span>
           <span className="text-muted">· {relativeTime(item.at, locale, now)}</span>
+          {item.kind === 'recommended' && item.note ? (
+            <>
+              <span className="text-muted">·</span>
+              <ReportLink
+                subject={{
+                  kind: 'recommendation',
+                  key: recommendationKey(person.id, item.post.article.id),
+                }}
+                path={profile}
+                member
+              />
+            </>
+          ) : null}
         </div>
         {item.kind === 'recommended' ? (
           <>

@@ -12,11 +12,15 @@ import { languageBadge } from '@tela/shared'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router'
 import { useTranslations } from 'use-intl'
+import { FeedLinks } from '../components/feed-links'
 import { CHECK, Glyph } from '../components/glyph'
 import { PersonAvatar } from '../components/person-avatar'
+import { ReportLink } from '../components/report-link'
 import { SiteAvatar } from '../components/site-avatar'
 import { daysAgo } from '../lib/days'
+import { blogrollFeedHref } from '../lib/feed-href'
 import { displayHost, relativeFormat, shortDate } from '../lib/format'
+import { outboundRel } from './post-link'
 import type { BlogrollBlog, BlogrollData, MemberControls, Person } from './types'
 
 /** What the owner's page puts into a row: its action (Remove) and its note, or the note editor. */
@@ -43,6 +47,11 @@ export type BlogrollViewProps = {
   readOnly?: boolean | undefined
   /** A line under the list: the owner's says who can see the blogroll. */
   footer?: ReactNode
+  /**
+   * Its RSS and OPML (ADR 0062), the RSS's titles in `hl`: only while others can see it, since a
+   * private blogroll's feeds are a 404.
+   */
+  feeds?: { hl: string | null } | undefined
 }
 
 /**
@@ -91,6 +100,7 @@ export function BlogrollView({
   empty,
   readOnly = false,
   footer,
+  feeds,
 }: BlogrollViewProps) {
   const t = useTranslations('blogroll')
   const { blogroll, owner, blogs } = data
@@ -163,6 +173,16 @@ export function BlogrollView({
               ? t('updatedDay', { when: updated.when })
               : t('updatedOn', { when: updated.when })}
           </span>
+          {mine ? null : (
+            <>
+              <span aria-hidden="true">·</span>
+              <ReportLink
+                subject={{ kind: 'blogroll', key: blogroll.id }}
+                path={here}
+                member={member !== undefined}
+              />
+            </>
+          )}
         </div>
         {actions ? (
           <div className="mt-1.5 flex w-full flex-col items-center gap-3">{actions}</div>
@@ -196,6 +216,15 @@ export function BlogrollView({
         <p className="mt-8 mb-0 text-center text-[13.5px] text-muted" data-testid="blogroll-footer">
           {footer}
         </p>
+      ) : null}
+
+      {/* Its feeds hold its listed blogs only: with none, they would be empty. */}
+      {feeds && blogs.some((b) => b.listed) ? (
+        <FeedLinks
+          rss={blogrollFeedHref(blogroll.id, 'rss', feeds.hl)}
+          opml={blogrollFeedHref(blogroll.id, 'opml')}
+          className="mt-8 text-center"
+        />
       ) : null}
     </main>
   )
@@ -286,10 +315,11 @@ function BlogRow({
               {name}
             </Link>
           ) : isWeb(blog.homeUrl) ? (
+            // A member's list, of blogs nobody else vouched for: never a followed link (ADR 0060).
             <a
               href={blog.homeUrl}
               target="_blank"
-              rel="noopener noreferrer"
+              rel={outboundRel(false)}
               className={`${nameClass} hover:underline`}
             >
               {name}

@@ -13,7 +13,7 @@
  *
  * Mounted at `/api/v1/public/discover`, beside the Blogs answer at that path itself (`public.ts`).
  */
-import { ARTICLE_COLUMNS, avatarOf, inDiscover, type TelaDb } from '@tela/data'
+import { ARTICLE_COLUMNS, avatarOf, inDiscover, standingOk, type TelaDb } from '@tela/data'
 import { isTopic } from '@tela/shared'
 import { type SQL, sql } from 'drizzle-orm'
 import { Hono } from 'hono'
@@ -32,6 +32,7 @@ import {
   PUBLIC_LISTING,
   postExtras,
   postOf,
+  profileIndexable,
   RECOMMENDERS_SHOWN,
   siteCard,
   TITLES,
@@ -133,9 +134,11 @@ function discoverPost(row: Row): DiscoverPost {
  */
 const recommendedStatement = (now: number, since: number, filters: SQL, limit: number) => sql`
   select ${ARTICLE_COLUMNS}, ${TITLES}, ${EXCERPTS}, ${POST_SITE}, ${postExtras(since)}
-  from (select article_id, count(*) as n from recommendations
-        where deleted_at is null and created_at >= ${since} and created_at <= ${now}
-        group by article_id) w
+  from (select rr.article_id, count(*) as n from recommendations rr
+        join profiles rp on rp.user_id = rr.user_id
+        where rr.deleted_at is null and rr.created_at >= ${since} and rr.created_at <= ${now}
+          and ${standingOk('rp')}
+        group by rr.article_id) w
   join articles a on a.id = w.article_id
   join feeds f on f.id = a.feed_id and f.merged_into is null
   join sites s on s.id = f.site_id
@@ -151,6 +154,10 @@ const recommendedStatement = (now: number, since: number, filters: SQL, limit: n
  * comes with their newest `caps.recs` recommendations as `[articleId, siteId]`, the public blogs
  * they read if they show them, their earliest find (the post they recommended before the most
  * others did, from `EARLY_MIN` up) and their newest note on a public blog's post.
+ *
+ * Only people whose profile is indexed (`profileIndexable`: a week old, in good standing): Readers
+ * and This week are indexed pages that name each person, with their bio and a note, and a new
+ * account must not reach them before its own profile would (ADR 0060).
  *
  * Two round trips, as a profile takes: the pool, then one batch keyed by its ids through one JSON
  * parameter. "Before" is by recommendation id, never `created_at`: that is the device's `at`, which
@@ -174,13 +181,13 @@ export async function readersPool(
         (select count(*) from recommendations r where r.user_id = p.user_id
           and r.deleted_at is null) as total
       from profiles p
-      where exists (select 1 from recommendations r
+      where ${profileIndexable(now)} and (exists (select 1 from recommendations r
           where r.user_id = p.user_id and r.deleted_at is null)
         or (p.public_subscriptions = 1 and exists (
           select 1 from subscriptions sub join feeds f on f.id = sub.feed_id
           join sites s on s.id = f.site_id
           where sub.user_id = p.user_id and sub.deleted_at is null
-            and s.listing in ${PUBLIC_LISTING}))
+            and s.listing in ${PUBLIC_LISTING})))
       order by recent desc, total desc, p.handle
       limit ${caps.people}
     `),
@@ -429,7 +436,7 @@ export function discoverRoutes(deps: ApiDeps) {
     const rows = await db.all<Row>(sql`
       select ${blogrollCard(DISCOVER_CARD_BLOGS)}
       from blogrolls r join profiles p on p.user_id = r.user_id
-      where ${inDiscover('r')} and r.public_since is not null ${after}
+      where ${inDiscover('r')} and ${standingOk('p')} and r.public_since is not null ${after}
       order by r.public_since desc, r.id desc
       limit ${BLOGROLLS_PAGE + 1}
     `)

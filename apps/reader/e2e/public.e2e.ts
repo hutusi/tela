@@ -377,6 +377,22 @@ test.describe('recommendations, profile, dashboard, settings', () => {
     await translate.click()
     await expect(translate).toHaveAttribute('aria-checked', 'true')
     await expect(page.getByTestId('toast')).toHaveText(/^Translation is on for .+\.$/)
+
+    // Only what the feed provides (ADR 0061): off until the owner says, and said each way.
+    const feedOnly = page.getByTestId('dashboard-feed-only')
+    await expect(feedOnly).toHaveAttribute('aria-checked', 'false')
+    await feedOnly.click()
+    await expect(feedOnly).toHaveAttribute('aria-checked', 'true')
+    await expect(page.getByTestId('toast')).toHaveText(
+      /^Tela now uses only what the feed of .+ provides\.$/,
+    )
+    await feedOnly.click()
+    await expect(feedOnly).toHaveAttribute('aria-checked', 'false')
+    await expect(page.getByTestId('toast')).toHaveText(/^Tela may fetch the pages of .+ again\.$/)
+    // Its hint leads to For writers, at what the switch does.
+    await site.getByRole('link', { name: 'How Tela reads your blog' }).click()
+    await expect(page).toHaveURL('/writers#opt-out')
+    await expect(page.getByTestId('writers-opt-out-feedOnly')).toBeVisible()
   })
 
   test('settings validate the handle and the profile link follows it', async ({ page }) => {

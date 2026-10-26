@@ -93,7 +93,9 @@
     "usePassword": "Se connecter avec un mot de passe",
     "useCode": "Recevoir plutôt un code par e-mail",
     "invite": "Code d’invitation",
+    "inviteOptional": "Code d’invitation (facultatif)",
     "noCode": "Pas de code ? Tela fonctionne sur invitation pour l’instant : demandez-en un à un membre.",
+    "paused": "Tela a accueilli aujourd’hui tous les nouveaux membres possibles. Les inscriptions rouvrent à {at, time, short}. Un code d’invitation permet quand même de s’inscrire aujourd’hui.",
     "agree": "En vous inscrivant, vous acceptez les <terms>Conditions</terms> ; voir aussi la page <privacy>Confidentialité</privacy>.",
     "newHere": "Première visite sur Tela ?",
     "toJoin": "S’inscrire",
@@ -131,7 +133,12 @@
       "invite_used": "Toutes les personnes prévues pour cette invitation se sont inscrites, ou elle a été retirée. Demandez-en une autre.",
       "missing_code": "Saisissez votre code d’invitation.",
       "invalid_code": "Ce code d’invitation n’existe pas, ou il a été retiré.",
+      "invalid_code_optional": "Ce code d’invitation n’existe pas, ou il a été retiré. Vérifiez-le, ou videz le champ pour vous inscrire sans code.",
       "code_used": "Toutes les personnes prévues pour ce code d’invitation se sont inscrites.",
+      "invite_only": "Pour l’instant, Tela n’accueille de nouveaux membres que sur invitation. Saisissez votre code d’invitation.",
+      "signups_paused": "Tela ne peut plus accueillir de nouveaux membres aujourd’hui. Réessayez après {at, time, short}, ou inscrivez-vous avec un code d’invitation.",
+      "account_suspended": "Ce compte est suspendu. Si vous pensez que c’est une erreur, écrivez à me@hutu.si.",
+      "account_closed": "Ce compte a été supprimé.",
       "provider_unlinked": "Vérifiez cette adresse auprès du fournisseur, ou connectez-vous par e-mail et associez-le dans Paramètres → Compte.",
       "provider_no_email": "Le fournisseur n’a pas communiqué d’adresse e-mail. Connectez-vous plutôt par e-mail.",
       "provider_cancelled": "La connexion a été annulée.",
@@ -234,8 +241,13 @@
       "opml_invalid": "Ce fichier n’est pas un document OPML.",
       "rate_limited": "Trop de requêtes. Patientez un peu, puis réessayez.",
       "opml_too_large": "Ce fichier OPML dépasse 1 Mo.",
-      "feed_too_large": "Le flux de ce blog dépasse ce que Tela peut lire (10 Mo)."
-    }
+      "feed_too_large": "Le flux de ce blog dépasse ce que Tela peut lire (10 Mo).",
+      "feed_limit": "{limit, plural, =0 {Tela n’accueille pas de nouveaux blogs pour le moment. Les blogs déjà présents sur Tela peuvent toujours être ajoutés.} one {Vous avez ajouté aujourd’hui un blog nouveau pour Tela, le maximum pour une journée. Vous pourrez en ajouter un autre après {time} ; les blogs déjà présents sur Tela s’ajoutent à tout moment.} other {Vous avez ajouté aujourd’hui # blogs nouveaux pour Tela, le maximum pour une journée. Vous pourrez en ajouter d’autres après {time} ; les blogs déjà présents sur Tela s’ajoutent à tout moment.}}",
+      "subscription_limit": "Vous suivez {limit} blogs, le maximum pour un compte. Désabonnez-vous d’un blog pour en ajouter un autre."
+    },
+    "importWaiting": "Tela ajoute pour vous {perDay, plural, one {# nouveau blog} other {# nouveaux blogs}} par jour ; {n, plural, one {le dernier arrive} other {les # autres arrivent}} {days, plural, one {demain} other {au cours des # prochains jours}}.",
+    "importPaused": "{n, plural, one {Un autre attend} other {# autres attendent}} que Tela accueille de nouveau des blogs.",
+    "importOver": "{n, plural, one {Un blog n’a pas été importé} other {# blogs n’ont pas été importés}} : un compte suit au plus {max} blogs."
   },
   "translation": {
     "writtenIn": "Écrit en <b>{source}</b>.",
@@ -257,6 +269,10 @@
     "notTranslated": "Non traduit · {language}",
     "rateLimited": "Trop de demandes de traduction pour le moment. Réessayez d’ici un petit moment.",
     "budgetExhausted": "Vous avez épuisé votre quota de traduction du jour. Il se renouvelle demain.",
+    "budgetMember": "Vous avez fait traduire {n, plural, one {# nouvel article} other {# nouveaux articles}} aujourd’hui. Rouvrez celui-ci demain.",
+    "budgetSite": "La traduction fait une pause pour aujourd’hui. Rouvrez cet article demain.",
+    "waitingToday": "Tela traduira cet article après {time}.",
+    "waitingTomorrow": "Tela traduira cet article demain, après {time}.",
     "unavailable": "La traduction n’a pas pu démarrer. Réessayez.",
     "retry": "Relancer la traduction"
   },
@@ -544,12 +560,14 @@
       "fetch_failed": "Impossible de joindre cette adresse.",
       "no_feed": "Aucun flux trouvé à cette adresse. Tela référence les blogs qui publient un flux.",
       "feed_too_large": "Le flux de ce blog dépasse ce que Tela peut lire (10 Mo).",
-      "rate_limited": "Trop de tentatives de revendication. Patientez un peu, puis réessayez."
+      "rate_limited": "Trop de tentatives de revendication. Patientez un peu, puis réessayez.",
+      "feed_limit": "Ce blog est nouveau pour Tela, et vous avez déjà ajouté aujourd’hui autant de nouveaux blogs qu’une journée le permet. Vous pourrez le revendiquer après {time}."
     },
     "taken": "L’identifiant choisi appartient déjà à quelqu’un d’autre : le vôtre reste donc provisoire. Choisissez-en un autre dans les <link>Paramètres</link>."
   },
   "writers": {
     "title": "Pour les auteurs",
+    "description": "Votre carte de visite d’auteur indépendant sur Tela, comment Tela lit votre blog, et comment le revendiquer ou tenir Tela à l’écart.",
     "kicker": "Pour les auteurs",
     "hero": {
       "title": "La <em>carte de visite</em> de votre écriture indépendante.",
@@ -656,6 +674,88 @@
         "body": "Les lecteurs peuvent lire vos articles traduits. Si vous préférez qu’ils ne le fassent pas, désactivez la traduction pour votre blog depuis le tableau de bord."
       }
     },
+    "reading": {
+      "title": "Comment Tela lit votre blog",
+      "intro": "Tela est un lecteur de flux. Il lit le flux RSS, Atom ou JSON que votre blog publie déjà, comme n’importe quel lecteur de flux, et demande le moins possible à votre serveur.",
+      "agent": {
+        "title": "Il dit qui il est",
+        "body": "Chaque requête porte l’agent utilisateur de Tela, <code>Tela/0.1 (+https://telaread.com; feed reader)</code>, ou pour les images <code>Tela/0.1 (+https://telaread.com; image proxy)</code>."
+      },
+      "often": {
+        "title": "Au rythme de vos articles",
+        "body": "Tela consulte votre flux environ deux fois plus souvent que vous avez publié la semaine passée : au plus toutes les 30 minutes, au moins une fois par jour. Chaque consultation qui ne trouve rien de neuf attend un peu plus la suivante. Le <code>ttl</code> de votre flux et <code>Cache-Control: max-age</code> peuvent lui demander d’attendre davantage, jusqu’à un jour."
+      },
+      "changed": {
+        "title": "Seulement ce qui a changé",
+        "body": "Chaque consultation renvoie l’<code>ETag</code> et le <code>Last-Modified</code> donnés par votre serveur : un flux inchangé ne coûte qu’une réponse 304."
+      },
+      "errors": {
+        "title": "Il ralentit",
+        "body": "Quand votre serveur échoue ou ne répond pas, Tela double son attente après chaque échec, jusqu’à une semaine, et attend aussi longtemps qu’un <code>Retry-After</code> le demande. Après un <code>410 Gone</code>, ou 30 échecs d’affilée, il n’essaie plus qu’une fois par semaine."
+      },
+      "images": {
+        "title": "Les images, à la lecture",
+        "body": "Les images de vos articles ne sont récupérées que lorsque quelqu’un lit l’article, par le proxy d’images de Tela, puis gardées une semaine."
+      },
+      "pages": {
+        "title": "Vos pages, seulement si le flux est court",
+        "body": "Si votre flux ne contient que des résumés, Tela récupère une fois la page publique de chaque nouvel article, peu après que le flux l’a annoncé, pour en montrer le texte intégral aux abonnés dans le lecteur, puis de nouveau seulement si le résumé change. Il lit une fois votre page d’accueil, à l’ajout de votre blog, pour en trouver l’icône. Dans les deux cas, il consulte d’abord votre robots.txt."
+      }
+    },
+    "shows": {
+      "title": "Ce que Tela montre",
+      "public": {
+        "title": "En public, titres et extraits",
+        "body": "Les pages publiques de Tela, celles que n’importe qui et n’importe quel moteur de recherche peut ouvrir, montrent les titres de vos articles et de courts extraits, chacun renvoyant à l’article sur votre blog. Elles ne montrent jamais un article en entier."
+      },
+      "members": {
+        "title": "Aux abonnés, vos articles",
+        "body": "Les membres abonnés à votre blog lisent vos articles dans le lecteur de Tela, tirés de votre flux ou de la page de l’article, comme dans n’importe quel lecteur de flux. Tela garde cette copie pour les membres connectés, jamais comme une page que tout le monde peut ouvrir."
+      },
+      "translation": {
+        "title": "Des traductions signalées",
+        "body": "Les titres et extraits sont traduits à l’avance dans les langues de lecture de Tela, pour que les lecteurs trouvent vos articles. Un article lui-même n’est traduit que pour le lecteur qui le demande. Chaque traduction est faite par une machine, signalée comme telle et montrée à côté de votre original, et vous pouvez désactiver la traduction pour votre blog."
+      }
+    },
+    "claiming": {
+      "title": "Revendiquer votre blog",
+      "intro": "Revendiquer un blog, c’est dire à Tela qu’il est à vous. Il vous faut un compte Tela et l’un de ces moyens :",
+      "link": {
+        "title": "Un lien vers votre profil Tela",
+        "body": "Un lien vers <code>telaread.com/@vous</code> sur votre page d’accueil, marqué <code>rel=\"me\"</code> ; sans cela, dans un en-tête ou un pied de page que votre page 404 montre aussi, pour que ce soit le lien de votre blog et non une mention dans un article."
+      },
+      "meta": {
+        "title": "Une balise meta",
+        "body": "La balise <code>tela-site-verification</code> que Tela vous donne, dans le <code>head</code> de votre page d’accueil. Vous pourrez la retirer une fois la revendication vérifiée."
+      },
+      "github": {
+        "title": "Votre GitHub",
+        "body": "Rien à ajouter si vous vous connectez avec GitHub, que votre profil GitHub indique votre blog comme site web et que votre blog renvoie à ce profil de l’une des façons ci-dessus."
+      },
+      "check": "Pour vérifier, Tela lit votre page d’accueil et, pour un lien sans <code>rel=\"me\"</code>, une adresse que votre blog n’a pas, pour voir sa page 404.",
+      "gives": "Un blog revendiqué figure dans Découvrir sous votre nom. Votre tableau de bord montre combien de personnes le lisent sur Tela, quels articles elles ont aimés et recommandés, et les notes qu’elles ont laissées ; vous y choisissez ses thèmes, s’il est traduit, et si Tela n’utilise que votre flux."
+    },
+    "optOut": {
+      "title": "Si vous préférez que Tela s’abstienne",
+      "intro": "Chacun de ces choix vaut dès qu’il est fait. Les deux derniers ne demandent aucune revendication.",
+      "translation": {
+        "title": "Désactiver la traduction",
+        "body": "Dans votre tableau de bord, une fois votre blog revendiqué. Les lecteurs ne voient alors vos articles que tels que vous les avez écrits."
+      },
+      "feedOnly": {
+        "title": "N’utiliser que ce que fournit mon flux",
+        "body": "Aussi dans votre tableau de bord. Tela cesse de récupérer les pages de votre blog, pour le texte intégral comme pour l’icône, et ne lit plus que votre flux. Si votre flux contient les articles en entier, vos abonnés les lisent toujours en entier, comme dans n’importe quel lecteur de flux ; s’il ne contient que des résumés, ils lisent ceux-ci et suivent le lien vers votre blog."
+      },
+      "robots": {
+        "title": "robots.txt",
+        "body": "Pour tenir Tela à l’écart de vos pages sans rien revendiquer, ajoutez ceci à votre robots.txt. Tela le relit dans la journée.",
+        "after": "Comme pour tout robot, un groupe qui nomme Tela remplace celui qui vaut pour tous (<code>User-agent: *</code>). Votre flux reste lu, comme par tout lecteur de flux : c’est ce qu’un abonné a demandé."
+      },
+      "email": {
+        "title": "Quitter Tela",
+        "body": "Écrivez à <mail>me@hutu.si</mail> : Tela retirera votre blog de Découvrir, supprimera sa page sur Tela et cessera de le récupérer. Si vous ne pouvez pas revendiquer le blog, les réglages ci-dessus peuvent être faits pour vous de la même façon."
+      }
+    },
     "cta": {
       "count": "{n, plural, one {# blog est} other {# blogs sont}} déjà sur Tela. <em>Et le vôtre ?</em>",
       "title": "<em>Où est votre blog ?</em>",
@@ -736,6 +836,10 @@
     "translateHint": "Tela traduit vos articles pour les lecteurs d’autres langues et montre toujours votre original à côté de la traduction. Si vous la désactivez, les lecteurs ne voient vos articles que tels que vous les avez écrits.",
     "translationOn": "La traduction est activée pour {blog}.",
     "translationOff": "La traduction est désactivée pour {blog}.",
+    "feedOnly": "N’utiliser que ce que fournit mon flux",
+    "feedOnlyHint": "Tela cesse de récupérer les pages de votre blog, pour le texte intégral comme pour l’icône, et ne lit plus que votre flux. Si votre flux contient les articles en entier, vos abonnés les lisent toujours en entier. <link>Comment Tela lit votre blog</link>",
+    "feedOnlyOn": "Tela n’utilise plus que ce que fournit le flux de {blog}.",
+    "feedOnlyOff": "Tela peut de nouveau récupérer les pages de {blog}.",
     "listing": {
       "private": "privé",
       "listed": "dans Découvrir",
@@ -752,6 +856,16 @@
       "likes": "<b>{n}</b> j’aime",
       "recommendations": "<b>{n}</b> {n, plural, one {recommandation} other {recommandations}}",
       "notes": "{n} avec un mot"
+    },
+    "release": {
+      "label": "Renoncer à ce blog",
+      "hint": "Vous n’en êtes plus le propriétaire sur Tela. Son réglage de traduction reste tel quel, et vous pourrez le revendiquer à nouveau.",
+      "open": "Renoncer",
+      "confirm": "Renoncer à {blog} ? Il n’a plus de propriétaire sur Tela tant que personne ne le revendique.",
+      "yes": "Y renoncer",
+      "keep": "Le garder",
+      "done": "Vous avez renoncé à {blog}.",
+      "failed": "Cela n’a pas fonctionné. Réessayez."
     }
   },
   "settings": {
@@ -905,10 +1019,20 @@
     "privacyDelay": "Votre profil public peut mettre quelques minutes à refléter un changement.",
     "yourData": "Vos données",
     "yourDataHint": "Votre profil, vos abonnements, coups de cœur, recommandations et surlignages, et les personnes que vous suivez, en un seul fichier.",
-    "download": "Télécharger"
+    "download": "Télécharger",
+    "translationsToday": "Nouvelles traductions",
+    "translationsTodayValue": "{used} sur {perDay} aujourd’hui",
+    "translationsHint": "Un article que Tela a déjà traduit, et le passage d’une écriture chinoise à l’autre, ne comptent pas. Le compteur repart à {time}.",
+    "translationsFree": "Aucune limite quotidienne ne s’applique à votre compte.",
+    "translationsUnlimited": "Sans limite",
+    "translationsWaiting": "{n, plural, one {Une traduction commencera} other {# traductions commenceront}} après {time}.",
+    "subscriptionsPending": "{n, plural, one {Un blog importé attend} other {# blogs importés attendent}} d’être ajoutés. Tela ajoute pour vous {perDay, plural, one {# nouveau blog} other {# nouveaux blogs}} par jour : {n, plural, one {il arrive} other {ils arrivent}} {days, plural, one {demain} other {au cours des # prochains jours}}.",
+    "subscriptionsPendingPaused": "{n, plural, one {Un blog importé attend} other {# blogs importés attendent}} que Tela accueille de nouveau des blogs.",
+    "subscriptionsCap": "Vous suivez {count} des {max} blogs qu’un compte peut suivre."
   },
   "invites": {
     "intro": "Tela fonctionne sur invitation pour l’instant. Vous pouvez inviter cinq personnes : un code permet à une personne de s’inscrire et, une fois utilisé, il compte pour de bon. Révoquez un code que personne n’a utilisé pour récupérer sa place.",
+    "open": "Tout le monde peut désormais s’inscrire sur Tela, sans code d’invitation. Vos codes sont conservés, et serviront de nouveau si Tela revient aux invitations.",
     "left": "{n, plural, =0 {Vous avez invité toutes les personnes possibles.} one {Vous pouvez encore inviter # personne.} other {Vous pouvez encore inviter # personnes.}}",
     "create": "Créer un code",
     "none": "Aucun code pour l’instant. Créez-en un, puis envoyez son lien à quelqu’un.",
@@ -962,6 +1086,24 @@
       "failed": "Cela n’a pas fonctionné. Réessayez.",
       "link_failed": "Ce compte n’a pas pu être associé. Réessayez.",
       "load": "Impossible de charger vos moyens de connexion. Réessayez plus tard."
+    },
+    "delete": {
+      "label": "Supprimer le compte",
+      "hint": "Supprime définitivement votre compte et ce que vous gardez sur Tela.",
+      "open": "Supprimer le compte",
+      "title": "Supprimer votre compte ?",
+      "goes": "Votre nom, votre bio, votre photo, vos mots et vos blogrolls disparaissent aussitôt, de même que les personnes que vous suivez et vos abonnés. Tous vos appareils sont déconnectés. Ce que vous gardiez pour vous (abonnements, dossiers, surlignages, j’aime, ce que vous avez lu) est supprimé dans les minutes qui suivent. Les blogs que vous avez revendiqués sont libérés, avec les réglages que vous leur aviez donnés.",
+      "stays": "Votre identifiant {handle} est mis hors d’usage : personne ne pourra le reprendre pour se faire passer pour vous. Les sauvegardes de Tela en gardent une copie 30 jours, puis elle disparaît.",
+      "export": "Pour en garder une copie, <link>téléchargez vos données</link> d’abord.",
+      "send": "M’envoyer un code",
+      "sent": "Nous avons envoyé un code à {email}. Saisissez-le pour supprimer votre compte.",
+      "confirm": "Supprimer mon compte",
+      "errors": {
+        "admin": "Ce compte gère la console d’administration de Tela. Confiez-la d’abord à quelqu’un d’autre, puis supprimez le compte.",
+        "bad_code": "Ce code n’est pas le bon, ou il a expiré. Demandez-en un nouveau.",
+        "rate_limited": "Trop d’essais. Réessayez plus tard.",
+        "failed": "Cela n’a pas fonctionné. Réessayez."
+      }
     }
   },
   "search": {
@@ -1036,7 +1178,9 @@
     "updated": "Dernière mise à jour : {date}"
   },
   "toast": {
-    "undo": "Annuler"
+    "undo": "Annuler",
+    "subscriptionLimit": "Vous suivez {max} blogs, le maximum pour un compte. Désabonnez-vous d’un blog pour en ajouter un autre.",
+    "subscriptionLimitMany": "Cela ferait {n} blogs de plus, et un compte en suit au plus {max}. Vous pouvez encore en suivre {room}."
   },
   "firstRun": {
     "title": "Commencez par quelques blogs",
@@ -1046,5 +1190,57 @@
     "more": "Plus de blogs dans Découvrir →",
     "import": "Vous venez d’un autre lecteur ? <opml>Importez un fichier OPML</opml> ou <add>collez l’adresse d’un blog</add>.",
     "footer": "Plus de blogs dans <discover>Découvrir</discover>. Vous venez d’un autre lecteur ? <opml>Importez un fichier OPML</opml> ou <add>collez l’adresse d’un blog</add>."
+  },
+  "feeds": {
+    "label": "Flux",
+    "rss": "Les nouveaux articles en RSS, pour un lecteur de flux",
+    "opml": "Ces blogs en OPML, à importer dans un lecteur de flux",
+    "blogroll": "Les derniers articles des blogs de {name}, une blogroll de {owner} sur Tela.",
+    "discover": "Les derniers articles des blogs de l’annuaire de Tela."
+  },
+  "report": {
+    "link": "Signaler",
+    "title": {
+      "profile": "Signaler ce profil",
+      "blogroll": "Signaler cette blogroll",
+      "site": "Signaler ce blog",
+      "recommendation": "Signaler ce mot"
+    },
+    "byMail": {
+      "profile": "Signaler ce profil par e-mail",
+      "blogroll": "Signaler cette blogroll par e-mail",
+      "site": "Signaler ce blog par e-mail",
+      "recommendation": "Signaler ce mot par e-mail"
+    },
+    "mailSubject": {
+      "profile": "Signalement : un profil sur Tela",
+      "blogroll": "Signalement : une blogroll sur Tela",
+      "site": "Signalement : un blog sur Tela",
+      "recommendation": "Signalement : un mot sur Tela"
+    },
+    "intro": "Votre signalement va à la personne qui gère Tela, et à elle seule. Personne ne saura qui l’a envoyé.",
+    "why": "Quel est le problème ?",
+    "reasons": {
+      "spam": "Spam ou publicité",
+      "abuse": "Injurieux ou harcelant",
+      "impersonation": "Se fait passer pour quelqu’un d’autre",
+      "copyright": "Copie le travail de quelqu’un d’autre",
+      "illegal": "Illégal",
+      "other": "Autre chose"
+    },
+    "details": "Autre chose à préciser",
+    "optional": "(facultatif)",
+    "count": "{n}/{max}",
+    "send": "Envoyer le signalement",
+    "sending": "Envoi…",
+    "cancel": "Annuler",
+    "thanks": "Merci",
+    "thanksBody": "Votre signalement est bien arrivé. Il sera lu, et suivi d’effet si nécessaire.",
+    "close": "Fermer",
+    "errors": {
+      "rate_limited": "Vous avez envoyé beaucoup de signalements aujourd’hui. Réessayez demain.",
+      "not_found": "Ce contenu n’est plus affiché : il n’y a plus rien à signaler.",
+      "failed": "Le signalement n’a pas pu être envoyé. Réessayez."
+    }
   }
 }

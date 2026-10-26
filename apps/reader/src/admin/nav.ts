@@ -5,15 +5,16 @@ export type NavGroup = 'queues' | 'library' | 'members' | 'running'
 
 export const NAV: readonly { group: NavGroup | null; areas: readonly AdminArea[] }[] = [
   { group: null, areas: ['overview'] },
-  { group: 'queues', areas: ['claims'] },
+  { group: 'queues', areas: ['claims', 'reports'] },
   { group: 'library', areas: ['sites', 'feeds', 'discover'] },
   { group: 'members', areas: ['people', 'invites'] },
-  { group: 'running', areas: ['translation', 'system'] },
+  { group: 'running', areas: ['translation', 'system', 'settings'] },
 ]
 
 /** The group an area's header names above its title. */
 export const AREA_GROUP: Record<LedgerArea, NavGroup> = {
   claims: 'queues',
+  reports: 'queues',
   sites: 'library',
   feeds: 'library',
   discover: 'library',
@@ -21,6 +22,7 @@ export const AREA_GROUP: Record<LedgerArea, NavGroup> = {
   invites: 'members',
   translation: 'running',
   system: 'running',
+  settings: 'running',
 }
 
 /** What waits in an area, for its badge: only the queues have one. */
@@ -31,5 +33,7 @@ export function badgeOf(area: AdminArea, counts: AdminCounts | null): number {
   // A tela-api from before ADR 0041 counts no review queue.
   if (area === 'discover') return counts.discover ?? 0
   if (area === 'system') return counts.dead
+  // A tela-api from before ADR 0059 counts no reports.
+  if (area === 'reports') return counts.reports ?? 0
   return 0
 }

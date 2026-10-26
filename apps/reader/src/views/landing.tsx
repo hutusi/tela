@@ -321,6 +321,7 @@ function PostCard({
           article={article}
           source={source}
           member={member}
+          vouched={site.vouched}
           className="text-ink after:absolute after:inset-0 after:rounded-xl hover:text-ink hover:no-underline"
         >
           {shown.big.text}

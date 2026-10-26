@@ -5,25 +5,33 @@
 import { folderName, MAX_FOLDERS, sameFolderName } from '@tela/shared'
 import { sql } from 'drizzle-orm'
 import type { TelaDb } from '../db'
-import { subscriptions } from '../schema'
 import { bumpSeq, currentSeq } from '../seq'
+import { subscribeWithinCap } from './allowances'
 import { recountReaders } from './sites'
 
 const siteOfFeed = (feedId: number) => sql`(select site_id from feeds where id = ${feedId})`
 
-/** Subscribe (or resubscribe); articles already stored count as unread from here on. */
-export async function subscribe(db: TelaDb, userId: string, feedId: number, now: number) {
-  await db.batch([
+/**
+ * Subscribe (or resubscribe); articles already stored count as unread from here on. Held to the
+ * member's subscription cap (ADR 0063): false when they do not follow the feed after, because
+ * they hold as many as the cap allows.
+ */
+export async function subscribe(
+  db: TelaDb,
+  userId: string,
+  feedId: number,
+  now: number,
+): Promise<boolean> {
+  const results = (await db.batch([
     bumpSeq(db),
-    db
-      .insert(subscriptions)
-      .values({ userId, feedId, createdAt: now, updatedAt: now, seq: currentSeq })
-      .onConflictDoUpdate({
-        target: [subscriptions.userId, subscriptions.feedId],
-        set: { deletedAt: null, updatedAt: now, seq: currentSeq },
-      }),
+    subscribeWithinCap(db, userId, feedId, now),
     ...recountReaders(db, siteOfFeed(feedId), now),
-  ])
+    db.all(sql`
+      select 1 as following from subscriptions
+      where user_id = ${userId} and feed_id = ${feedId} and deleted_at is null
+    `),
+  ] as never)) as unknown[]
+  return (results[4] as unknown[]).length > 0
 }
 
 export async function unsubscribe(db: TelaDb, userId: string, feedId: number, now: number) {

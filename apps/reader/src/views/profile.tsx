@@ -4,10 +4,13 @@
  * they show it. Pure: the SPA and the edge both render it, and a member's own state (Follow, their
  * counts, their own blogrolls) comes in by props.
  */
+
+import { recommendationKey } from '@tela/shared'
 import { Link } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { BLOGROLL_GRID, BlogrollCard } from '../components/blogroll-card'
 import { PersonAvatar } from '../components/person-avatar'
+import { ReportLink } from '../components/report-link'
 import { SiteAvatar } from '../components/site-avatar'
 import { displayHost, monthYear, shortDate, swatchColor } from '../lib/format'
 import { publicTitle } from '../lib/public-title'
@@ -123,6 +126,16 @@ export function ProfileView({
           </h1>
           <div className="mt-1 text-[13px] text-muted md:mt-2 md:text-[13.5px]">
             @{profile.handle} · {t('joined', { when: monthYear(profile.memberSince, locale) })}
+            {known && !mine ? (
+              <>
+                {' · '}
+                <ReportLink
+                  subject={{ kind: 'profile', key: profile.id }}
+                  path={here}
+                  member={member !== undefined}
+                />
+              </>
+            ) : null}
           </div>
         </div>
         {mine ? (
@@ -237,6 +250,8 @@ export function ProfileView({
               ? (data.liked ?? []).map((l) => ({ ...l, at: l.likedAt, note: null }))
               : data.recommendations.map((r) => ({ ...r, at: r.createdAt }))
           }
+          // Someone else's notes can be reported (ADR 0059); a liked post carries none.
+          reportAs={known && !mine && tab !== 'liked' ? { userId: profile.id, path: here } : null}
           member={member}
           reading={reading}
           locale={locale}
@@ -253,6 +268,8 @@ type PostItem = {
   siteId: number
   siteTitle: string | null
   homeUrl: string
+  /** An operator listed the blog: the post's link is followed (ADR 0060). */
+  vouched?: boolean
   article: PublicArticle
 }
 
@@ -264,8 +281,11 @@ function Posts({
   locale,
   now,
   testId,
+  reportAs = null,
 }: {
   items: PostItem[]
+  /** Whose notes these are, and the page they are on, when a reader may report one. */
+  reportAs?: { userId: string; path: string } | null
   member: MemberControls | undefined
   reading: Reading
   locale: string
@@ -296,12 +316,24 @@ function Posts({
             </div>
             <div className="flex min-w-0 flex-col gap-2 md:gap-3">
               {item.note ? (
-                <p
-                  className="m-0 font-serif text-[19px] leading-[1.4] italic md:text-[21px]"
-                  style={{ textWrap: 'pretty' }}
-                >
-                  {tc('quoted', { text: item.note })}
-                </p>
+                <div className="flex flex-col items-start gap-1">
+                  <p
+                    className="m-0 font-serif text-[19px] leading-[1.4] italic md:text-[21px]"
+                    style={{ textWrap: 'pretty' }}
+                  >
+                    {tc('quoted', { text: item.note })}
+                  </p>
+                  {reportAs ? (
+                    <ReportLink
+                      subject={{
+                        kind: 'recommendation',
+                        key: recommendationKey(reportAs.userId, item.article.id),
+                      }}
+                      path={reportAs.path}
+                      member={member !== undefined}
+                    />
+                  ) : null}
+                </div>
               ) : null}
               <div className="relative flex flex-col gap-1.5 hover:opacity-75">
                 <div className="flex items-center gap-2 text-[12.5px] text-muted">
@@ -323,6 +355,7 @@ function Posts({
                     article={item.article}
                     source={source}
                     member={member}
+                    vouched={item.vouched}
                     className="text-ink after:absolute after:inset-0 hover:no-underline"
                   >
                     {title}

@@ -4,19 +4,15 @@
  */
 import type { Request as CfRequest, ExecutionContext } from '@cloudflare/workers-types'
 import { r2Blobs } from '@tela/platform/cloudflare'
-import { isUiLocale, preferredLanguages } from '@tela/shared'
-import { detectLocale } from '../src/i18n'
+import { isUiLocale } from '@tela/shared'
+import { requestLocale } from '../src/i18n'
 import { type PublicRoute, publicRoute, renderPublicPage } from '../src/ssr'
 import { createEdge, type PublicPages } from './edge'
 import type { Env } from './env'
 
 const pages: PublicPages<PublicRoute> = {
   route: publicRoute,
-  locale: (request) =>
-    detectLocale(
-      request.headers.get('cookie') ?? '',
-      preferredLanguages(request.headers.get('accept-language') ?? ''),
-    ),
+  locale: requestLocale,
   render: ({ route, url, data, locale, template }) =>
     renderPublicPage({
       route,
@@ -41,7 +37,7 @@ function edgeFor(env: Env) {
       fetch: (request) => env.ASSETS.fetch(request as never) as unknown as Promise<Response>,
     },
     pages: pages as unknown as PublicPages,
-    config: { authSecret: env.AUTH_SECRET, privateBeta: env.TELA_PRIVATE_BETA === '1' },
+    config: { authSecret: env.AUTH_SECRET, noindex: env.TELA_NOINDEX === '1' },
   })
   cached = { env, edge }
   return edge

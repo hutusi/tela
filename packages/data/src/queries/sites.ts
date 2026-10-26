@@ -51,12 +51,13 @@ function ensureSiteForNewFeed(
   origin: string,
   now: number,
   meta: SiteMeta,
+  within: SQL,
 ) {
   return db.run(sql`
     insert into sites (home_url, title, description, primary_lang, created_at, updated_at, seq)
     select ${origin}, ${meta.title ?? null}, ${meta.description ?? null}, ${meta.primaryLang ?? null},
       ${now}, ${now}, ${currentSeq}
-    where not exists (select 1 from feeds where feed_url = ${feedUrl})
+    where not exists (select 1 from feeds where feed_url = ${feedUrl}) and ${within}
     on conflict (home_url) do update set
       title = coalesce(sites.title, excluded.title),
       description = coalesce(sites.description, excluded.description),
@@ -168,46 +169,52 @@ export type EnsureFeedInput = {
   now: number
 }
 
-/** Find or create a feed (and its site). A new feed is due immediately. */
+export type EnsuredFeed = { feedId: number; siteId: number; created: boolean }
+
+/**
+ * Find or create a feed (and its site). A new feed is due immediately. With `within`, a feed new to
+ * Tela is created only while that holds, as a member's room for new feeds (`feedRoom`, ADR 0063):
+ * evaluated in the statements that write, so two adds cannot both take the day's last place, and
+ * null when it refused one. A feed Tela has is found whatever it says.
+ */
 export async function ensureFeed(
   db: TelaDb,
-  input: EnsureFeedInput,
-): Promise<{ feedId: number; siteId: number; created: boolean }> {
-  const [, , inserted] = await db.batch([
+  input: EnsureFeedInput & { within: SQL },
+): Promise<EnsuredFeed | null>
+export async function ensureFeed(db: TelaDb, input: EnsureFeedInput): Promise<EnsuredFeed>
+export async function ensureFeed(
+  db: TelaDb,
+  input: EnsureFeedInput & { within?: SQL },
+): Promise<EnsuredFeed | null> {
+  const within = input.within ?? sql`true`
+  const [, , inserted] = (await db.batch([
     bumpSeq(db),
-    ensureSiteForNewFeed(db, input.feedUrl, input.siteOrigin, input.now, input.site ?? {}),
-    db
-      .insert(feeds)
-      .values({
-        // A feed that exists already made no site above; its own site keeps the column filled
-        // until the conflict below drops the row.
-        siteId: sql`coalesce(${siteIdOf(input.siteOrigin)},
-          (select site_id from feeds where feed_url = ${input.feedUrl}))`,
-        feedUrl: input.feedUrl,
-        host: input.host,
-        title: input.title ?? null,
-        description: input.description ?? null,
-        format: input.format ?? null,
-        hubUrl: input.hubUrl ?? null,
-        addedBy: input.addedBy ?? null,
-        fetchRegion: input.fetchRegion ?? 'global',
-        nextFetchAt: input.now,
-        createdAt: input.now,
-        updatedAt: input.now,
-        seq: currentSeq,
-      })
-      .onConflictDoNothing({ target: feeds.feedUrl })
-      .returning({ id: feeds.id, siteId: feeds.siteId }),
-  ])
+    ensureSiteForNewFeed(db, input.feedUrl, input.siteOrigin, input.now, input.site ?? {}, within),
+    // A feed that exists already made no site above; its own site keeps the column filled until
+    // the conflict below drops the row.
+    db.all(sql`
+      insert into feeds (site_id, feed_url, host, title, description, format, hub_url, added_by,
+        fetch_region, next_fetch_at, created_at, updated_at, seq)
+      select coalesce(${siteIdOf(input.siteOrigin)},
+          (select site_id from feeds where feed_url = ${input.feedUrl})),
+        ${input.feedUrl}, ${input.host}, ${input.title ?? null}, ${input.description ?? null},
+        ${input.format ?? null}, ${input.hubUrl ?? null}, ${input.addedBy ?? null},
+        ${input.fetchRegion ?? 'global'}, ${input.now}, ${input.now}, ${input.now}, ${currentSeq}
+      where ${within}
+      on conflict (feed_url) do nothing
+      returning id, site_id
+    `),
+  ] as never)) as unknown as [unknown, unknown, { id: number; site_id: number }[]]
   const row = inserted[0]
-  if (row) return { feedId: row.id, siteId: row.siteId, created: true }
+  if (row) return { feedId: Number(row.id), siteId: Number(row.site_id), created: true }
   const existing = await db
     .select({ id: feeds.id, siteId: feeds.siteId })
     .from(feeds)
     .where(eq(feeds.feedUrl, input.feedUrl))
   const found = existing[0]
-  if (!found) throw new Error(`feed ${input.feedUrl} vanished during insert`)
-  return { feedId: found.id, siteId: found.siteId, created: false }
+  if (found) return { feedId: found.id, siteId: found.siteId, created: false }
+  if (input.within) return null
+  throw new Error(`feed ${input.feedUrl} vanished during insert`)
 }
 
 /** Where a declared home may file a feed: an unclaimed site, or one the acting member claimed. */

@@ -57,6 +57,22 @@ export async function adminCode(request: APIRequestContext, uses = 1): Promise<s
   return code
 }
 
+/**
+ * A runtime setting, as `bun run admin set` changes one (ADR 0056). The stack is shared by every
+ * spec, and they run one at a time: a spec that changes one puts it back when it is done.
+ */
+export async function setSetting(
+  request: APIRequestContext,
+  key: string,
+  value: unknown,
+): Promise<void> {
+  const res = await request.post(`${BASE}/api/admin/settings`, {
+    headers: { authorization: `Bearer ${ADMIN_TOKEN}` },
+    data: { key, value },
+  })
+  if (!res.ok()) throw new Error(`setting failed: ${res.status()} ${await res.text()}`)
+}
+
 /** Join with an invite code, as the sheet does, and return the sign-in code the mail carries. */
 export async function joinAndReadCode(
   request: APIRequestContext,
@@ -91,7 +107,7 @@ export async function memberHeaders(request: APIRequestContext): Promise<Record<
   if (!me.ok()) throw new Error(`who am I failed: ${me.status()} ${await me.text()}`)
   const { id } = (await me.json()) as { id: string }
   // x-tela-client carries MIN_CLIENT (packages/sync/src/protocol.ts), as the app's calls do.
-  return { 'x-tela-client': '3', 'x-tela-member': id }
+  return { 'x-tela-client': '4', 'x-tela-member': id }
 }
 
 /**

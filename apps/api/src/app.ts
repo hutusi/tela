@@ -2,8 +2,18 @@
  * tela-api's routes (ADR 0024). Portable: built from `ApiDeps`, so the Cloudflare entry and the
  * bun test suite run the same app. Reached only through tela-web, which forwards `/api/*`.
  */
-import { audit, bumpSeq, currentSeq, first, newGroupId, readTitles, schema } from '@tela/data'
-import { isReadingLanguage } from '@tela/shared'
+import {
+  audit,
+  bumpSeq,
+  currentSeq,
+  first,
+  isBarred,
+  newGroupId,
+  readTitles,
+  reapplyClosures,
+  schema,
+} from '@tela/data'
+import { isReadingLanguage, isSettingKey } from '@tela/shared'
 import {
   CLIENT_HEADER,
   MEMBER_HEADER,
@@ -22,6 +32,7 @@ import { fromOperator } from './operator'
 import { accountRoutes } from './routes/account'
 import { adminRoutes } from './routes/admin'
 import { runBatch } from './routes/admin/framework'
+import { applySetting, settingRows } from './routes/admin/running/settings'
 import { avatarRoutes } from './routes/avatars'
 import { blogrollRoutes } from './routes/blogrolls'
 import { claimRoutes } from './routes/claims'
@@ -34,6 +45,9 @@ import { inviteRoutes, operatorCodeRoutes } from './routes/invites'
 import { memberRoutes } from './routes/members'
 import { pictureRoutes } from './routes/picture'
 import { publicRoutes } from './routes/public'
+import { publicFeedRoutes } from './routes/public-feeds'
+import { reportRoutes } from './routes/reports'
+import { sitemapRoutes } from './routes/sitemap'
 import { socialRoutes } from './routes/social'
 import { translationRoutes } from './routes/translations'
 import { websubRoutes } from './routes/websub'
@@ -98,6 +112,19 @@ function protocolOf(header: string | undefined): number {
   const n = Number(header ?? '0')
   return Number.isInteger(n) ? n : 0
 }
+
+/**
+ * The member calls that read the account's standing from D1 first (ADRs 0058, 0059): who is signed
+ * in, the pull, the export, and every call that writes. Other reads trust the session as ever;
+ * the next pull, a minute away at most, signs the tab out.
+ */
+const STANDING_READS: ReadonlySet<string> = new Set([
+  '/api/v1/me',
+  '/api/v1/sync',
+  '/api/v1/export',
+])
+export const guarded = (method: string, path: string) =>
+  (method !== 'GET' && method !== 'HEAD') || STANDING_READS.has(path)
 
 /** A client older than the protocol is told to reload, not left misreading rows. */
 const tooOld = (header: string | undefined) => protocolOf(header) < MIN_CLIENT
@@ -281,6 +308,42 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
     return c.json({ userId: found.id, admin, changed: found.is_admin !== flag })
   })
 
+  /**
+   * Runtime settings from the operator's CLI (`bun run admin settings|set`, ADR 0056): the same
+   * audited write the console's `setting.set` makes, with no member as its actor.
+   */
+  app.get('/api/admin/settings', async (c) => {
+    if (!fromOperator(c, deps.config.adminToken)) return c.json({ error: 'forbidden' }, 403)
+    return c.json({ settings: await settingRows(deps.db) }, 200, { 'cache-control': 'no-store' })
+  })
+  app.post('/api/admin/settings', async (c) => {
+    if (!fromOperator(c, deps.config.adminToken)) return c.json({ error: 'forbidden' }, 403)
+    const body = await c.req
+      .json<{ key?: unknown; value?: unknown }>()
+      .catch(() => ({}) as { key?: unknown; value?: unknown })
+    if (!isSettingKey(body.key) || !('value' in body)) return c.json({ error: 'invalid' }, 400)
+    const outcome = await applySetting(deps.db, {
+      key: body.key,
+      value: body.value,
+      actor: null,
+      group: newGroupId(),
+      now: deps.clock.now(),
+    })
+    if (outcome === 'invalid') return c.json({ error: 'invalid' }, 400)
+    return c.json({ key: body.key, changed: outcome === 'done' })
+  })
+
+  /**
+   * Close again every account closed since a restore's backup (`bun run admin closures`, ADR
+   * 0058): a Time Travel rollback or a restored export brings closed accounts back with it, and
+   * `closures/<id>` in R2 says which. Idempotent; run it before the restored database serves
+   * anyone.
+   */
+  app.post('/api/admin/closures', async (c) => {
+    if (!fromOperator(c, deps.config.adminToken)) return c.json({ error: 'forbidden' }, 403)
+    return c.json(await reapplyClosures(deps.db, deps.blobs, deps.clock.now()))
+  })
+
   if (deps.config.testMode) {
     // e2e reads sign-in codes here instead of from a real inbox. Test mode only.
     app.get('/api/test/outbox', (c) => {
@@ -294,6 +357,19 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
       if (!deps.cycle) return c.json({ error: 'no_jobs' }, 404)
       return c.json(await deps.cycle({ refetch: c.req.query('refetch') === '1' }))
     })
+    // …and make a member's profile `days` older, for a spec that needs someone past the week a
+    // new account waits before Discover suggests them or search engines index them (ADR 0060).
+    app.post('/api/test/age', async (c) => {
+      const handle = c.req.query('handle') ?? ''
+      const days = Number(c.req.query('days'))
+      if (!handle || !Number.isInteger(days)) return c.json({ error: 'invalid' }, 400)
+      await deps.db.batch([
+        bumpSeq(deps.db),
+        deps.db.run(sql`update profiles set created_at = created_at - ${days * 86_400_000},
+          seq = ${currentSeq} where handle = ${handle.toLowerCase()}`),
+      ] as never)
+      return c.json({ handle, days })
+    })
   }
 
   // Anyone may read these, and nothing in them depends on who asks: the pages tela-web renders
@@ -305,6 +381,10 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
   app.route('/api/v1/public/discover', discoverRoutes(deps))
   // A public blogroll's page (ADR 0050); its owner reads their own from the device.
   app.route('/api/v1/public/blogrolls', blogrollRoutes(deps))
+  // What tela-web's sitemaps list (ADR 0060): the pages search engines may index.
+  app.route('/api/v1/public/sitemap', sitemapRoutes(deps))
+  // What tela-web renders Tela's own RSS and OPML from (ADR 0062).
+  app.route('/api/v1/public/feeds', publicFeedRoutes(deps))
   app.route('/api/v1/public', publicRoutes(deps, auth))
   // Hubs, not members, call this; the signature is the authorization.
   app.route('/api/websub', websubRoutes(deps))
@@ -334,6 +414,13 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
     if (!session) return c.json({ error: 'unauthorized' }, 401)
     const member = { id: session.user.id, email: session.user.email }
     c.set('member', member)
+    // A closed or suspended account is signed out from its next call that matters (ADRs 0058,
+    // 0059), whatever copy of its session the cookie still carries: 401, which every shell reads
+    // as the end of the session and wipes the device's copy on. Checked in D1 for the calls that
+    // say who is signed in, sync, write, or hand the member their data.
+    if (guarded(c.req.method, c.req.path) && (await isBarred(deps.db, member.id))) {
+      return c.json({ error: 'unauthorized' }, 401)
+    }
     if (c.req.path === '/api/v1/me') return next()
     if (tooOld(c.req.header(CLIENT_HEADER))) return c.json({ error: 'upgrade' }, 409)
     if (c.req.header(MEMBER_HEADER) !== member.id) return c.json({ error: 'account_changed' }, 409)
@@ -402,6 +489,8 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
   app.route('/api/v1/translations', translationRoutes(deps))
   app.route('/api/v1/feeds', feedRoutes(deps))
   app.route('/api/v1/claims', claimRoutes(deps))
+  // Reporting what a public page shows (ADR 0059): members only; a visitor writes instead.
+  app.route('/api/v1/reports', reportRoutes(deps))
   app.route('/api/v1', memberRoutes(deps))
   app.route('/api/v1', pictureRoutes(deps))
   app.route('/api/v1', socialRoutes(deps))

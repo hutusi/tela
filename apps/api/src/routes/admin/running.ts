@@ -7,6 +7,7 @@ import { Hono } from 'hono'
 import type { ApiDeps } from '../../deps'
 import type { AdminEnv, AdminModule } from './framework'
 import { overviewRoutes } from './running/overview'
+import { settingActions, settingInverses, settingRoutes } from './running/settings'
 import { systemActions, systemInverses, systemRoutes } from './running/system'
 import { translationRoutes } from './running/translation'
 
@@ -15,5 +16,10 @@ export function runningModule(deps: ApiDeps): AdminModule {
   routes.route('/', overviewRoutes(deps))
   routes.route('/', translationRoutes(deps))
   routes.route('/', systemRoutes(deps))
-  return { routes, actions: { ...systemActions }, inverses: { ...systemInverses } }
+  routes.route('/', settingRoutes(deps))
+  return {
+    routes,
+    actions: { ...systemActions, ...settingActions },
+    inverses: { ...systemInverses, ...settingInverses },
+  }
 }

@@ -12,11 +12,19 @@
     "rejected": "已隐藏"
   },
   "people": {
-    "filters": { "admins": "管理员", "members": "成员" },
+    "filters": {
+      "admins": "管理员",
+      "members": "成员",
+      "suspended": "已停用"
+    },
     "search": "按用户名、昵称或邮箱搜索",
     "name": "成员",
     "columns": { "role": "角色", "signIn": "登录方式", "joined": "加入时间" },
-    "role": { "admin": "管理员", "member": "成员" },
+    "role": {
+      "admin": "管理员",
+      "member": "成员",
+      "suspended": "已停用"
+    },
     "privacy": "阅读记录、订阅和点赞都是私密的，管理员也看不到。",
     "kv": {
       "email": "邮箱",
@@ -24,7 +32,8 @@
       "joined": "加入",
       "invites": "邀请",
       "sessions": "会话",
-      "bio": "简介"
+      "bio": "简介",
+      "suspended": "停用于"
     },
     "separator": "、",
     "joinedBy": {
@@ -97,5 +106,64 @@
       "created": "已创建，可供 {n, plural, other {# 人}}使用",
       "addUses": "名额从 {from} 增加到 {to}"
     }
+  },
+  "reports": {
+    "filters": {
+      "open": "待处理",
+      "resolved": "已处理",
+      "dismissed": "已忽略"
+    },
+    "search": "按名字、用户名、博客或举报内容搜索",
+    "name": "被举报的内容",
+    "kinds": {
+      "profile": "个人页",
+      "blogroll": "博客链",
+      "site": "博客",
+      "recommendation": "推荐语"
+    },
+    "sub": "{kind} · @{handle}",
+    "gone": "已不再显示的{kind}",
+    "columns": {
+      "reason": "原因",
+      "reporters": "举报人数",
+      "when": "最近举报"
+    },
+    "reasons": {
+      "spam": "垃圾信息",
+      "abuse": "辱骂或骚扰",
+      "impersonation": "冒充他人",
+      "copyright": "侵犯版权",
+      "illegal": "违法内容",
+      "other": "其他"
+    },
+    "reporters": "{n} 位成员",
+    "status": {
+      "open": "待处理",
+      "resolved": "已处理",
+      "dismissed": "已忽略"
+    },
+    "standing": {
+      "ok": "正常",
+      "suspended": "已停用",
+      "deleted": "账户已关闭"
+    },
+    "privacy": "举报人的名字只在这里显示。被举报的人不会知道是谁举报的。",
+    "kv": {
+      "what": "内容",
+      "page": "公开页面",
+      "member": "所属成员",
+      "reasons": "举报原因",
+      "reporters": "举报人数",
+      "first": "首次举报",
+      "last": "最近举报",
+      "decided": "处理"
+    },
+    "notPublic": "现在没有对任何人显示",
+    "decidedBy": "{when}，由 @{handle}",
+    "openBlog": "打开这个博客的记录",
+    "actOn": "对它采取操作",
+    "entries": "举报",
+    "gonePerson": "账户已不存在的成员",
+    "from": "来自 {url}"
   }
 }

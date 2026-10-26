@@ -7,9 +7,11 @@ import {
   type Backoff,
   currentSeq,
   dueBodies,
+  dueErasures,
   dueExtractions,
   dueFeeds,
   dueGravatarChecks,
+  duePendingFeeds,
   dueReprocessing,
   dueTitles,
   FEED_FETCH_TTL_MS,
@@ -36,6 +38,8 @@ import {
 } from '@tela/ingest/pipeline'
 import { PIPELINE_VERSION } from '@tela/shared'
 import { type SQL, sql } from 'drizzle-orm'
+import { ERASE_TTL_MS, eraseMemberJob } from './erase'
+import { PENDING_FEEDS_TTL_MS, pendingFeedsJob } from './pending-feeds'
 import { translateBodyJob } from './translation/body'
 import { TITLE_TTL_MS, type TranslationContext, translateTitlesJob } from './translation/titles'
 
@@ -142,6 +146,37 @@ export const KINDS: Partial<Record<LeaseKind, KindSpec>> = {
       db.run(sql`update profiles set gravatar_checked_at = ${now} where user_id = ${key}`),
     ],
   },
+  'member.pendingFeeds': {
+    // An import's feeds new to Tela beyond the member's day, added on the days after (ADR 0063).
+    // Keyed by member; nothing is fetched, so no host. Due only while a run would move something:
+    // the day and the cap have room, or a waiting feed is one Tela has now.
+    queue: 'misc',
+    ttlMs: PENDING_FEEDS_TTL_MS,
+    limit: 50,
+    backoff: { baseMs: 10 * MIN, maxMs: 6 * 60 * MIN, maxAttempts: 3 },
+    due: (now) => duePendingFeeds(now),
+    run: pendingFeedsJob,
+    // A batch that keeps failing is a bug, not a member's doing: their feeds wait a day, visibly.
+    exhausted: (db, key, now) => [
+      db.run(sql`
+        update pending_feeds set queued_at = ${now + 24 * 60 * MIN}
+        where user_id = ${key} and queued_at <= ${now}
+      `),
+    ],
+  },
+  'member.erase': {
+    // What a closed account's own devices held (ADR 0058), once no signed copy of its session
+    // can be read. A member at a time per claim is plenty: accounts close rarely.
+    queue: 'misc',
+    ttlMs: ERASE_TTL_MS,
+    limit: 10,
+    backoff: { baseMs: 10 * MIN, maxMs: 6 * 60 * MIN, maxAttempts: 3 },
+    due: (now) => dueErasures(now),
+    run: eraseMemberJob,
+    // Nothing to mark: an erasure is never called finished when it is not. Its dead letter is the
+    // record that it stopped, and `dueErasures` waits on it until the console retries.
+    exhausted: () => [],
+  },
   'site.claim': {
     queue: 'misc',
     // The home page, then up to 20 declared feeds under a 90 s budget.
@@ -180,6 +215,8 @@ export const KINDS: Partial<Record<LeaseKind, KindSpec>> = {
     ttlMs: TITLE_TTL_MS,
     limit: 100,
     backoff: { baseMs: 5 * MIN, maxMs: 6 * 60 * MIN, maxAttempts: 4 },
+    // The day's budgets are read as the due query runs (ADR 0057); the env value is only what a
+    // background budget of null falls back to.
     due: (now, ctx) => dueTitles(now, ctx.backgroundBudget ?? 0),
     run: translateTitlesJob,
     // The provider kept failing on this batch: record it failed so the sweep stops until the
@@ -194,7 +231,8 @@ export const KINDS: Partial<Record<LeaseKind, KindSpec>> = {
     ttlMs: TRANSLATE_BODY_TTL_MS,
     limit: 20,
     backoff: { baseMs: MIN, maxMs: 30 * MIN, maxAttempts: 3 },
-    due: () => dueBodies(),
+    // A request put off to the next day waits for its `due_at` (ADR 0057).
+    due: (now) => dueBodies(now),
     run: translateBodyJob,
     // Also what retires a body whose every start died. The reservation goes back and what the
     // chunks spent is charged, before the flip that the settle's state filter reads.
@@ -205,8 +243,8 @@ export const KINDS: Partial<Record<LeaseKind, KindSpec>> = {
       return [
         settleBodyUsage(db, contentKey, lang, now),
         db.run(sql`
-          update body_translations set state = 'failed', reserved_tokens = 0, updated_at = ${now},
-            seq = ${currentSeq}
+          update body_translations set state = 'failed', reserved_tokens = 0,
+            reserved_spend = 0, due_at = null, updated_at = ${now}, seq = ${currentSeq}
           where content_key = ${contentKey} and lang = ${lang} and state in ('requested', 'running')
         `),
       ]

@@ -13,6 +13,7 @@ import {
   cookiesOf,
   createTestApi,
   memberHeaders,
+  operatorSets,
   type SignedIn,
   signedIn,
   type TestApi,
@@ -172,6 +173,35 @@ describe("joining with a member's code", () => {
     await d.ask('new@x.test')
     expect(api.mail.outbox).toHaveLength(mailed)
   })
+
+  test.each(['suspended_at', 'deleted_at'] as const)(
+    'a code of a member whose %s is set admits nobody until it is cleared',
+    async (column) => {
+      const api = await createTestApi()
+      const inviter = await signedIn(api, 'inviter@x.test')
+      const d = door(api)
+      const code = await newCode(api, inviter)
+      // Asked for before the inviter was stopped: the hold stands, but admits nobody.
+      expect((await d.join(code, 'early@x.test')).status).toBe(200)
+      const set = (value: number | null) =>
+        api.db.run(sql`update profiles set ${sql.raw(column)} = ${value}
+        where user_id = ${inviter.userId}`)
+      await set(api.clock.now())
+      const late = await d.join(code, 'late@x.test')
+      expect(late.status).toBe(400)
+      expect(await late.json()).toEqual({ error: 'invalid_code' })
+      expect(mailsTo(api, 'late@x.test')).toEqual([])
+      const early = await d.signIn('early@x.test')
+      expect(early.status).toBe(403)
+      expect(await early.json()).toMatchObject({ code: 'INVITE_REQUIRED' })
+      expect(await isMember(api, 'early@x.test')).toBe(false)
+      // Lifted, the code admits as it did.
+      await set(null)
+      expect((await d.join(code, 'late@x.test')).status).toBe(200)
+      expect((await d.signIn('late@x.test')).status).toBe(200)
+      expect(await isMember(api, 'late@x.test')).toBe(true)
+    },
+  )
 
   test('a used code is 409, for a newcomer and a member alike, and mails nothing', async () => {
     const api = await createTestApi()
@@ -591,5 +621,117 @@ describe('the join limits', () => {
     expect(join.status).toBe(429)
     expect(await join.json()).toEqual({ error: 'rate_limited' })
     expect(mailsTo(api, 'a@x.test')).toHaveLength(5)
+  })
+})
+
+describe('joining while sign-up is open (ADR 0056)', () => {
+  const open = async (api: TestApi, maxPerDay?: number | null) => {
+    await operatorSets(api, 'signup.mode', 'open')
+    if (maxPerDay !== undefined) await operatorSets(api, 'signup.maxPerDay', maxPerDay)
+  }
+
+  test('needs no code: the address is welcomed, and its sign-in makes the account', async () => {
+    const api = await createTestApi()
+    await open(api)
+    const d = door(api)
+    for (const [code, email] of [
+      [undefined, 'a@x.test'],
+      ['', 'b@x.test'],
+      [null, 'c@x.test'],
+    ] as const) {
+      const joined = await d.join(code, email)
+      expect(joined.status).toBe(200)
+      expect(await joined.json()).toEqual({ ok: true })
+      expect(mailsTo(api, email).at(-1)?.subject).toStartWith('Welcome to Tela')
+      expect((await d.signIn(email)).status).toBe(200)
+      expect(await isMember(api, email)).toBe(true)
+    }
+    expect(await count(api, 'invite_redemptions')).toBe(0)
+  })
+
+  test("a member's code is still claimed, so the inviter sees who joined", async () => {
+    const api = await createTestApi()
+    const inviter = await signedIn(api, 'inviter@x.test')
+    const code = await newCode(api, inviter)
+    await open(api)
+    const d = door(api)
+    expect((await d.join(code, 'friend@x.test')).status).toBe(200)
+    expect(mailsTo(api, 'friend@x.test').at(-1)?.subject).toStartWith('You are invited to Tela')
+    expect((await d.signIn('friend@x.test')).status).toBe(200)
+    expect((await listOf(api, inviter)).codes[0]?.handle).toMatch(/^u_/)
+  })
+
+  test('a code everyone has joined with is left behind, and the joiner comes in without it', async () => {
+    const api = await createTestApi()
+    await operator(api, { body: { code: 'WELCOME', uses: 1 } })
+    await open(api)
+    const d = door(api)
+    await d.join('WELCOME', 'a@x.test')
+    expect((await d.signIn('a@x.test')).status).toBe(200)
+    const late = await d.join('WELCOME', 'b@x.test')
+    expect(late.status).toBe(200)
+    expect(mailsTo(api, 'b@x.test').at(-1)?.subject).toStartWith('Welcome to Tela')
+    expect((await d.signIn('b@x.test')).status).toBe(200)
+    expect(await api.db.all(sql`select email from invite_redemptions`)).toEqual([
+      { email: 'a@x.test' },
+    ])
+  })
+
+  test('a code typed but unknown is still told, so a typo is put right rather than dropped', async () => {
+    const api = await createTestApi()
+    await open(api)
+    const d = door(api)
+    for (const code of ['NOSUCHCODE', 'ab', 42]) {
+      const res = await d.join(code, 'a@x.test')
+      expect(res.status).toBe(400)
+      expect(await res.json()).toEqual({ error: 'invalid_code' })
+    }
+    expect(api.mail.outbox).toEqual([])
+  })
+
+  test("once the day is full, a join with no invitation is paused for anyone, a member's address too", async () => {
+    const api = await createTestApi()
+    await signedIn(api, 'member@x.test')
+    await operator(api, { body: { code: 'WELCOME', uses: 5 } })
+    // The member made one of the day's two.
+    await open(api, 2)
+    const d = door(api)
+    expect((await d.join(undefined, 'first@x.test')).status).toBe(200)
+    expect((await d.signIn('first@x.test')).status).toBe(200)
+    const mailed = api.mail.outbox.length
+    for (const email of ['new@x.test', 'member@x.test']) {
+      const paused = await d.join(undefined, email)
+      expect(paused.status).toBe(403)
+      expect(await paused.json()).toEqual({ error: 'signups_paused' })
+    }
+    expect(api.mail.outbox).toHaveLength(mailed)
+    // An invite code still joins: an invited account is never what the cap holds back.
+    expect((await d.join('WELCOME', 'new@x.test')).status).toBe(200)
+    expect((await d.signIn('new@x.test')).status).toBe(200)
+  })
+
+  test('joins with no code are limited as joins with one are', async () => {
+    const api = await createTestApi()
+    await open(api)
+    const d = door(api)
+    for (let i = 0; i < 3; i++) expect((await d.join(undefined, 'a@x.test')).status).toBe(200)
+    const fourth = await d.join(undefined, 'A@x.test')
+    expect(fourth.status).toBe(429)
+    expect(await fourth.json()).toEqual({ error: 'rate_limited' })
+    expect(mailsTo(api, 'a@x.test')).toHaveLength(3)
+    for (let i = 0; i < 10; i++)
+      expect((await d.join(undefined, `p${i}@x.test`, '203.0.113.9')).status).toBe(200)
+    expect((await d.join(undefined, 'p10@x.test', '203.0.113.9')).status).toBe(429)
+  })
+
+  test('back to invitations, a join needs its code again, refused before anything counts', async () => {
+    const api = await createTestApi()
+    await open(api)
+    await operatorSets(api, 'signup.mode', 'invite')
+    const res = await door(api).join(undefined, 'a@x.test')
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ error: 'invalid_code' })
+    expect(await count(api, 'action_limits')).toBe(0)
+    expect(api.mail.outbox).toEqual([])
   })
 })

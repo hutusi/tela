@@ -14,7 +14,7 @@ import {
   moveFeedToOrigin,
   type TelaDb,
 } from '@tela/data'
-import type { ClaimMethod, ClaimReason, HomeUnreachable } from '@tela/shared'
+import type { ClaimMethod, ClaimReason, FetchRegion, HomeUnreachable } from '@tela/shared'
 import { findAll, getAttributeValue } from 'domutils'
 import { type SQL, sql } from 'drizzle-orm'
 import { parseDocument } from 'htmlparser2'
@@ -23,6 +23,7 @@ import { type HttpClient, HttpError } from '../http'
 import { requestHubSubscription } from '../websub'
 import { commit, type IngestContext, type Statement } from './context'
 import { namesSite, type ProfileLink, profileHosts, readProofs } from './proofs'
+import { checkLanded, checkRobots } from './robots'
 
 /** The host of a site's origin (`https://blog.example` → `blog.example`), in SQL. */
 const siteHost = (homeUrl: SQL) => sql`substr(${homeUrl}, instr(${homeUrl}, '://') + 3)`
@@ -75,21 +76,46 @@ async function tryGet(http: HttpClient, url: string, accept: string) {
   }
 }
 
-/** Find and store a site's favicon. The stamp is written whatever happens, so it runs once. */
+/**
+ * Find and store a site's favicon. The stamp is written whatever happens, so it runs once. The
+ * home page is read for the icons it declares only where the blog's robots.txt allows it, and
+ * never on a blog whose writer asked for only its feed (ADR 0061): then `/favicon.ico` alone is
+ * tried, as a browser would.
+ */
 export async function siteAssetsJob(
   ctx: IngestContext,
   lease: Lease,
-): Promise<{ status: 'done' | 'skipped' | 'lost'; favicon?: boolean }> {
+): Promise<{ status: 'done' | 'skipped' | 'lost'; favicon?: boolean; homePage?: boolean }> {
   const siteId = Number(lease.key)
-  const site = await first<{ home_url: string }>(
+  const site = await first<{ home_url: string; feed_only: number; region: FetchRegion | null }>(
     ctx.db,
-    sql`select home_url from sites where id = ${siteId} and assets_checked_at is null`,
+    sql`select home_url, feed_only,
+          (select fetch_region from feeds where site_id = sites.id and status = 'active'
+            and merged_into is null order by id limit 1) as region
+        from sites where id = ${siteId} and assets_checked_at is null`,
   )
   if (!site || !ctx.assets) {
     const committed = await commit(ctx, lease, [])
     return committed.ok ? { status: 'skipped' } : { status: 'lost' }
   }
-  const page = await tryGet(ctx.http, site.home_url, 'text/html, */*;q=0.5')
+  let learned: Statement[] = []
+  let page: Awaited<ReturnType<typeof tryGet>> = null
+  if (site.feed_only !== 1) {
+    // Read from where the blog's feed is: the rules are kept per origin, and extraction reads
+    // them too, so a read that timed out from the wrong side would hold its pages back an hour.
+    const robots = await checkRobots(ctx, site.home_url, site.region ?? 'global')
+    learned = [...robots.statements]
+    if (robots.verdict === 'allowed') {
+      page = await tryGet(ctx.http, site.home_url, 'text/html, */*;q=0.5')
+    }
+    // Redirected, the home page is where it landed, on another origin or the same, and so are
+    // its rules (as extraction reads them): refused there, nothing it declared is used.
+    if (page) {
+      const landed = await checkLanded(ctx, robots, page.finalUrl, site.region ?? 'global')
+      learned.push(...landed.statements)
+      if (landed.verdict !== 'allowed') page = null
+    }
+  }
   const html = page?.status === 200 ? page.body : ''
   const base = page?.status === 200 ? page.finalUrl : site.home_url
   let faviconKey: string | null = null
@@ -108,13 +134,16 @@ export async function siteAssetsJob(
   }
   const now = ctx.clock.now()
   const committed = await commit(ctx, lease, [
+    ...learned,
     ctx.db.run(sql`
       update sites set assets_checked_at = ${now}, favicon_key = coalesce(${faviconKey}, favicon_key),
         updated_at = ${now}, seq = ${currentSeq}
       where id = ${siteId}
     `),
   ])
-  return committed.ok ? { status: 'done', favicon: faviconKey !== null } : { status: 'lost' }
+  return committed.ok
+    ? { status: 'done', favicon: faviconKey !== null, homePage: page !== null }
+    : { status: 'lost' }
 }
 
 // ---------------------------------------------------------------------------------------------

@@ -6,7 +6,7 @@
  */
 
 import { buildOpml, MAX_OPML_BYTES } from '@tela/content/opml'
-import { normalizeOrigin } from '@tela/content/url'
+import { asUrl, normalizeOrigin } from '@tela/content/url'
 import {
   claimDue,
   consumeLimit,
@@ -14,10 +14,12 @@ import {
   FEED_FETCH_TTL_MS,
   fileImportedFeeds,
   first,
-  importFeedUrls,
+  importFeeds,
   type JobQueues,
+  nextUtcDay,
+  readSetting,
   subscribe,
-  subscribeMany,
+  subscriptionRoom,
   type TelaDb,
 } from '@tela/data'
 import type { Jobs } from '@tela/platform'
@@ -32,7 +34,45 @@ const ERROR_STATUS = {
   unreachable: 422,
   not_a_feed: 422,
   feed_too_large: 422,
+  feed_limit: 429,
 } as const
+
+/**
+ * A member's limit reached, as the refusal says it (ADR 0063): which limit, how many it allows,
+ * and for the day's, when it comes back. A shell from before it reads only `error`.
+ */
+export async function feedLimitAnswer(db: TelaDb, now: number) {
+  return {
+    error: 'feed_limit' as const,
+    limit: await readSetting(db, 'member.feedsPerDay'),
+    resetsAt: nextUtcDay(now),
+  }
+}
+
+async function subscriptionLimitAnswer(db: TelaDb) {
+  return {
+    error: 'subscription_limit' as const,
+    limit: await readSetting(db, 'member.maxSubscriptions'),
+  }
+}
+
+/**
+ * Whether the member holds as many subscriptions as the cap allows, and the URL they typed is no
+ * feed they follow already: one they follow takes no place, so adding it again is answered as
+ * ever. Found by the URL as tela-jobs registers it, and through a merge, as `addFeed` finds one;
+ * a page or a redirect that leads to a feed they follow is not known before the fetch this check
+ * is there to save, and is refused.
+ */
+async function atSubscriptionCap(db: TelaDb, userId: string, feedUrl: string) {
+  const url = asUrl(feedUrl)?.toString() ?? null
+  const row = await first<{ room: number; following: number }>(
+    db,
+    sql`select ${subscriptionRoom(userId)} as room,
+      exists (select 1 from feeds f join subscriptions s on s.feed_id = coalesce(f.merged_into, f.id)
+        where f.feed_url = ${url} and s.user_id = ${userId} and s.deleted_at is null) as following`,
+  )
+  return Number(row?.room ?? 0) <= 0 && !row?.following
+}
 
 /** Claim a feed that has never been fetched and send it on, so a new subscriber sees posts now. */
 export async function fetchSoon(db: TelaDb, jobs: Jobs<JobQueues>, feedId: number, now: number) {
@@ -81,9 +121,19 @@ export function feedRoutes(deps: ApiDeps) {
     if (!(await consumeLimit(db, 'subscribe', member.id, now)).allowed) {
       return c.json({ error: 'rate_limited' }, 429)
     }
-    const added = await ingest.addFeed({ feedUrl, actorId: member.id })
-    if ('error' in added) return c.json(added, ERROR_STATUS[added.error])
-    await subscribe(db, member.id, added.feedId, now)
+    // Before the fetch, so a member at the cap adds no feed nobody would read. The subscribe below
+    // is held to the cap as well, for two adds at once.
+    if (await atSubscriptionCap(db, member.id, feedUrl)) {
+      return c.json(await subscriptionLimitAnswer(db), 409)
+    }
+    const added = await ingest.addFeed({ feedUrl, actorId: member.id, withinDay: true })
+    if ('error' in added) {
+      if (added.error === 'feed_limit') return c.json(await feedLimitAnswer(db, now), 429)
+      return c.json(added, ERROR_STATUS[added.error])
+    }
+    if (!(await subscribe(db, member.id, added.feedId, now))) {
+      return c.json(await subscriptionLimitAnswer(db), 409)
+    }
     const feed = await first<{ last_fetched_at: number | null }>(
       db,
       sql`select last_fetched_at from feeds where id = ${added.feedId}`,
@@ -122,12 +172,26 @@ export function feedRoutes(deps: ApiDeps) {
       const origin = normalizeOrigin(feedUrl)
       return origin ? [{ feedUrl, host: new URL(feedUrl).hostname.toLowerCase(), origin }] : []
     })
-    const feedIds = await importFeedUrls(db, feeds, member.id, now)
-    const subscribed = await subscribeMany(db, member.id, feedIds, now)
-    // An older tela-jobs reads no folders; its import files nothing, as imports always did.
+    // Feeds Tela has subscribe free; new ones are added up to the member's day, and the rest wait
+    // for `member.pendingFeeds` (ADR 0063), all within the subscription cap.
+    const brought = await importFeeds(db, { userId: member.id, feeds, now })
+    // An older tela-jobs reads no folders; its import files nothing, as imports always did. A feed
+    // that waits is filed in none when it arrives: a waiting row keeps no folder.
     const filed = await fileImportedFeeds(db, member.id, read.folders ?? [], now)
     // New feeds are due now: the next sweep fetches them, politely per host.
-    return c.json({ feeds: feedIds.length, subscribed, folders: filed.folders, filed: filed.filed })
+    return c.json({
+      // What a shell from before ADR 0063 reads: the blogs of the file the member now follows.
+      feeds: brought.following,
+      subscribed: brought.subscribed,
+      added: brought.added,
+      waiting: brought.waiting,
+      over: brought.over,
+      perDay: brought.exempt ? null : brought.perDay,
+      maxSubscriptions: brought.exempt ? null : brought.maxSubscriptions,
+      resetsAt: nextUtcDay(now),
+      folders: filed.folders,
+      filed: filed.filed,
+    })
   })
 
   routes.get('/opml', async (c) => {
@@ -154,7 +218,7 @@ export function feedRoutes(deps: ApiDeps) {
         homeUrl: r.home_url,
         folder: r.folder,
       })),
-      new Date(deps.clock.now()),
+      { title: 'Tela subscriptions', dateCreated: new Date(deps.clock.now()) },
     )
     return c.body(opml, 200, {
       'content-type': 'text/x-opml; charset=utf-8',

@@ -1,12 +1,14 @@
 /**
  * Public pages, rendered at the edge (ADR 0025, 0035): the front page, Discover's tabs (ADR 0044;
- * Blogrolls, ADR 0050), a blog's page, a member's profile, a public blogroll (ADR 0050), and About,
- * Privacy and Terms, for visitors who have no shell cached yet and for link previews. The same
- * views the SPA renders, with a guest session and an empty store; the page's data is handed over
- * in `#tela-data`, so the SPA's first render needs no request of its own. About, Privacy and Terms
- * take no data at all (ADR 0035): their copy is in the bundle.
+ * Blogrolls, ADR 0050), a blog's page, a member's profile, a public blogroll (ADR 0050), About,
+ * Privacy and Terms, and For writers (ADR 0061), for visitors who have no shell cached yet and for
+ * link previews. The same views the SPA renders, with a guest session and an empty store; the
+ * page's data is handed over in `#tela-data`, so the SPA's first render needs no request of its
+ * own. About, Privacy, Terms and For writers take no data at all (ADR 0035): their copy is in the
+ * bundle. Each page's head says where it is in every language (`?hl=`), how it previews, whether
+ * it is indexed, and what it is in schema.org's terms (ADR 0060, `lib/head.ts`).
  */
-import type { UiLocale } from '@tela/shared'
+import { hlLocale, UI_LOCALES, type UiLocale } from '@tela/shared'
 import { renderToString } from 'react-dom/server'
 import { StaticRouter } from 'react-router'
 import { createTranslator } from 'use-intl'
@@ -35,11 +37,12 @@ import {
   WEEK_PATH,
 } from './lib/discover-href'
 import { NOTHING_HIDDEN } from './lib/discover-overlay'
-import { composeWeek } from './lib/discover-week'
+import { type ComposedWeek, composeWeek } from './lib/discover-week'
 import { FRONT_PATH, frontHref, type TitlesMode, titlesMode } from './lib/edition'
+import { blogrollFeedHref, discoverFeedHref } from './lib/feed-href'
 import { displayHost } from './lib/format'
+import { headTags, inScript, type PageHead } from './lib/head'
 import { suggestReaders } from './lib/suggest-readers'
-import { pageTitle } from './lib/title'
 import { NotFoundPage } from './pages/not-found'
 import { handleFrom, profilePath } from './pages/profile'
 import { sitePath } from './pages/site'
@@ -66,12 +69,15 @@ import type {
   BlogrollData,
   BlogrollsData,
   DiscoverData,
+  DiscoverPost,
   FrontData,
   ProfileData,
+  PublicArticle,
   ReadersData,
   SiteData,
   WeekData,
 } from './views/types'
+import { WritersView } from './views/writers'
 
 /**
  * `key` is what the edge caches the page under when it is not `api` alone: a profile's tabs share
@@ -102,6 +108,7 @@ export type PublicRoute =
   | { kind: 'profile'; handle: string; tab: string | null; api: string; key: string }
   | { kind: 'blogroll'; id: string; api: string }
   | { kind: 'info'; page: InfoPageId; api: null; key: string }
+  | { kind: 'writers'; api: null; key: string }
 
 /** The public page a URL names, and the endpoint its data comes from; null for anything else. */
 export function publicRoute(url: URL): PublicRoute | null {
@@ -140,6 +147,9 @@ export function publicRoute(url: URL): PublicRoute | null {
   if (url.pathname === '/discover/readers') {
     return { kind: 'readers', api: READERS_PATH, alwaysExists: true }
   }
+  // For writers, as a visitor sees it: its copy is in the bundle, and the count of blogs the app
+  // fetches once it takes the page over (ADR 0061).
+  if (url.pathname === '/writers') return { kind: 'writers', api: null, key: '/writers' }
   const info = url.pathname.slice(1)
   if (isInfoPage(info)) return { kind: 'info', page: info, api: null, key: `/info/${info}` }
   const site = url.pathname.match(/^\/s\/(\d{1,12})$/)
@@ -160,11 +170,11 @@ export function publicRoute(url: URL): PublicRoute | null {
 }
 
 /**
- * The address a page renders as. A page cached under a key renders from what the key says, not
- * the address asked: it is cached for every visitor, and a campaign's query string or anything
- * else in the address is not the page's to keep.
+ * The address a page renders as, and is canonical at (ADR 0060). A page cached under a key renders
+ * from what the key says, not the address asked: it is cached for every visitor, and a campaign's
+ * query string, a `?hl=` or anything else in the address is not the page's to keep.
  */
-function pageAddress(route: PublicRoute, url: URL): string {
+function pageAddress(route: PublicRoute): string {
   switch (route.kind) {
     case 'landing':
     case 'articles':
@@ -176,33 +186,124 @@ function pageAddress(route: PublicRoute, url: URL): string {
       return tabHref('readers')
     case 'blogs':
       return blogsHref(route.params)
-    default:
-      return url.pathname + url.search
+    case 'site':
+      return `/s/${route.siteId}`
+    case 'blogroll':
+      return `/l/${route.id}`
+    case 'profile':
+      return `/@${route.handle}${route.tab ? `?tab=${route.tab}` : ''}`
+    case 'info':
+      return `/${route.page}`
+    case 'writers':
+      return '/writers'
+    case 'redirect':
+      return route.redirect
   }
 }
 
-/** Nothing a page says may close the script it is handed over in. */
-const inScript = (value: unknown) => JSON.stringify(value).replace(/</g, '\\u003c')
+/** Entries a list's structured data names: enough to say what the list is, not the whole page. */
+const LIST_ITEMS = 25
+/** Posts a blog's structured data names, of those its page shows. */
+const BLOG_POSTS = 10
+/** Neither indexed nor followed: what anyone can publish, before anyone has vouched for it. */
+const UNVOUCHED = 'noindex, nofollow'
 
-const escapeHtml = (s: string) =>
-  s.replace(
-    /[&<>"']/g,
-    (c) => `&${{ '&': 'amp', '<': 'lt', '>': 'gt', '"': 'quot', "'": '#39' }[c]};`,
-  )
+const iso = (ms: number | null | undefined) =>
+  typeof ms === 'number' && Number.isFinite(ms) && ms > 0 ? new Date(ms).toISOString() : undefined
 
-function titleOf(
+/** A post's title as a visitor's page shows it: in their language when it has one there. */
+const titleIn = (article: PublicArticle, locale: UiLocale) =>
+  article.titles?.[locale] ?? article.title
+
+/** A list as schema.org's ItemList: how many entries have an address, and the first of them. */
+function itemList(items: { url: string | null; name: string }[]): Record<string, unknown> {
+  const listed = items.filter((i): i is { url: string; name: string } => Boolean(i.url))
+  return {
+    '@type': 'ItemList',
+    numberOfItems: listed.length,
+    itemListElement: listed.slice(0, LIST_ITEMS).map((item, i) => ({
+      '@type': 'ListItem',
+      position: i + 1,
+      url: item.url,
+      name: item.name,
+    })),
+  }
+}
+
+/** Discover's posts as list entries: each at the original post's address, never Tela's. */
+const postItems = (posts: readonly DiscoverPost[], locale: UiLocale) =>
+  posts.map((p) => ({ url: p.article.url, name: titleIn(p.article, locale) }))
+
+/**
+ * What a page says about itself in its head: title, description, address, robots rule and
+ * structured data (ADR 0060). What anyone can publish is indexed only once someone has vouched
+ * for it: a blog an operator listed, a profile a week old, a blogroll Discover shows. tela-api
+ * says which (`indexable`), and an answer that does not say is not indexed.
+ */
+function headOf(
   route: PublicRoute,
   data: unknown,
   locale: UiLocale,
-): { title: string | null; description: string | null } {
+  origin: string,
+  week: ComposedWeek | null,
+): PageHead {
   const t = createTranslator({ locale, messages: MESSAGES[locale] })
+  const path = pageAddress(route)
+  const collection = (title: string, list: Record<string, unknown>) => ({
+    '@type': 'CollectionPage',
+    name: title,
+    description: t('discover.intro'),
+    url: `${origin}${path}`,
+    inLanguage: locale,
+    mainEntity: list,
+  })
   // The front page is Tela's own: titled by its name alone, whatever its data said.
-  if (route.kind === 'landing') return { title: null, description: t('front.description') }
-  if (route.kind === 'info')
-    return { title: t(`info.tabs.${route.page}`), description: infoDescription(locale, route.page) }
-  if (data === null || route.kind === 'redirect')
-    return { title: t('notFound.title'), description: null }
-  if (route.kind === 'week') return { title: t('nav.discover'), description: t('discover.intro') }
+  if (route.kind === 'landing') {
+    return {
+      title: null,
+      description: t('front.description'),
+      path,
+      robots: null,
+      jsonLd: {
+        '@type': 'WebSite',
+        name: 'Tela',
+        url: `${origin}/`,
+        description: t('front.description'),
+        inLanguage: [...UI_LOCALES],
+      },
+    }
+  }
+  if (route.kind === 'info') {
+    return {
+      title: t(`info.tabs.${route.page}`),
+      description: infoDescription(locale, route.page),
+      path,
+      robots: null,
+    }
+  }
+  // For writers, as a visitor reads it (ADR 0061): indexed like an info page.
+  if (route.kind === 'writers') {
+    return {
+      title: t('writers.title'),
+      description: t('writers.description'),
+      path,
+      robots: null,
+    }
+  }
+  if (data === null || route.kind === 'redirect') {
+    return { title: t('notFound.title'), description: null, path: null, robots: 'noindex' }
+  }
+  if (route.kind === 'week') {
+    const title = t('nav.discover')
+    const posts = week ? [...(week.lead ? [week.lead] : []), ...week.rest] : []
+    return {
+      title,
+      description: t('discover.intro'),
+      path,
+      robots: null,
+      jsonLd: collection(title, itemList(postItems(posts, locale))),
+    }
+  }
   if (
     route.kind === 'articles' ||
     route.kind === 'blogs' ||
@@ -210,22 +311,163 @@ function titleOf(
     route.kind === 'readers'
   ) {
     const title = `${t(`discover.tabs.${route.kind}`)} · ${t('nav.discover')}`
-    return { title, description: t('discover.intro') }
-  }
-  if (route.kind === 'site') {
-    const { site } = data as SiteData
-    return { title: site.title ?? displayHost(site.homeUrl), description: site.description }
-  }
-  if (route.kind === 'blogroll') {
-    const { blogroll, owner } = blogrollDataOf(data as BlogrollData)
-    const by = owner.displayName ?? `@${owner.handle}`
+    const items =
+      route.kind === 'articles'
+        ? postItems(articlesList([data as ArticlesData], route.params.sort, NOTHING_HIDDEN), locale)
+        : route.kind === 'blogs'
+          ? (data as DiscoverData).sites.map((s) => ({
+              url: `${origin}/s/${s.id}`,
+              name: s.title ?? displayHost(s.homeUrl),
+            }))
+          : route.kind === 'blogrolls'
+            ? ((data as BlogrollsData).blogrolls ?? []).map((b) => ({
+                url: `${origin}/l/${b.id}`,
+                name: b.name,
+              }))
+            : suggestReaders((data as ReadersData).readers, null).map(({ person }) => ({
+                url: `${origin}/@${person.handle}`,
+                name: person.displayName ?? `@${person.handle}`,
+              }))
+    // A page past the first is a moment's slice of a list that moves on: followed, not indexed.
+    // Articles and Blogrolls page by a cursor, Blogs by its number.
+    const cursor =
+      (route.kind === 'articles' && route.params.cursor !== null) ||
+      (route.kind === 'blogrolls' && route.cursor !== null) ||
+      (route.kind === 'blogs' && route.params.page > 1)
     return {
-      title: blogroll.name,
-      description: blogroll.description || t('discover.blogrolls.by', { name: by }),
+      title,
+      description: t('discover.intro'),
+      path,
+      robots: cursor ? 'noindex' : null,
+      jsonLd: collection(title, itemList(items)),
     }
   }
-  const { profile } = data as ProfileData
-  return { title: profile.displayName ?? `@${profile.handle}`, description: profile.bio }
+  if (route.kind === 'site') {
+    const { site, posts } = siteDataOf(data as SiteData)
+    const name = site.title ?? displayHost(site.homeUrl)
+    const published = posts.filter((a) => a.url).slice(0, BLOG_POSTS)
+    return {
+      title: name,
+      description: site.description,
+      path,
+      robots: site.indexable === true ? null : UNVOUCHED,
+      jsonLd: {
+        '@type': 'Blog',
+        name,
+        // The blog is where it is published; this page is Tela's, about it.
+        url: site.homeUrl,
+        ...(site.description ? { description: site.description } : {}),
+        ...(site.primaryLang ? { inLanguage: site.primaryLang } : {}),
+        ...(site.claimant
+          ? {
+              author: {
+                '@type': 'Person',
+                name: site.claimant.displayName ?? `@${site.claimant.handle}`,
+                url: `${origin}/@${site.claimant.handle}`,
+              },
+            }
+          : {}),
+        // Each post as its writer published it: its own title, in the language it names.
+        blogPost: published.map((a) => ({
+          '@type': 'BlogPosting',
+          headline: a.title,
+          url: a.url,
+          ...(iso(a.publishedAt) ? { datePublished: iso(a.publishedAt) } : {}),
+          ...(a.sourceLang ? { inLanguage: a.sourceLang } : {}),
+        })),
+      },
+    }
+  }
+  if (route.kind === 'blogroll') {
+    const { blogroll, owner, blogs } = blogrollDataOf(data as BlogrollData)
+    const by = owner.displayName ?? `@${owner.handle}`
+    const description = blogroll.description || t('discover.blogrolls.by', { name: by })
+    return {
+      title: blogroll.name,
+      description,
+      path,
+      robots: blogroll.indexable === true ? null : UNVOUCHED,
+      jsonLd: {
+        '@type': 'CollectionPage',
+        name: blogroll.name,
+        description,
+        url: `${origin}${path}`,
+        author: { '@type': 'Person', name: by, url: `${origin}/@${owner.handle}` },
+        mainEntity: itemList(
+          blogs.map((b) => ({
+            url: b.listed ? `${origin}/s/${b.siteId}` : b.homeUrl,
+            name: b.name ?? displayHost(b.homeUrl),
+          })),
+        ),
+      },
+    }
+  }
+  const { profile } = profileDataOf(data as ProfileData)
+  const name = profile.displayName ?? `@${profile.handle}`
+  const avatar = profile.avatar ? new URL(profile.avatar, origin).toString() : null
+  return {
+    title: name,
+    description: profile.bio,
+    path,
+    robots: profile.indexable === true ? null : UNVOUCHED,
+    type: 'profile',
+    username: profile.handle,
+    jsonLd: {
+      '@type': 'ProfilePage',
+      url: `${origin}${path}`,
+      ...(iso(profile.memberSince) ? { dateCreated: iso(profile.memberSince) } : {}),
+      mainEntity: {
+        '@type': 'Person',
+        name,
+        alternateName: `@${profile.handle}`,
+        url: `${origin}/@${profile.handle}`,
+        ...(profile.bio ? { description: profile.bio } : {}),
+        ...(avatar ? { image: avatar } : {}),
+      },
+    },
+  }
+}
+
+/**
+ * The feeds a page offers (ADR 0062), as `<link rel="alternate">` for a feed reader handed the
+ * page's address (`feeds` in its head, ADR 0060): a blogroll's own, while it has a listed blog for
+ * them to hold, and Discover's on every tab, narrowed to its topic. The RSS reads in the page's
+ * language, as the page does.
+ */
+function feedsOf(
+  route: PublicRoute,
+  data: unknown,
+  locale: UiLocale,
+): NonNullable<PageHead['feeds']> {
+  if (data === null) return []
+  const feed = (type: string, title: string, href: string) => ({ type, title, href })
+  if (route.kind === 'blogroll') {
+    const { blogroll, blogs } = data as BlogrollData
+    if (!blogs?.some((b) => b.listed)) return []
+    return [
+      feed(
+        'application/rss+xml',
+        `${blogroll.name} · RSS`,
+        blogrollFeedHref(route.id, 'rss', locale),
+      ),
+      feed('text/x-opml', `${blogroll.name} · OPML`, blogrollFeedHref(route.id, 'opml')),
+    ]
+  }
+  if (
+    route.kind !== 'week' &&
+    route.kind !== 'articles' &&
+    route.kind !== 'blogs' &&
+    route.kind !== 'blogrolls' &&
+    route.kind !== 'readers'
+  ) {
+    return []
+  }
+  const topic = route.kind === 'articles' || route.kind === 'blogs' ? route.params.topic : null
+  const name = `${createTranslator({ locale, messages: MESSAGES[locale] })('nav.discover')} · Tela`
+  return [
+    feed('application/rss+xml', `${name} · RSS`, discoverFeedHref('rss', { topic, hl: locale })),
+    feed('text/x-opml', `${name} · OPML`, discoverFeedHref('opml', { topic, hl: locale })),
+  ]
 }
 
 /**
@@ -249,6 +491,9 @@ export function renderPublicPage(input: {
   }
   // The edge's reader reads in the page's language and translates everything else.
   const reading = { lang: locale, never: [] }
+  // For a visitor: nothing hidden. Composed once, for the page and for what its head lists.
+  const week =
+    route.kind === 'week' && data !== null ? composeWeek(data as WeekData, NOTHING_HIDDEN) : null
   const view =
     route.kind === 'landing' ? (
       <LandingView
@@ -261,12 +506,14 @@ export function renderPublicPage(input: {
       />
     ) : route.kind === 'info' ? (
       <InfoView page={route.page} locale={locale} year={new Date(now).getFullYear()} />
+    ) : route.kind === 'writers' ? (
+      <WritersView visitor ownHandle={null} blogs={null} locale={locale} now={now} />
     ) : data === null || route.kind === 'redirect' ? (
       <NotFoundPage />
     ) : route.kind === 'week' ? (
       // For a visitor: nothing hidden, and only the readers anyone may be suggested.
       <DiscoverWeekView
-        week={composeWeek(data as WeekData, NOTHING_HIDDEN)}
+        week={week ?? composeWeek(data as WeekData, NOTHING_HIDDEN)}
         readers={suggestReaders((data as WeekData).readers, null).slice(0, WEEK_READERS)}
         reading={reading}
         locale={locale}
@@ -289,6 +536,7 @@ export function renderPublicPage(input: {
       <DiscoverBlogrollsView
         cards={(data as BlogrollsData).blogrolls ?? []}
         next={(data as BlogrollsData).next ?? null}
+        hl={locale}
       />
     ) : route.kind === 'readers' ? (
       <DiscoverReadersView
@@ -298,7 +546,12 @@ export function renderPublicPage(input: {
     ) : route.kind === 'site' ? (
       <SiteView data={siteDataOf(data as SiteData)} reading={reading} locale={locale} now={now} />
     ) : route.kind === 'blogroll' ? (
-      <BlogrollView data={blogrollDataOf(data as BlogrollData)} locale={locale} now={now} />
+      <BlogrollView
+        data={blogrollDataOf(data as BlogrollData)}
+        locale={locale}
+        now={now}
+        feeds={{ hl: locale }}
+      />
     ) : (
       <ProfileView
         data={profileDataOf(data as ProfileData)}
@@ -308,7 +561,7 @@ export function renderPublicPage(input: {
         now={now}
       />
     )
-  const location = pageAddress(route, url)
+  const location = pageAddress(route)
   const body = renderToString(
     <StoreProvider value={handle}>
       <GuestSession>
@@ -325,18 +578,15 @@ export function renderPublicPage(input: {
       </GuestSession>
     </StoreProvider>,
   )
-  const { title, description } = titleOf(route, data, locale)
-  const meta = [
-    `<title>${escapeHtml(pageTitle(title))}</title>`,
-    `<meta property="og:title" content="${escapeHtml(title ?? 'Tela')}" />`,
-    ...(description
-      ? [
-          `<meta name="description" content="${escapeHtml(description)}" />`,
-          `<meta property="og:description" content="${escapeHtml(description)}" />`,
-        ]
-      : []),
-  ].join('\n    ')
-  // A page without data (About, Privacy, Terms) hands nothing over.
+  const head = {
+    ...headOf(route, data, locale, url.origin, week),
+    feeds: feedsOf(route, data, locale),
+  }
+  // The address fixes the language, and the page is in it (ADR 0060): a member's page is not,
+  // unless the language named is their own.
+  const pinned = hlLocale(url.searchParams.get('hl')) === locale
+  const meta = headTags(head, { origin: url.origin, locale, pinned }).join('\n    ')
+  // A page without data (About, Privacy, Terms, For writers) hands nothing over.
   const handover =
     data === null || route.api === null
       ? ''
@@ -344,8 +594,9 @@ export function renderPublicPage(input: {
   return (
     template
       // The page's own description replaces the site's, before the page's is put in.
-      .replace(/\s*<meta name="description"[^>]*>/, description ? '' : '$&')
-      // The shell's noindex is for the app; whether a public page is indexed is the edge's header.
+      .replace(/\s*<meta name="description"[^>]*>/, head.description ? '' : '$&')
+      // The shell's noindex is for the app. A public page says its own rule, which the edge
+      // repeats as X-Robots-Tag, and TELA_NOINDEX is the edge's alone.
       .replace(/\s*<meta name="robots"[^>]*>/, '')
       // Functions, not strings: a `$&` in a blog's title is text, not a replacement pattern.
       .replace(/<html lang="[^"]*"/, () => `<html lang="${locale}"`)

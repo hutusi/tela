@@ -12,6 +12,7 @@ import type { Tables } from '@tela/sync'
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router'
 import { useTranslations } from 'use-intl'
+import { useOpenSignup } from '../lib/door-config'
 import { useDismiss } from '../lib/use-dismiss'
 import { useSession } from '../session'
 import { useTables } from '../store/hooks'
@@ -152,6 +153,8 @@ function Menu({
   const ts = useTranslations('settings')
   const { signOut } = useSession()
   const tables = useTables()
+  // Nobody needs an invitation while sign-up is open (ADR 0056).
+  const openSignup = useOpenSignup()
   const profile = tables.profile
   const writer = writes(tables)
   const language = useMemberLanguage()
@@ -219,9 +222,11 @@ function Menu({
           {t('admin')}
         </Link>
       ) : null}
-      <Link to="/settings/invites" className={ITEM} onClick={done} data-testid="nav-invites">
-        {t('invites')}
-      </Link>
+      {openSignup ? null : (
+        <Link to="/settings/invites" className={ITEM} onClick={done} data-testid="nav-invites">
+          {t('invites')}
+        </Link>
+      )}
       <hr className={DIVIDER} />
       <button
         type="button"

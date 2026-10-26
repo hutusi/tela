@@ -1,12 +1,12 @@
 /**
- * About, Privacy and Terms in French: the English pages (`en.ts`), translated, with the same
- * section ids. Interface names follow the fr catalogue (Paramètres → Confidentialité, Tableau de
- * bord, Découvrir); French spacing (a no-break space before : and inside « », a narrow one before
- * ; ? !) is typed into the strings.
+ * About, Privacy and Terms in French: the same pages, facts and section ids as `en.ts`, written
+ * for French readers rather than line by line. Interface names follow the fr catalogue
+ * (Paramètres → Confidentialité, Tableau de bord, Découvrir); French spacing (a no-break space
+ * before : and inside « », a narrow one before ; ? !) is typed into the strings.
  */
 import type { InfoContent } from './types'
 
-const CONTACT = '[hutusi.com/about](https://hutusi.com/about) (en chinois)'
+const CONTACT = 'me@hutu.si'
 const ISSUES = 'https://github.com/hutusi/tela/issues'
 
 export const fr = {
@@ -95,7 +95,7 @@ export const fr = {
         heading: 'Écrivez-nous',
         blocks: [
           {
-            p: `Une question, une idée, un bug, ou un blog que Tela devrait connaître ? Ouvrez un ticket sur [github.com/hutusi/tela](${ISSUES}), ou prenez contact via ${CONTACT}. Les tickets sont publics : pour tout ce qui est privé, passez par hutusi.com/about.`,
+            p: `Une question, une idée, un bug, ou un blog que Tela devrait connaître ? Écrivez à ${CONTACT}, ou ouvrez un ticket sur [github.com/hutusi/tela](${ISSUES}). Les tickets sont publics : pour tout ce qui est privé, passez par l’e-mail.`,
           },
         ],
       },
@@ -107,8 +107,8 @@ export const fr = {
     short: [
       'Tela garde ce dont il a besoin pour faire fonctionner votre liste de lecture, et rien pour la publicité.',
       'Nous ne vendons pas vos données, n’affichons pas de publicité et n’utilisons aucun outil de mesure d’audience.',
-      'Ce que vous lisez, aimez et surlignez reste privé, sauf si vous choisissez de le montrer. Votre profil, vos recommandations, les blogrolls que vous rendez publiques et les blogs que vous revendiquez sont publics.',
-      'Vous pouvez exporter vos abonnements, avec leurs dossiers, en OPML, et télécharger votre profil, vos paramètres, abonnements, coups de cœur, recommandations, surlignages, blogrolls et suivis en un seul fichier, quand vous voulez.',
+      'Ce que vous lisez, aimez et surlignez reste privé, sauf si vous choisissez de le montrer. Votre profil, vos recommandations, les blogrolls que vous rendez publiques et les blogs que vous revendiquez sont publics, et les moteurs de recherche peuvent les trouver.',
+      'Vous pouvez emporter vos abonnements et vos données quand vous voulez, et supprimer votre compte dans Paramètres → Compte.',
     ],
     sections: {
       collect: {
@@ -121,26 +121,32 @@ export const fr = {
               'Votre identifiant et, si vous les ajoutez, un nom affiché, une bio et une photo.',
               'Si vous définissez un mot de passe, seulement son empreinte, jamais le mot de passe lui-même.',
               'Si vous vous connectez avec Google ou GitHub, le compte qui est le vôtre chez eux. Nous ne gardons aucun jeton de leur part, ni le nom ou la photo qu’ils nous envoient.',
-              'Votre inscription : le code d’invitation utilisé, et donc la personne qui vous l’a donné. Si vous distribuez des codes, les codes que vous avez créés et les personnes qui s’en sont servies.',
-              'Si vous commencez à vous inscrire sans aller au bout, votre adresse e-mail reste associée au code pendant un jour.',
+              'Si vous vous êtes inscrit avec un code d’invitation, ce code, et donc la personne qui vous l’a donné. Si vous distribuez des codes, les codes que vous avez créés et les personnes qui s’en sont servies.',
+              'Si vous commencez à vous inscrire avec un code sans aller au bout, votre adresse e-mail reste associée au code pendant un jour.',
             ],
           },
           { h: 'Votre lecture' },
           {
             list: [
-              'Vos abonnements aux blogs, les dossiers où vous les rangez, et les flux que vous ajoutez.',
+              'Vos abonnements aux blogs, les dossiers où vous les rangez, les flux que vous ajoutez, et ceux qu’une importation n’a pas encore ajoutés.',
               'Les articles que vous avez lus, aimés et recommandés, et les mots joints à vos recommandations.',
               'Vos surlignages et les notes qui les accompagnent.',
               'Les personnes que vous suivez.',
               'Vos blogrolls, avec leur nom et leur description, les blogs qu’elles contiennent, vos notes sur ces blogs, et si elles sont publiques ou non.',
               'Vos paramètres : langues, thème, taille du texte, etc.',
-              'Les traductions que vous demandez et ce que chacune a coûté, pour que tout le monde reste dans un quota quotidien.',
+              'Les traductions que vous demandez et ce que chacune a coûté, et le nombre de blogs nouveaux pour Tela que vous ajoutez chaque jour, pour que chacun reste dans les [limites quotidiennes](/terms#limits).',
             ],
           },
           { h: 'Les blogs que vous revendiquez' },
           {
             list: [
               'Les blogs que vous revendiquez, la façon dont vous l’avez prouvé, et le résultat de chaque vérification.',
+            ],
+          },
+          { h: 'Vos signalements' },
+          {
+            list: [
+              'Ce que vous avez signalé, pourquoi, ce que vous avez écrit avec, et l’adresse de la page d’où vous l’avez signalé.',
             ],
           },
           { h: 'Données techniques' },
@@ -172,7 +178,22 @@ export const fr = {
               'La personne qui gère Tela examine les blogs que les membres ajoutent, et peut les référencer dans Découvrir. Elle voit chaque blog et le nombre de membres qui le lisent, jamais qui ils sont.',
               'Les auteurs voient des nombres dans leur tableau de bord, pas des noms. Qui a lu ou aimé quoi n’apparaît que là où la personne concernée l’a rendu public.',
               'Jamais public : votre adresse e-mail, ce que vous avez lu, vos surlignages et leurs notes, et vos paramètres.',
-              'Les pages publiques peuvent mettre quelques minutes à refléter un changement.',
+              'Les pages publiques peuvent mettre quelques minutes à refléter un changement, et les moteurs de recherche peuvent les trouver ([voir plus bas](#search)).',
+            ],
+          },
+        ],
+      },
+      search: {
+        heading: 'Moteurs de recherche et IA',
+        blocks: [
+          {
+            list: [
+              'Les pages publiques de Tela peuvent être indexées par les moteurs de recherche : la page d’accueil, Découvrir, les pages des blogs, les blogrolls publiques et les profils des membres.',
+              'Les outils d’IA qui cherchent sur le Web pour répondre à une question peuvent aussi lire ces pages, les citer ou y renvoyer.',
+              'Tela demande aux robots d’IA qui collectent des données d’entraînement de ne pas utiliser les pages qui montrent le travail des auteurs. Il le demande dans son robots.txt, sans pouvoir obliger chaque robot à l’écouter.',
+              'Un nouveau profil n’est pas proposé aux moteurs de recherche pendant ses premiers jours.',
+              'Rien de ce qui demande une connexion n’est public : votre liste de lecture, vos paramètres et tout ce qui est privé restent hors de portée des robots.',
+              'Un moteur de recherche garde sa propre copie un certain temps : un changement ou une suppression peut mettre un moment à apparaître dans ses résultats.',
             ],
           },
         ],
@@ -184,8 +205,8 @@ export const fr = {
             list: [
               'Faire fonctionner Tela : récupérer vos flux, garder votre liste de lecture à jour sur tous vos appareils et afficher votre profil.',
               'Traduire des articles (voir plus bas).',
-              'Vous écrire, uniquement pour vous connecter ou protéger votre compte.',
-              'Empêcher les abus.',
+              'Vous écrire, uniquement au sujet de votre compte : pour vous connecter, confirmer ce que vous avez demandé, ou le protéger.',
+              'Empêcher les abus, et examiner les signalements.',
             ],
           },
           {
@@ -197,6 +218,7 @@ export const fr = {
               'Un code de connexion, avec un lien, quand vous en demandez un.',
               'Une invitation, si la personne qui gère Tela vous invite.',
               'Un code pour réinitialiser votre mot de passe, quand vous en demandez un.',
+              'Un code de confirmation, quand vous demandez à supprimer votre compte.',
               'Un avis quand vos moyens de connexion changent.',
             ],
           },
@@ -212,6 +234,7 @@ export const fr = {
               'Ce qui est envoyé, c’est le texte de l’article, avec son titre et le nom du blog pour le contexte. Rien ne vous concerne : ni votre nom, ni votre adresse e-mail, ni votre identifiant, ni ce que vous lisez.',
               'La traduction est assurée par Alibaba Cloud Model Studio (Bailian, dashscope.aliyuncs.com), en Chine continentale.',
               'Une traduction est conservée et partagée : toutes les personnes qui lisent cet article dans cette langue voient la même.',
+              'Chaque compte a un nombre quotidien de nouvelles traductions, et Tela un budget quotidien pour tout le site. Au-delà de l’un ou de l’autre, une traduction attend le lendemain ([Conditions](/terms#limits)).',
               'L’auteur d’un blog qui l’a revendiqué peut y désactiver la traduction depuis le tableau de bord.',
             ],
           },
@@ -249,7 +272,7 @@ export const fr = {
             ],
           },
           {
-            p: 'La personne qui gère Tela peut voir sa base de données, pour la maintenir en état. Personne d’autre, sauf si la loi l’exige.',
+            p: 'La personne qui gère Tela peut voir sa base de données, pour la maintenir en état et traiter les signalements. Personne d’autre, sauf si la loi l’exige.',
           },
         ],
       },
@@ -283,8 +306,27 @@ export const fr = {
               'Quand une session prend fin, son enregistrement, avec l’adresse IP et le navigateur, est supprimé dans la journée. Une session prend fin quand vous vous déconnectez, ou après 60 jours sans utilisation.',
               'Les compteurs qui empêchent les abus, qui contiennent une adresse IP, une adresse e-mail ou un numéro de compte, sont supprimés au bout d’un jour.',
               'Cloudflare garde ses journaux de requêtes 7 jours.',
-              'Une recommandation, un surlignage ou une blogroll que vous retirez, ou un blog que vous enlevez d’une blogroll, reste dans la base de données, marqué comme retiré et avec son texte, pour que vos autres appareils se mettent à jour.',
+              'Une recommandation, un surlignage ou une blogroll que vous retirez, ou un blog que vous enlevez d’une blogroll, reste dans la base de données, marqué comme retiré et avec son texte, pour que vos autres appareils se mettent à jour. La suppression de votre compte les efface ([voir plus bas](#delete)).',
               'Cloudflare conserve un point de restauration de toute la base de données sur 30 jours, et Tela copie la base chaque nuit en gardant chaque copie 30 jours. Ce que vous modifiez ou retirez peut subsister aussi longtemps dans l’un ou l’autre. La copie nocturne exclut les sessions, les codes de connexion et les compteurs d’abus.',
+            ],
+          },
+        ],
+      },
+      delete: {
+        heading: 'Supprimer votre compte',
+        blocks: [
+          {
+            p: 'Vous pouvez supprimer votre compte dans Paramètres → Compte. Tela vous envoie un code par e-mail pour le confirmer ; une fois le code saisi, le compte est fermé, sans retour possible.',
+          },
+          {
+            list: [
+              'Tout de suite, ou en quelques minutes, Tela efface votre adresse e-mail, vos moyens de connexion, votre profil et vos photos, vos abonnements et vos dossiers, votre historique de lecture, vos coups de cœur, recommandations et mots, vos surlignages, vos blogrolls, et vos suivis dans les deux sens.',
+              'Tous vos appareils sont déconnectés, et la copie de votre liste de lecture gardée dans un navigateur est effacée la prochaine fois que Tela s’y ouvre.',
+              'Votre identifiant est conservé, inutilisé, pour que personne ne puisse le prendre et se faire passer pour vous.',
+              'Les blogs que vous avez revendiqués sont libérés. Leurs réglages, comme la traduction, restent tels quels.',
+              'Les codes d’invitation que vous avez créés ne fonctionnent plus. Les personnes qui s’en sont servies gardent leur compte.',
+              'Les relevés de ce qu’ont coûté les traductions sont conservés, sans lien avec vous. Les blogs que vous avez ajoutés restent sur Tela pour ceux qui les lisent.',
+              'Les sauvegardes en gardent une copie jusqu’à 30 jours ([Combien de temps nous les gardons](#keep)). Les caches peuvent montrer votre ancienne photo jusqu’à 30 jours, et votre page de profil quelques minutes.',
             ],
           },
         ],
@@ -295,14 +337,24 @@ export const fr = {
           {
             list: [
               'Exportez vos abonnements, avec leurs dossiers, en OPML dans Paramètres → Abonnements.',
-              'Téléchargez votre profil, vos paramètres, abonnements, coups de cœur, recommandations, surlignages, blogrolls et les personnes que vous suivez en un seul fichier dans Paramètres → Confidentialité → Vos données.',
+              'Téléchargez vos données en un seul fichier dans Paramètres → Confidentialité → Vos données : votre profil, vos paramètres, abonnements, historique de lecture, coups de cœur, recommandations, surlignages, blogrolls, les personnes que vous suivez, les blogs que vous avez revendiqués et vos codes d’invitation.',
               'Choisissez ce que les autres voient dans Paramètres → Confidentialité. Votre photo et votre Gravatar sont dans Paramètres → Profil ; une photo envoyée que vous retirez est supprimée.',
               'Définissez ou changez un mot de passe, associez ou dissociez Google et GitHub, et déconnectez-vous partout dans Paramètres → Compte.',
-              'Retrouvez les codes d’invitation que vous avez créés et les personnes qui s’en sont servies dans Paramètres → Invitations, et révoquez-en un que personne n’a utilisé.',
+              'Tant que l’inscription à Tela demande une invitation, retrouvez les codes d’invitation que vous avez créés et les personnes qui s’en sont servies dans Paramètres → Invitations, et révoquez-en un que personne n’a utilisé.',
               'Changez votre identifiant, votre nom et votre bio quand vous voulez.',
               'Retirez une recommandation, un surlignage, un coup de cœur, un suivi ou une blogroll à tout moment. Chacun disparaît aussitôt de Tela, et des pages publiques en quelques minutes. Rendre une blogroll privée la retire des pages publiques de la même façon.',
-              'Pour toute autre question sur vos données, [contactez-nous](#contact).',
+              'Libérez un blog que vous avez revendiqué, depuis le tableau de bord.',
+              'Supprimez votre compte dans Paramètres → Compte ([ce qui se passe alors](#delete)).',
+              `Pour toute autre question sur vos données, écrivez à ${CONTACT}.`,
             ],
+          },
+        ],
+      },
+      age: {
+        heading: 'Âge',
+        blocks: [
+          {
+            p: `Tela s’adresse aux personnes de 16 ans et plus. Si vous savez qu’un compte appartient à quelqu’un de plus jeune, écrivez à ${CONTACT} et nous le supprimerons.`,
           },
         ],
       },
@@ -318,7 +370,7 @@ export const fr = {
         heading: 'Contact',
         blocks: [
           {
-            p: `Tela est un projet personnel et non commercial de hutusi (AI Naive). Pour toute question sur vos données, utilisez les coordonnées indiquées sur ${CONTACT}. Les bugs et les idées sont les bienvenus sous forme de [tickets sur GitHub](${ISSUES}), mais ceux-ci sont publics.`,
+            p: `Tela est un projet personnel et non commercial, tenu par une seule personne, hutusi (AI Naive). Pour toute question sur vos données, écrivez à ${CONTACT}. Les bugs et les idées sont les bienvenus sous forme de [tickets sur GitHub](${ISSUES}), mais ceux-ci sont publics.`,
           },
         ],
       },
@@ -328,17 +380,17 @@ export const fr = {
   terms: {
     title: 'Conditions',
     short: [
-      'Utilisez Tela pour lire, suivre et recommander.',
-      'Les auteurs gardent tous leurs droits sur leurs textes. Tela les affiche et renvoie vers leur source.',
-      'Respectez les autres : n’usurpez l’identité de personne, et ne cassez rien.',
-      'Tela est un projet personnel et gratuit, fourni tel quel.',
+      'Toute personne de 16 ans ou plus peut s’inscrire, et utiliser Tela pour lire, suivre et recommander.',
+      'Les auteurs gardent tous leurs droits sur leurs textes. Tela les affiche, renvoie vers leur source, et s’en tient à l’écart quand ils le demandent.',
+      'Respectez les autres : ni spam, ni usurpation d’identité, rien d’illégal.',
+      'Tela est gratuit, tenu par une seule personne, avec des limites quotidiennes, et fourni tel quel.',
     ],
     sections: {
       who: {
         heading: 'Qui nous sommes',
         blocks: [
           {
-            p: 'Tela (telaread.com) est un projet personnel et non commercial réalisé par [hutusi](https://hutusi.com) sous le nom d’[AI Naive](https://ainaive.com). Il est gratuit. « Nous », sur ces pages, désigne la personne qui le gère.',
+            p: `Tela (telaread.com) est un projet personnel et non commercial tenu par une seule personne, [hutusi](https://hutusi.com), sous le nom d’[AI Naive](https://ainaive.com). Il est gratuit. « Nous », sur ces pages, désigne cette personne, que vous pouvez joindre à ${CONTACT}.`,
           },
         ],
       },
@@ -347,9 +399,11 @@ export const fr = {
         blocks: [
           {
             list: [
-              'Tela fonctionne sur invitation pour l’instant : vous vous inscrivez avec un code d’invitation, ou avec une invitation de la personne qui gère Tela.',
-              'Connectez-vous avec un code envoyé par e-mail, un mot de passe, ou Google ou GitHub. Utilisez une adresse à laquelle vous recevez du courrier, et gardez vos moyens de connexion en lieu sûr.',
+              'Il faut avoir 16 ans ou plus pour utiliser Tela.',
+              'Tout le monde peut s’inscrire avec une adresse e-mail à laquelle il reçoit du courrier. Si besoin, face à une vague de spam par exemple, nous pouvons de nouveau demander une invitation : l’inscription demande alors un code d’invitation, d’un membre ou de nous. Un jour où les nouveaux comptes sont très nombreux, les inscriptions peuvent aussi s’interrompre jusqu’au lendemain.',
+              'Connectez-vous avec un code envoyé par e-mail, un mot de passe, ou Google ou GitHub, et gardez vos moyens de connexion en lieu sûr.',
               'Un compte est destiné à une seule personne. Merci de ne pas le partager, le vendre ou le céder.',
+              'Vous pouvez supprimer votre compte à tout moment dans Paramètres → Compte. La page [Confidentialité](/privacy#delete) dit ce qui disparaît, et quand.',
             ],
           },
         ],
@@ -362,6 +416,7 @@ export const fr = {
               'Vous pouvez changer d’identifiant dans Paramètres → Profil.',
               'Un identifiant compte 3 à 30 lettres minuscules, chiffres ou tirets bas, au premier arrivé, premier servi. Quelques mots sont réservés.',
               'Si vous changez le vôtre, l’adresse de votre ancien profil cesse de fonctionner, et quelqu’un d’autre peut prendre l’ancien identifiant.',
+              'L’identifiant d’un compte supprimé reste attaché à ce compte : personne ne peut le reprendre.',
               'Nous pouvons changer un identifiant qui usurpe l’identité de quelqu’un ou reprend un nom que vous n’avez pas le droit d’utiliser.',
             ],
           },
@@ -372,11 +427,13 @@ export const fr = {
         blocks: [
           {
             list: [
-              'Tela lit les flux que publient les blogs. Quand un flux ne contient qu’un résumé, Tela récupère la page publique de l’article pour en obtenir le texte complet.',
+              'Tela lit les flux que publient les blogs, comme tout lecteur de flux. Quand un flux ne contient qu’un résumé, Tela récupère la page publique de l’article pour en obtenir le texte complet.',
               'Le texte reste celui de son auteur, avec tous les droits qui s’y attachent. Les membres connectés le lisent sur Tela. Les pages publiques n’en montrent que les titres et de courts extraits, et chaque article renvoie vers son propre site.',
               'Les traductions sont faites par une machine et signalées comme telles. L’original est ce que l’auteur a écrit.',
-              'Si vous tenez un blog, vous pouvez le revendiquer pour voir combien de personnes le lisent, choisir ses thèmes ou désactiver la traduction.',
-              'Si vous préférez que votre blog ne figure pas sur Tela, dites-le-nous via les [coordonnées ci-dessous](#contact). Nous le retirerons de Découvrir, supprimerons sa page sur Tela et cesserons de le récupérer.',
+              'Si vous tenez un blog, vous pouvez le revendiquer pour voir combien de personnes le lisent, choisir ses thèmes, désactiver la traduction, ou choisir « N’utiliser que ce que fournit mon flux » : Tela ne lit alors que votre flux et ne récupère plus aucune de vos pages.',
+              'Vous pouvez aussi tenir Tela à l’écart de vos pages avec robots.txt. Chaque fois qu’il s’apprête à récupérer une page, Tela suit les règles écrites pour « User-agent: Tela », ou à défaut celles écrites pour tous les robots. Votre flux reste lu, comme le font les lecteurs de flux.',
+              `Si vous préférez que votre blog ne figure pas du tout sur Tela, écrivez à ${CONTACT}. Nous le retirerons de Découvrir, supprimerons sa page sur Tela et cesserons de le récupérer.`,
+              'La page [Pour les auteurs](/writers) en dit plus.',
             ],
           },
         ],
@@ -388,6 +445,7 @@ export const fr = {
             list: [
               'Ne revendiquez qu’un blog que vous écrivez ou que vous contrôlez. Vous le prouvez avec une balise ou un lien sur sa page d’accueil, ou avec votre compte GitHub, quand le blog et ce compte renvoient l’un vers l’autre.',
               'Un blog revendiqué est référencé dans Découvrir, avec votre nom et votre bio sur sa page.',
+              'Vous pouvez libérer un blog revendiqué à tout moment, depuis le tableau de bord. Ses réglages restent tels que vous les avez laissés.',
               'Si une revendication se révèle fausse, nous l’annulerons.',
             ],
           },
@@ -401,19 +459,49 @@ export const fr = {
           },
         ],
       },
+      limits: {
+        heading: 'Limites',
+        blocks: [
+          {
+            p: 'Tela est partagé, et la traduction est ce qui lui coûte le plus : les comptes ordinaires ont donc des limites. Les chiffres peuvent changer, et Tela vous prévient quand vous en atteignez une.',
+          },
+          {
+            list: [
+              'Un nombre quotidien de nouvelles traductions. Un article déjà traduit pour quelqu’un d’autre, ou le chinois traditionnel tiré du simplifié, ne compte pas. Paramètres → Langue indique combien vous en avez utilisé aujourd’hui.',
+              'Un nombre quotidien de blogs nouveaux pour Tela. S’abonner à un blog que Tela connaît déjà ne compte pas, et une importation ajoute ses autres nouveaux blogs les jours suivants.',
+              'Un plafond d’abonnements par compte.',
+              'Au-delà de votre limite de traductions, une traduction attend au lieu d’échouer : Tela la fait après minuit UTC (8 h à Pékin), et l’article l’indique.',
+              'Tela a aussi un budget quotidien de traduction pour tout le site. Une fois qu’il est épuisé, les traductions attendent le lendemain de la même façon, et les nouveaux titres peuvent rester dans leur langue d’origine jusque-là.',
+            ],
+          },
+        ],
+      },
       dont: {
         heading: 'Merci de ne pas',
         blocks: [
           {
             list: [
-              'Envoyer du spam ou harceler qui que ce soit.',
+              'Envoyer du spam, harceler ou malmener qui que ce soit.',
               'Usurper l’identité d’une personne ou d’un blog.',
-              'Aspirer Tela à grande échelle, ou contourner ses limites.',
-              'Utiliser Tela à des fins illégales, ou publier ce qui porte atteinte aux droits d’autrui.',
+              'Publier quoi que ce soit d’illégal, ou qui porte atteinte aux droits d’autrui.',
+              'Créer des comptes automatiquement ou en masse, aspirer Tela à grande échelle, ou contourner ses limites.',
+              'Chercher à casser Tela, ou à entrer dans un compte qui n’est pas le vôtre.',
             ],
           },
           {
-            p: 'Nous pouvons retirer tout ce qui enfreint ces règles, et annuler les revendications qui les enfreignent.',
+            p: 'Nous pouvons masquer ce qui enfreint ces règles, annuler les revendications qui les enfreignent, et suspendre ou supprimer un compte qui les enfreint. Un compte suspendu ne peut plus se connecter, et son profil, ses mots et ses blogrolls sont masqués.',
+          },
+        ],
+      },
+      reports: {
+        heading: 'Signalements',
+        blocks: [
+          {
+            list: [
+              `Si un profil, une blogroll, un blog ou le mot d’une recommandation enfreint ces conditions, les membres peuvent le signaler depuis sa page, et tout le monde peut écrire à ${CONTACT}.`,
+              'Nous examinons chaque signalement et décidons de la suite : masquer ce qui a été signalé, suspendre ou supprimer le compte concerné, ou ne rien faire.',
+              'Nous seuls savons qui a envoyé un signalement. Ce n’est jamais montré à la personne signalée, ni à personne d’autre.',
+            ],
           },
         ],
       },
@@ -445,7 +533,7 @@ export const fr = {
         heading: 'Contact',
         blocks: [
           {
-            p: `Utilisez les coordonnées indiquées sur ${CONTACT}, ou ouvrez un [ticket sur GitHub](${ISSUES}).`,
+            p: `Écrivez à ${CONTACT}, ou ouvrez un [ticket sur GitHub](${ISSUES}), qui sera public.`,
           },
         ],
       },

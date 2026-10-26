@@ -13,6 +13,7 @@ import {
   first,
   gravatarOn,
   publicReaderCount,
+  standingOk,
 } from '@tela/data'
 import { isReadingLanguage, isTopic, isValidHandle } from '@tela/shared'
 import { sql } from 'drizzle-orm'
@@ -127,6 +128,38 @@ export function memberRoutes(deps: ApiDeps) {
   })
 
   /**
+   * "Only use what my feed provides" (ADR 0061): Tela stops fetching the blog's pages, for full
+   * text and for its favicon, and reads only its feeds. A post already waiting for its page waits
+   * no more: it is the feed's, as a post from a full feed is. What was extracted before stays.
+   */
+  routes.put('/sites/:siteId/feed-only', async (c) => {
+    const siteId = Number(c.req.param('siteId'))
+    if (!Number.isInteger(siteId) || !(await ownSite(siteId, c.get('member').id))) {
+      return c.json({ error: 'not_owner' }, 403)
+    }
+    const body = (await c.req.json().catch(() => ({}))) as { feedOnly?: unknown }
+    const feedOnly = body.feedOnly === true
+    await db.batch([
+      bumpSeq(db),
+      db.run(sql`
+        update sites set feed_only = ${feedOnly ? 1 : 0}, updated_at = ${deps.clock.now()},
+          seq = ${currentSeq}
+        where id = ${siteId}
+      `),
+      ...(feedOnly
+        ? [
+            db.run(sql`
+              update articles set extract_state = 'none', seq = ${currentSeq}
+              where extract_state = 'due'
+                and feed_id in (select id from feeds where site_id = ${siteId})
+            `),
+          ]
+        : []),
+    ] as never)
+    return c.json({ feedOnly })
+  })
+
+  /**
    * A blogger's view of their blogs: readers, recent posts and how they landed, and notes. The
    * totals are the whole blog's, every post and every live like, recommendation and note, not the
    * twenty posts listed: the notes below them cover every post, and a total of the twenty could
@@ -144,7 +177,7 @@ export function memberRoutes(deps: ApiDeps) {
       db.all(sql`
         select id, title, home_url as "homeUrl", favicon_key as "faviconKey", listing,
           primary_lang as "primaryLang", reader_count as "readerCount",
-          translation_opt_out as "translationOptOut",
+          translation_opt_out as "translationOptOut", feed_only as "feedOnly",
           (select count(distinct sub.user_id) from subscriptions sub
             join feeds f on f.id = sub.feed_id
             where f.site_id = sites.id and sub.deleted_at is null and sub.created_at > ${since}
@@ -187,6 +220,7 @@ export function memberRoutes(deps: ApiDeps) {
           join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
           join profiles p on p.user_id = r.user_id
           where s.claimed_by = ${member.id} and r.deleted_at is null and r.note is not null
+            and ${standingOk('p')}
         ) where n <= 20 order by "createdAt" desc
       `),
       // The counters are live counts (`recount` in sync/push.ts), as the posts' columns are.
@@ -197,6 +231,7 @@ export function memberRoutes(deps: ApiDeps) {
           (select count(*) from recommendations r join articles a2 on a2.id = r.article_id
             join feeds f2 on f2.id = a2.feed_id join profiles p2 on p2.user_id = r.user_id
             where f2.site_id = f.site_id and r.deleted_at is null and r.note is not null
+              and ${standingOk('p2')}
           ) as "notes"
         from articles a join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
         where s.claimed_by = ${member.id}
@@ -224,6 +259,7 @@ export function memberRoutes(deps: ApiDeps) {
       sites: sites.map((s) => ({
         ...s,
         translationOptOut: s.translationOptOut === 1,
+        feedOnly: s.feedOnly === 1,
         topics: topics.filter((t) => t.siteId === s.id).map((t) => t.topic),
         totals: totalsOf(s.id),
         posts: posts.filter((p) => p.siteId === s.id).map(({ n: _n, siteId: _s, ...p }) => p),
@@ -234,7 +270,9 @@ export function memberRoutes(deps: ApiDeps) {
 
   /**
    * "Your data": what the member did, as one JSON file. Their own rows only; of anyone they
-   * follow, only what a public profile already says.
+   * follow, only what a public profile already says. Since ADR 0058 also the blogs they claimed,
+   * their invite codes and who joined by each (by handle, never an address), the invitation they
+   * joined by, what they read, and their picture's address: what leaving would take with it.
    */
   routes.get('/export', async (c) => {
     const member = c.get('member')
@@ -256,6 +294,10 @@ export function memberRoutes(deps: ApiDeps) {
       highlights,
       following,
       blogrolls,
+      claims,
+      codes,
+      joinedBy,
+      reads,
     ] = (await db.batch([
       db.all(sql`
         select p.handle, p.display_name as "displayName", p.bio, p.reading_lang as "readingLang",
@@ -270,7 +312,8 @@ export function memberRoutes(deps: ApiDeps) {
       ),
       db.all(sql`
         select f.feed_url as "feedUrl", s.home_url as "blog", s.title, fo.name as "folder",
-          sub.created_at as "since"
+          sub.created_at as "since",
+          (select a.url from articles a where a.id = sub.watermark_id) as "readUpTo"
         from subscriptions sub join feeds f on f.id = sub.feed_id join sites s on s.id = f.site_id
           left join feed_folders ff on ff.user_id = sub.user_id and ff.feed_id = sub.feed_id
           left join folders fo on fo.id = ff.folder_id and fo.deleted_at is null
@@ -294,10 +337,12 @@ export function memberRoutes(deps: ApiDeps) {
         from highlights h ${on(sql`h.article_id`)}
         where h.user_id = ${id} and h.deleted_at is null order by h.created_at desc
       `),
+      // Only those in good standing (ADR 0059), as their Following and their device show them.
       db.all(sql`
         select p.handle, p.display_name as "displayName", fo.created_at as "since"
         from follows fo join profiles p on p.user_id = fo.followee_id
-        where fo.follower_id = ${id} and fo.deleted_at is null order by p.handle
+        where fo.follower_id = ${id} and fo.deleted_at is null and ${standingOk('p')}
+        order by p.handle
       `),
       // Every blogroll they keep (ADR 0050), private ones too, with the blogs in it now and
       // their notes: blogs the operator hid from others are still theirs.
@@ -315,6 +360,39 @@ export function memberRoutes(deps: ApiDeps) {
         from blogrolls r where r.user_id = ${id} and r.deleted_at is null
         order by r.created_at, r.id
       `),
+      db.all(sql`
+        select s.home_url as "blog", s.title, c.status, c.method, c.created_at as "askedAt",
+          c.verified_at as "verifiedAt"
+        from site_claims c join sites s on s.id = c.site_id
+        where c.user_id = ${id} order by c.created_at, c.id
+      `),
+      // Who joined by each code, by handle: a hold's address is someone else's, never shown, and
+      // a member out of good standing is a place taken with no handle.
+      db.all(sql`
+        select c.code, c.created_at as "createdAt", c.revoked_at as "revokedAt",
+          (select json_group_array(json_object(
+              'handle', case when ${standingOk('p')} then p.handle end,
+              'joinedAt', r.redeemed_at))
+            from invite_redemptions r join profiles p on p.user_id = r.user_id
+            where r.code = c.code and r.redeemed_at is not null) as joined
+        from invite_codes c where c.created_by = ${id} order by c.created_at, c.code
+      `),
+      db.all(sql`
+        select r.code, r.redeemed_at as "joinedAt", p.handle as "invitedBy"
+        from invite_redemptions r left join invite_codes c on c.code = r.code
+          left join profiles p on p.user_id = c.created_by and ${standingOk('p')}
+        where r.user_id = ${id} and r.settled_at is not null
+        order by r.redeemed_at, r.id limit 1
+      `),
+      // What they read and marked unread by hand. A feed's posts up to its subscription's
+      // `readUpTo` are read too, whether or not a row here says so (ADR 0009).
+      db.all(sql`
+        select ${post}, st.read_at as "readAt",
+          (st.read_at is null and st.read_updated_at is not null) as "markedUnread"
+        from user_article_states st ${on(sql`st.article_id`)}
+        where st.user_id = ${id} and (st.read_at is not null or st.read_updated_at is not null)
+        order by coalesce(st.read_at, st.read_updated_at) desc, st.article_id
+      `),
     ] as never)) as unknown as Record<string, unknown>[][]
     const profile = profiles?.[0]
     const body = {
@@ -327,6 +405,11 @@ export function memberRoutes(deps: ApiDeps) {
             publicLikes: profile.publicLikes === 1,
             showsGravatar: profile.showsGravatar === 1,
             pictureUploaded: profile.pictureUploaded === 1,
+            // Where anyone sees it, whole, rather than the path the app asks for.
+            picture:
+              typeof profile.picture === 'string'
+                ? `${deps.config.publicUrl}${profile.picture}`
+                : null,
           }
         : null,
       prefs: (prefs ?? []).map((p) => ({ key: p.key, value: JSON.parse(String(p.valueJson)) })),
@@ -340,6 +423,16 @@ export function memberRoutes(deps: ApiDeps) {
         ...blogroll,
         isPublic: isPublic === 1,
         blogs: JSON.parse(String(blogs ?? '[]')),
+      })),
+      claims,
+      inviteCodes: (codes ?? []).map(({ joined, ...code }) => ({
+        ...code,
+        joined: JSON.parse(String(joined ?? '[]')),
+      })),
+      joinedBy: joinedBy?.[0] ?? null,
+      reads: (reads ?? []).map(({ markedUnread, ...read }) => ({
+        ...read,
+        markedUnread: markedUnread === 1,
       })),
     }
     return new Response(JSON.stringify(body, null, 2), {

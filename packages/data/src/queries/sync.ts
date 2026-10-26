@@ -27,6 +27,7 @@ import { sql } from 'drizzle-orm'
 import type { TelaDb } from '../db'
 import { avatarSql, gravatarOnSql } from './people'
 import { deviceReaderCount } from './sites'
+import { standingOk } from './standing'
 
 /** Raw rows as SQL returns them; the API shapes them into the protocol's row types. */
 export type RawRow = Record<string, unknown>
@@ -109,12 +110,21 @@ const CLAIM = sql.raw(`id, site_id as "siteId", method, token, status, error,
  * page by the profile's seq and never selected by the next (ADR 0031).
  */
 const FOLLOW_SEQ = sql.raw(`(case when f.deleted_at is null then max(f.seq, p.seq) else f.seq end)`)
-/** A follow with how the followed member appears, from `follows f join profiles p`. */
+/**
+ * A follow with how the followed member appears, from `follows f join profiles p`. A followee
+ * suspended or gone (ADR 0059) is sent as unfollowed, at the time they left, so no device shows
+ * a profile nobody else can see; the profile's seq moved when they left, which sends the row
+ * again, and moves again if a suspension is lifted, which sends it back as a follow. The follow
+ * row itself is untouched, so lifting a suspension gives every follower back.
+ */
 const FOLLOW = sql`f.followee_id as "userId", p.handle, p.display_name as "displayName",
-  ${sql.raw(avatarSql('p'))} as "avatar", f.created_at as "createdAt", f.deleted_at as "deletedAt", ${FOLLOW_SEQ} as seq`
+  ${sql.raw(avatarSql('p'))} as "avatar", f.created_at as "createdAt",
+  (case when ${standingOk('p')} then f.deleted_at
+    else coalesce(f.deleted_at, p.deleted_at, p.suspended_at) end) as "deletedAt",
+  ${FOLLOW_SEQ} as seq`
 const TRANSLATION = sql.raw(`b.content_key as "contentKey", b.lang, b.state,
   b.chunk_keys as "chunkKeys", b.object_key as "objectKey", b.failed_leaves as "failedLeaves",
-  b.seq`)
+  b.due_at as "dueAt", b.seq`)
 
 function siteColumns(userId: string): SQL {
   return sql`s.id, s.home_url as "homeUrl", s.title, s.description, s.favicon_key as "faviconKey",
@@ -275,7 +285,7 @@ export async function readPull(
     // changed since the cursor: the device shows their handle and name.
     follows: snapshot
       ? sql`select ${FOLLOW} from follows f join profiles p on p.user_id = f.followee_id
-          where f.follower_id = ${userId} and f.deleted_at is null`
+          where f.follower_id = ${userId} and f.deleted_at is null and ${standingOk('p')}`
       : sql`select ${FOLLOW} from follows f join profiles p on p.user_id = f.followee_id
           where f.follower_id = ${userId} and ${FOLLOW_SEQ} > ${cursor}
           order by ${FOLLOW_SEQ} limit ${over}`,

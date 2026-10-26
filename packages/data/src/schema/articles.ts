@@ -14,7 +14,7 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/sqlite-core'
 import { user } from './auth'
-import { ms, oneOf, seq, validJson } from './columns'
+import { flag, ms, oneOf, seq, validJson } from './columns'
 import { feeds } from './sources'
 import { BODY_TRANSLATION_STATES, EXTRACT_STATES, PROVENANCES, TITLE_STATUSES } from './values'
 
@@ -47,6 +47,11 @@ export const articles = sqliteTable(
     wordCount: integer().notNull().default(0),
     readingMinutes: integer().notNull().default(0),
     extractState: text({ enum: EXTRACT_STATES }).notNull().default('none'),
+    /**
+     * Whether a `failed` extraction was refused by the blog's robots.txt (ADR 0061), so that new
+     * rules make only those due again, never every page that failed for another reason.
+     */
+    extractRefused: flag(),
     /**
      * Hash of the title and excerpt readers see now. A title translation made from another hash is
      * stale, which is how the title sweep finds work without a queue (ADR 0021).
@@ -172,12 +177,26 @@ export const bodyTranslations = sqliteTable(
     requestedBy: text().references(() => user.id, { onDelete: 'set null' }),
     reservedTokens: integer().notNull().default(0),
     /**
+     * Reserved as ADR 0057 reserves: `reservedTokens` reckons the request's whole spend, input and
+     * output, and the job translates as much source as that pays for, and a member's request was
+     * counted in `usage_daily.requests`. A request tela-api reserved before then reserved source
+     * tokens alone and was never counted: it is translated up to them, as it was, and gives no
+     * count back. Every end of a request clears both, so a request an older tela-api makes again
+     * over it is read as that one's.
+     */
+    reservedSpend: flag(),
+    /**
      * Tokens this request has spent so far, across every execution that continued it. What the
      * member's reservation is reconciled against when it concludes.
      */
     usedTokens: integer().notNull().default(0),
     /** UTC day (YYYY-MM-DD) the reservation was charged to, so completion reconciles that day. */
     reservedDay: text(),
+    /**
+     * A request that waits (ADR 0057): its member's day, or the site's, had no room, so it was
+     * charged to the next day and is not due before this instant. Cleared when it starts.
+     */
+    dueAt: ms(),
     chunkKeys: text().notNull().default('[]'),
     objectKey: text(),
     failedLeaves: text().notNull().default('[]'),

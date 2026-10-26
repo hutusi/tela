@@ -14,12 +14,17 @@
  *   Only when that has lapsed does it ask tela-api, and passes on the refreshed cookie.
  * - `/` (for visitors), Discover's tabs (`/discover`, `/discover/articles`, `/discover/blogs`,
  *   `/discover/readers`), `/s/:id` and `/@handle` are rendered here from tela-api's public JSON,
- *   poured into the SPA's index.html and cached per colo, locale and deploy for five minutes;
+ *   poured into the SPA's index.html and cached per colo, locale and deploy for five minutes, a
+ *   page whose `?hl=` fixed its language apart from one in the same language that it did not
+ *   (ADR 0060: their canonical addresses differ);
  *   `/about`, `/privacy` and `/terms` the same way, from the bundle alone. An address from before
  *   Discover's tabs (`/discover?topic=…`) is a permanent redirect, answered here. A request to
  *   `/` that carries a session cookie is a member's: the plain shell, from the assets, never
  *   cached, and tela-api is not asked (ADR 0035). Every other path is the SPA's
  *   static assets, which answer without running this Worker at all.
+ * - `/l/<id>.rss`, `/l/<id>.opml`, `/discover/articles.rss` and `/discover.opml` are Tela's own
+ *   feeds (ADR 0062), rendered here from tela-api's public JSON through the same copy per colo,
+ *   in the language `?hl=` pins.
  * - A write to `/api/*` must come from this origin: cookies are `SameSite=Lax`, and this closes
  *   what Lax leaves open to a sibling subdomain.
  *
@@ -27,9 +32,24 @@
  */
 import { isBlockedHost } from '@tela/ingest/net'
 import type { Blobs } from '@tela/platform'
+import { hlLocale } from '@tela/shared'
 import { getCookieCache } from 'better-auth/cookies'
+import { type FeedRoute, feedRoute } from '../src/lib/feed-href'
 import { safeDecode } from '../src/lib/safe-decode'
+import { renderFeed } from './feeds'
+import { llmsTxt } from './llms'
+import { robotsTxt } from './robots'
 import { withSecurityHeaders } from './security'
+import {
+  kindPages,
+  ownPages,
+  type SitemapItems,
+  type SitemapSummary,
+  sitemapIndex,
+  sitemapOf,
+  sitemapPage,
+  urlset,
+} from './sitemap'
 
 export type EdgeCache = {
   match(key: Request): Promise<Response | undefined>
@@ -53,8 +73,8 @@ export type EdgeDeps = {
   config: {
     /** The secret tela-api signs sessions with; the same value on both Workers. */
     authSecret: string
-    /** While set, nothing is indexed (ADR 0015). */
-    privateBeta: boolean
+    /** While set, nothing is indexed (ADRs 0015, 0060): `TELA_NOINDEX`. */
+    noindex: boolean
     /** How long a public page waits on tela-api for its data; `PAGE_DEADLINE_MS` unless a test says. */
     pageDeadlineMs?: number
   }
@@ -81,7 +101,10 @@ export type PublicPageRoute = {
 export type PublicPages<R extends PublicPageRoute = PublicPageRoute> = {
   /** The page a URL names, or null. */
   route(url: URL): R | null
-  /** The UI language to render in, from the locale cookie and Accept-Language. */
+  /**
+   * The UI language to render in: a visitor's `?hl=`, then the locale cookie, then
+   * Accept-Language; a member's cookie, whatever the address says (ADR 0060).
+   */
   locale(request: Request): string
   /** `data` null: the endpoint said there is no such page. */
   render(input: { route: R; url: URL; data: unknown; locale: string; template: string }): string
@@ -117,9 +140,25 @@ const PAGE_CACHE = 'public, max-age=0, must-revalidate'
  * it: a slow D1 must not keep the front page blank.
  */
 const PAGE_DEADLINE_MS = 3_000
+/**
+ * When a public page's data did not come, how soon a crawler should ask again (ADR 0060). The
+ * fallback is the plain shell, whose own head says `noindex`: a crawler handed it as a 200 drops
+ * the page, while a 503 with `Retry-After` says only "not now".
+ */
+const PAGE_RETRY_AFTER_SECONDS = 120
 /** When the colo's copy of a public answer was made, so a hit can say its `age`. Never sent on. */
 const STORED_AT = 'x-tela-stored-at'
 const WRITES = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
+/** A sitemap, in the browser or a crawler: as long as tela-api keeps the list it is made from. */
+const SITEMAP_CACHE = 'public, max-age=3600'
+/** A rendered page's own robots rule (ADR 0060), which its answer repeats as X-Robots-Tag. */
+const ROBOTS_META = /<meta name="robots" content="([^"]+)"/
+/**
+ * A feed, in the browser or feed reader: a minute, then a conditional GET, which its ETag answers
+ * 304 while the colo's copy has not changed. The copy itself lives as tela-api says, so a blogroll
+ * made private stops being served within minutes, as its page does.
+ */
+const FEED_CACHE = 'public, max-age=60'
 
 /** A public answer the colo may keep for everyone: one tela-api says a shared cache may. */
 function keepsAtTheColo(res: Response): boolean {
@@ -140,6 +179,8 @@ const text = (body: string, status: number, headers: Record<string, string> = {}
 export function createEdge(deps: EdgeDeps) {
   const { blobs, api, cache, config, assets, pages } = deps
   const now = deps.now ?? Date.now
+  /** `/llms.txt`, made once per origin: it changes only with a deploy. */
+  const llms = new Map<string, string>()
 
   /** A member's session: from the signed cookie cache, else from tela-api (one D1 read). */
   async function session(request: Request): Promise<{ setCookies: string[] } | null> {
@@ -392,6 +433,98 @@ export function createEdge(deps: EdgeDeps) {
     return new Response(body, res)
   }
 
+  /**
+   * A sitemap (ADR 0060): Tela's own pages from the bundle, the rest from tela-api's list through
+   * the colo's copy, which tela-api keeps an hour. No list from tela-api is a 503 a crawler asks
+   * again after, never an empty sitemap, which would say every page it named is gone.
+   */
+  async function serveSitemap(
+    request: Request,
+    url: URL,
+    sitemap: NonNullable<ReturnType<typeof sitemapOf>>,
+    waiter?: Waiter,
+  ): Promise<Response> {
+    if (request.method !== 'GET' && request.method !== 'HEAD') return text('not allowed', 405)
+    const xml = (body: string) =>
+      new Response(body, {
+        headers: {
+          'content-type': 'application/xml; charset=utf-8',
+          'cache-control': SITEMAP_CACHE,
+          // A sitemap is read, not shown in results.
+          'x-robots-tag': 'noindex',
+        },
+      })
+    if (sitemap === 'pages') return xml(urlset(url.origin, ownPages()))
+    const page = sitemap === 'index' ? 1 : sitemapPage(url.searchParams.get('page'))
+    if (page === null) return text('not found', 404)
+    const path =
+      sitemap === 'index'
+        ? '/api/v1/public/sitemap'
+        : `/api/v1/public/sitemap/${sitemap}?page=${page}`
+    const unavailable = () =>
+      text('sitemap unavailable', 503, { 'retry-after': '3600', 'cache-control': 'no-store' })
+    try {
+      const res = await pageJson(new URL(path, url), waiter)
+      if (res.status === 404) return text('not found', 404)
+      if (res.status !== 200) return unavailable()
+      const data = (await res.json()) as SitemapSummary & SitemapItems
+      return xml(
+        sitemap === 'index'
+          ? sitemapIndex(url.origin, data)
+          : urlset(url.origin, kindPages(sitemap, data)),
+      )
+    } catch (err) {
+      console.error('sitemap failed', path, err)
+      return unavailable()
+    }
+  }
+
+  /**
+   * One of Tela's own feeds (ADR 0062): its data through the colo's copy, as a page's, rendered in
+   * the language its `?hl=` pins. A feed of nothing others can see is a 404, kept a minute; one
+   * whose data could not be had or read is a 503, kept nowhere, which a feed reader tries again.
+   * The same bytes keep the same ETag, so a reader polling it is answered 304.
+   */
+  async function serveFeed(request: Request, route: FeedRoute, waiter?: Waiter) {
+    if (request.method !== 'GET' && request.method !== 'HEAD') {
+      return text('method not allowed', 405, { allow: 'GET, HEAD' })
+    }
+    const missing = () =>
+      text('not found', 404, { 'cache-control': 'public, max-age=60', 'x-robots-tag': 'noindex' })
+    const unavailable = () =>
+      text('unavailable', 503, { 'cache-control': 'no-store', 'retry-after': '60' })
+    if (route.kind === 'missing') return missing()
+    const url = new URL(request.url)
+    let feed: ReturnType<typeof renderFeed>
+    try {
+      const res = await pageJson(new URL(route.api, url), waiter)
+      if (res.status === 404) return missing()
+      if (res.status !== 200) return unavailable()
+      feed = renderFeed(route, await res.json(), url.origin)
+    } catch (err) {
+      console.error('feed failed', url.pathname, err)
+      return unavailable()
+    }
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(feed.body))
+    const etag = `"${[...new Uint8Array(digest).slice(0, 12)]
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('')}"`
+    const headers: Record<string, string> = {
+      'content-type': feed.type,
+      'cache-control': FEED_CACHE,
+      etag,
+      // A feed is not a page to list in a search: the page it is of is.
+      'x-robots-tag': 'noindex',
+      'x-content-type-options': 'nosniff',
+      ...(feed.filename ? { 'content-disposition': `inline; filename="${feed.filename}"` } : {}),
+    }
+    const asked = request.headers.get('if-none-match') ?? ''
+    if (asked.split(',').some((tag) => tag.trim().replace(/^W\//, '') === etag)) {
+      return new Response(null, { status: 304, headers })
+    }
+    return new Response(request.method === 'HEAD' ? null : feed.body, { headers })
+  }
+
   async function servePublic(request: Request, waiter?: Waiter): Promise<Response> {
     const url = new URL(request.url)
     const read = request.method === 'GET' || request.method === 'HEAD'
@@ -411,18 +544,14 @@ export function createEdge(deps: EdgeDeps) {
     // A member's `/` is the app, which takes them to their reading. Told by the cookie alone,
     // before the cache and without asking tela-api: a lapsed session gets the plain shell too,
     // whose app shows the front page once /me says so. Each copy is for one kind of request, so
-    // the browser keys it by the cookie; the colo's copy needs no Vary (workerd ignores it), since
-    // only a visitor's is ever stored.
+    // the browser keys it by the cookie (a visitor's page says so itself); the colo's copy needs
+    // no Vary (workerd ignores it), since only a visitor's is ever stored.
     const cookie = request.headers.get('cookie') ?? ''
-    let response: Response
-    if (cookie.includes('tela.session_token')) {
-      const app = await assets.fetch(request)
-      response = new Response(app.body, app)
-      response.headers.set('cache-control', PAGE_CACHE)
-    } else {
-      response = await renderPublic(request, url, route, waiter)
-    }
-    response.headers.append('vary', 'cookie')
+    if (!cookie.includes('tela.session_token')) return renderPublic(request, url, route, waiter)
+    const app = await assets.fetch(request)
+    const response = new Response(app.body, app)
+    response.headers.set('cache-control', PAGE_CACHE)
+    response.headers.set('vary', 'cookie')
     return response
   }
 
@@ -472,18 +601,27 @@ export function createEdge(deps: EdgeDeps) {
     const shell = await assets.fetch(new Request(new URL('/', url).toString()))
     const template = await shell.text()
     const locale = pages.locale(request)
+    // The address fixes the language (`?hl=`) and the page is in it: a page of its own, whose
+    // canonical link names it (ADR 0060). A member's page is pinned only when the language named
+    // is their own, and is then the same page a visitor gets.
+    const pinned = hlLocale(url.searchParams.get('hl')) === locale
+    // An unpinned page's language comes from the cookie or Accept-Language, a pinned one's from
+    // the address unless a session cookie overrides it: what the browser must key its copy by.
+    // The colo's copy carries none (workerd ignores Vary and refuses `*`): its key says it all.
+    const vary = pinned ? 'cookie' : 'cookie, accept-language'
     // The deploy is part of the key: a page cached before it names scripts that are gone.
     const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(template))
     const build = [...new Uint8Array(digest).slice(0, 6)]
       .map((b) => b.toString(16).padStart(2, '0'))
       .join('')
     const cacheKey = new Request(
-      `${CACHE_ORIGIN}/page/${build}/${locale}${route.key ?? route.api ?? url.pathname}`,
+      `${CACHE_ORIGIN}/page/${build}/${locale}${pinned ? '.hl' : ''}${route.key ?? route.api ?? url.pathname}`,
     )
     const hit = await cache.match(cacheKey)
     if (hit) {
       const cached = new Response(hit.body, hit)
       cached.headers.set('cache-control', PAGE_CACHE)
+      cached.headers.set('vary', vary)
       return cached
     }
     // A page with no endpoint (About, Privacy, Terms) renders from the bundle alone.
@@ -491,16 +629,24 @@ export function createEdge(deps: EdgeDeps) {
     // How old the data already is: the page is kept only as long as its data had left, so a page
     // made from the colo's four-minute-old copy is not kept five minutes more.
     let age = 0
+    // The page could not be made: the plain shell, which boots the app and asks again from the
+    // browser, as a 503 kept by nobody. Its head says `noindex` (it is the app's), so as a 200 a
+    // crawler that came at that moment would drop the page; a 503 with `Retry-After` is "not now".
+    const unavailable = () =>
+      new Response(template, {
+        status: 503,
+        headers: {
+          'content-type': 'text/html; charset=utf-8',
+          'cache-control': 'no-store',
+          'retry-after': String(PAGE_RETRY_AFTER_SECONDS),
+          vary,
+        },
+      })
     if (route.api !== null) {
       const answer = await pageData(route.api, url, route.alwaysExists === true, waiter)
       // tela-api is down, slow or failing, or (for a page that always exists) has no such endpoint
-      // yet: the plain shell, uncached, which asks again from the browser. A cached 404 at `/`
-      // would be the front page for five minutes.
-      if (!answer) {
-        return new Response(template, {
-          headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': PAGE_CACHE },
-        })
-      }
+      // yet. A cached 404 at `/` would be the front page for five minutes.
+      if (!answer) return unavailable()
       data = answer.data
       age = answer.age
     }
@@ -509,14 +655,19 @@ export function createEdge(deps: EdgeDeps) {
       html = pages.render({ route, url, data, locale, template })
     } catch (err) {
       // An answer this build cannot render (a tela-api of another release beside it): the plain
-      // shell, uncached, whose app asks again from the browser, rather than an error page. Logged,
-      // since a page that always falls back is otherwise invisible.
+      // shell, whose app asks again from the browser, rather than an error page. Logged, since a
+      // page that always falls back is otherwise invisible.
       console.error('public page did not render', url.pathname, err)
-      return new Response(template, {
-        headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': PAGE_CACHE },
-      })
+      return unavailable()
     }
-    const headers = { 'content-type': 'text/html; charset=utf-8', 'content-language': locale }
+    // A page that is not to be indexed (a 404, a blog nobody vouched for) says so in its head,
+    // and in a header for whatever reads no HTML; kept with the colo's copy.
+    const robots = html.match(ROBOTS_META)?.[1]
+    const headers: Record<string, string> = {
+      'content-type': 'text/html; charset=utf-8',
+      'content-language': locale,
+      ...(robots ? { 'x-robots-tag': robots } : {}),
+    }
     const status = data === null ? 404 : 200
     const keep = PAGE_EDGE_SECONDS - age
     if (keep > 0) {
@@ -530,24 +681,31 @@ export function createEdge(deps: EdgeDeps) {
       if (waiter) waiter.waitUntil(put)
       else await put
     }
-    return new Response(html, { status, headers: { ...headers, 'cache-control': PAGE_CACHE } })
+    return new Response(html, {
+      status,
+      headers: { ...headers, 'cache-control': PAGE_CACHE, vary },
+    })
   }
 
   return {
     async fetch(request: Request, waiter?: Waiter): Promise<Response> {
       const url = new URL(request.url)
       const path = url.pathname
+      const sitemap = sitemapOf(path)
       if (path === '/robots.txt') {
-        return text(
-          config.privateBeta ? 'User-agent: *\nDisallow: /\n' : 'User-agent: *\nAllow: /\n',
-          200,
-          {
-            'cache-control': 'public, max-age=3600',
-          },
-        )
+        return text(robotsTxt({ origin: url.origin, noindex: config.noindex }), 200, {
+          'cache-control': 'public, max-age=3600',
+        })
       }
       let response: Response
-      if (path.startsWith('/api/')) {
+      if (path === '/llms.txt') {
+        let body = llms.get(url.origin)
+        if (body === undefined) {
+          body = llmsTxt(url.origin)
+          llms.set(url.origin, body)
+        }
+        response = text(body, 200, { 'cache-control': 'public, max-age=3600' })
+      } else if (path.startsWith('/api/')) {
         const foreign = request.headers.get('origin') !== url.origin
         response =
           WRITES.has(request.method) && foreign && !CROSS_ORIGIN_WRITERS.test(path)
@@ -573,13 +731,25 @@ export function createEdge(deps: EdgeDeps) {
           CONTENT_KEY.test(key) && Number.isInteger(i) && i >= 0 && i < 1000
             ? await serveImage(request, key, i, waiter)
             : text('not found', 404)
+      } else if (sitemap) {
+        response = await serveSitemap(request, url, sitemap, waiter)
       } else {
-        // `run_worker_first` sends only the public pages here besides the above.
-        response = await servePublic(request, waiter)
+        // `run_worker_first` sends only the public pages and feeds here besides the above.
+        const feed = feedRoute(url)
+        response = feed
+          ? await serveFeed(request, feed, waiter)
+          : await servePublic(request, waiter)
       }
-      if (config.privateBeta && !response.headers.has('x-robots-tag')) {
+      // Nothing is indexed while TELA_NOINDEX is set; and the API never is, whatever it answers
+      // (ADR 0060): JSON a search engine found through a page is no page of its own.
+      const robots = config.noindex
+        ? 'noindex, nofollow'
+        : path.startsWith('/api/')
+          ? 'noindex'
+          : null
+      if (robots && !response.headers.has('x-robots-tag')) {
         response = new Response(response.body, response)
-        response.headers.set('x-robots-tag', 'noindex, nofollow')
+        response.headers.set('x-robots-tag', robots)
       }
       // Every page this Worker answers, rendered, cached, the plain shell or a member's `/`,
       // carries what `_headers` gives the pages it never sees (ADR 0051).

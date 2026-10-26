@@ -47,7 +47,7 @@ async function get<T>(path: string): Promise<T> {
 describe('the dev seed', () => {
   test('fills every queue the Overview shows', async () => {
     const counts = await get<AdminCounts>('counts')
-    expect(counts).toEqual({ claims: 3, feeds: 5, dead: 5, discover: 3 })
+    expect(counts).toEqual({ claims: 3, feeds: 5, dead: 5, discover: 3, reports: 2 })
     const overview = await get<AdminOverview>('overview')
     expect(overview.queues.candidates.count).toBe(3)
     expect(overview.activity.length).toBeGreaterThan(0)
@@ -67,6 +67,8 @@ describe('the dev seed', () => {
       'discover?f=dismissed',
       'discover?f=hidden',
       'people?f=members',
+      'reports?f=open',
+      'reports?f=dismissed',
       'invites?f=codes',
       'invites?f=waiting',
       'invites?f=revoked',

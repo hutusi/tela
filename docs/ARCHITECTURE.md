@@ -59,16 +59,16 @@ epoch milliseconds; arrays read whole are JSON text; every row a device syncs ca
 | `user`, `account`, `session`, `verification`, `rate_limit` | better-auth's, through its Drizzle adapter (ADR 0024). `account` is also unique on `(provider_id, account_id)`, which `auth generate` leaves out: better-auth refuses an identity it finds twice (ADR 0036) |
 | `invite_codes`, `invite_redemptions` | Invite codes, not synced (ADR 0034). A code is a member's (`created_by`, one place) or the operator's (null, `max_uses` places), until `revoked_at`. A redemption is an address beside a code, or the operator's invitation to one address (code null): a hold until `redeemed_at`, lapsing at `expires_at` without taking a place, then a place for good, settled once the account it made exists (`user_id`, and `settled_at`, which outlives a deleted member). A claim never settled admits the same address again. A code's places are its redeemed rows; every claim is one statement (`packages/data/src/queries/invites.ts`) |
 | `admin_actions` | What operators did in the admin console (ADR 0039), not synced: one row per target, with the group a request shares (the undo token), the actor, the action, the target, and `detail` holding `{from, to}`, read by an `insert … select` in the change's own batch. Never an email address |
-| `profiles` | One per member: `handle`, `display_name`, `bio`, `ui_locale` and `reading_lang` (null follows the interface, ADR 0040), each with the `at` of the change that set it (`ui_locale_at`, `reading_lang_at`), whether the member shows their subscriptions and likes (`public_subscriptions`, `public_likes`, both off by default, each with the `at` of the change that set it and a version that every change counts up, which a show must name, issue #16), their picture (ADR 0032, 0033): the R2 key of one they uploaded (`avatar_key`), whether they show their Gravatar (`gravatar`, with its `gravatar_at`; never set counts as on), whether Gravatar has one for them (`gravatar_found`, asked at `gravatar_checked_at`), and `avatar_version`, the picture's version, which every change of picture counts up, and `is_admin`, who may open the admin console (granted only by the operator's token, ADR 0039) |
+| `profiles` | One per member: `handle`, `display_name`, `bio`, `ui_locale` and `reading_lang` (null follows the interface, ADR 0040), each with the `at` of the change that set it (`ui_locale_at`, `reading_lang_at`), whether the member shows their subscriptions and likes (`public_subscriptions`, `public_likes`, both off by default, each with the `at` of the change that set it and a version that every change counts up, which a show must name, issue #16), their picture (ADR 0032, 0033): the R2 key of one they uploaded (`avatar_key`), whether they show their Gravatar (`gravatar`, with its `gravatar_at`; never set counts as on), whether Gravatar has one for them (`gravatar_found`, asked at `gravatar_checked_at`), and `avatar_version`, the picture's version, which every change of picture counts up, and `is_admin`, who may open the admin console (granted only by the operator's token, ADR 0039). A member's standing: `suspended_at` (an operator's suspension, ADR 0059) and `deleted_at` (the account closed: the row stays for good as an empty shell holding the handle, ADR 0058), with `erased_at` once `member.erase` is done; `standingOk` is the one predicate every public query and guard uses |
 | `user_prefs` | Synced preferences, one row per key: reading mode, text size, measure, theme (`lib/typography.ts`), the Reading and Translation settings `reader.mark_on_open`, `translate.auto`, `translate.never`, and the reading list's Unread / All switch, `reader.hide_read` (on unless set; `lib/prefs.ts`) |
-| `sites` | A blog: normalized `home_url`, `listing` (private/listed/featured/rejected), `claimed_by`, `reader_count`, `translation_opt_out`, and an operator's review for Discover (ADR 0041, neither synced): what it decided (`review`, listed or dismissed; null keeps a blog a member added in the review queue, and `listed` keeps a blog in Discover through an Unfeature or a removed claim) and when the last decision was made (`reviewed_at`) |
+| `sites` | A blog: normalized `home_url`, `listing` (private/listed/featured/rejected), `claimed_by`, `reader_count`, `translation_opt_out`, and `feed_only` (its writer's "Only use what my feed provides": no page of the blog is fetched, ADR 0061), an operator's review for Discover (ADR 0041, neither synced): what it decided (`review`, listed or dismissed; null keeps a blog a member added in the review queue, and `listed` keeps a blog in Discover through an Unfeature or a removed claim) and when the last decision was made (`reviewed_at`) |
 | `site_topics`, `site_claims` | A blog's topics; claim attempts and how each was proved (`method`: a meta tag, a `rel="me"` link, a link on every page, or GitHub both ways, ADR 0045; a check that found no proof stores its reason as JSON in `error`), with the operator who vouched for one (`vouched_by`, so its check skips only the proof), when an operator last decided on it (`reviewed_at`, ADR 0039), and when one last rejected or removed it (`overruled_at`: from then on only the tag or `rel="me"` proves it) |
 | `feeds` | The fetch unit: validators, schedule (`next_fetch_at`, `fetch_interval_sec`), `fetch_region`, `timeout_streak`, `status`, `content_mode`, `hub_url`, `merged_into` (another address for the blog's canonical feed, ADR 0028), `last_item_at` (the newest item it listed when last fetched, which the pull sends with the feed so Settings can say when a blog last posted, ADR 0049) |
-| `articles` | `dedup_key` unique per feed, `sort_at`, `source_lang`, `current_version`, `content_key`, `extract_state`, counts. `AUTOINCREMENT` ids, so the unread watermark never meets a reused id. Ordered two ways: within a feed by `(feed_id, sort_at, id)` (`articles_feed_sort_idx`), and across every feed by `(sort_at, id)` (`articles_sort_idx`, Discover's Articles) |
+| `articles` | `dedup_key` unique per feed, `sort_at`, `source_lang`, `current_version`, `content_key`, `extract_state` (with `extract_refused`, a failed one robots.txt refused, ADR 0061), counts. `AUTOINCREMENT` ids, so the unread watermark never meets a reused id. Ordered two ways: within a feed by `(feed_id, sort_at, id)` (`articles_feed_sort_idx`), and across every feed by `(sort_at, id)` (`articles_sort_idx`, Discover's Articles) |
 | `article_versions` | Every body an article has had: provenance (feed or readability), `content_key`, `raw_key` (ADR 0022), and the `pipeline_version` it was made under (ADR 0055) |
 | `article_titles` | Eager title and excerpt per launch language: `done`, `echo` or `failed` against the title hash |
 | `block_translations` | The content-addressed block cache: source hash × target language × `NORM_VERSION` |
-| `body_translations` | A body per content version and language: state, reservation, streamed `chunk_keys`, the finished object (ADR 0023) |
+| `body_translations` | A body per content version and language: state, reservation (`reserved_spend` once it reckons the whole spend), streamed `chunk_keys`, the finished object (ADR 0023), and `due_at` for a request that waits for its day (ADR 0057) |
 | `subscriptions` | `(user_id, feed_id)` with `watermark_id`: everything at or below it is read (ADR 0009) |
 | `folders`, `feed_folders` | The member's private folders (ADR 0048): a folder by client-minted `id` with its `name`, soft-deleted; and which folder each blog is in, `(user_id, feed_id)` with `folder_id` (null is none) and the move's `updated_at`. A table apart from `subscriptions`, so a move never re-sends a feed's horizon; a filing outlives an unsubscribe |
 | `blogrolls`, `blogroll_blogs` | The member's blogrolls (ADR 0050), synced to their member only; others read a public one through tela-api. A blogroll by a client-minted 12-character `id`, which is its address (`/l/<id>`), with its `name` and `description` (their clock is `updated_at`), `is_public` with a version of its own that a show must name (`public_version`, as the profile's switches, issue #16), `public_since` (when it first went public, never cleared: Discover's order) and the operator's Hide from Discover (`hidden_at`, never synced and never moving `seq`), soft-deleted. The blogs in each, `(blogroll_id, feed_id)` with `user_id`: the `note` on a clock of its own (`note_at`), so it outlives a removal, `added_at` (the order), and putting in and taking out on `updated_at` and `removed_at`. Unsubscribing touches neither |
@@ -77,7 +77,11 @@ epoch milliseconds; arrays read whole are JSON text; every row a device syncs ca
 | `websub_subscriptions` | One per feed with a hub: topic, secret, status, lease |
 | `leases`, `lease_fence` | Who holds which piece of background work, and the fence that aborts a stale holder's batch |
 | `dead_letters`, `ops_heartbeats` | Work that gave up, until an operator retries or dismisses it (`resolved_at`, `resolution`, `resolved_by`); the last `tick`, `health`, `daily` and `digest` runs, the tick's with the switches tela-jobs runs with (ADR 0039) |
-| `llm_calls`, `usage_daily` | Every model call, with the feed it was for (`feed_id`); reserved and used tokens per member and day (`'*'` is background) |
+| `llm_calls`, `usage_daily` | Every model call, with the feed it was for (`feed_id`); reserved and used tokens per member and day (`'*'` is background, `'~closed'` the erased accounts' days folded together, ADR 0058), and `requests`, the body translations a member's day was charged (ADR 0057); the day's site total is the sum over every subject |
+| `settings` | Runtime settings (ADR 0056): one row per setting changed from its default in `@tela/shared`'s `SETTINGS`, as JSON. Not synced; read inline by the statement that enforces a limit (`settingSql`) |
+| `pending_feeds` | An import's feeds new to Tela beyond the member's day, which `member.pendingFeeds` adds on the days after (ADR 0063) |
+| `reports` | Reports of public content (ADR 0059): who reported, what (`target_kind`, `target_key`), why, and where it stands. Not synced |
+| `ops_alerts`, `robots_rules` | Operator mail already sent, one row per alert and day or hour (ADR 0063); a host's robots.txt as Tela last read it, the group that applies to Tela (ADR 0061). Neither is exported |
 | `action_limits`, `applied_mutations`, `tombstones`, `counters` | Reader action limits, and sign-in limits per email address; pushed mutation ids (replays change nothing); hard deletes for sync; the `seq` counter |
 
 ## Content pipeline
@@ -197,6 +201,12 @@ ADR 0053).
 - `REDUE` (`@tela/data`) says, per kind, how a dead item is made due again: the admin console's
   Retry runs it with the dead letter's resolution in one batch, and the next tick claims the item
   with fresh attempts.
+- Every fifth minute, beside the health check, `checkAlerts` mails the operator when the day's
+  translation budget reaches a share, sign-ups pass `alerts.signupsPerDay`, or new reports wait:
+  an `ops_alerts` row inserted first, so each is mailed once (ADR 0063).
+- `member.pendingFeeds` adds an import's waiting feeds as a member's day and cap have room (ADR
+  0063); `member.erase` removes what a closed account's own devices held, 10 minutes after it
+  closed, in fenced chunks that recount likes, recommendations and readers first (ADR 0058).
 - `src/portable.ts` runs the same tick and jobs on a timer with an in-process queue: the exit path,
   and what the test-mode `cycle()` uses.
 
@@ -209,10 +219,14 @@ ADR 0053).
 - **Titles, eager** (`translate.title`, keyed by feed): the sweep finds feeds with articles whose
   current title hash has no row in some reading language (`READING_LANGUAGES`: `zh-Hans`, `zh-Hant`, `en`, `fr`); a job translates up to 20 titles and
   excerpts of one feed per call per language, and commits each (language, source) group in its
-  own fenced batch as it lands. The background budget (`usage_daily` subject `'*'`)
-  stops the sweep for the day once spent.
-- **Bodies, lazy and streamed** (`translate.body`, ADR 0023): opening a foreign post reserves
-  against the member's day and claims the work at once. Groups follow top-level block boundaries,
+  own fenced batch as it lands, newest posts first. The background budget (`usage_daily` subject
+  `'*'`, `translation.backgroundDailyTokens`) and the site's day (`translation.siteDailyTokens`)
+  stop the sweep for the day once spent (ADR 0057).
+- **Bodies, lazy and streamed** (`translate.body`, ADR 0023): opening a foreign post is admitted
+  by count (`usage_daily.requests` against `member.translationsPerDay`) and by the site's day,
+  reserves against the day it is charged to, and claims the work at once. Past either, the row
+  waits until the next UTC midnight (`due_at`), one day deep, and a member with room today who
+  opens it takes it over (ADR 0057). Groups follow top-level block boundaries,
   about 400 source tokens first and then about 3k; each lands as a chunk object
   `tc/<key>/<lang>/<request>/<n>.json`, committed in a fenced batch with its cache rows and call
   log, and the reader lays it over the original by block index. The finished object is
@@ -248,8 +262,16 @@ tela-api is Hono, built by `createApp(deps)` from portable dependencies.
 | `/api/v1/claims` | Start a claim, see its proofs (and whether the member has a GitHub to claim by), ask for the check; a failed check comes back as a `reason` the page words, or as text |
 | `/api/v1/profile`, `/api/v1/sites/:id/*`, `/api/v1/dashboard`, `/api/v1/search` | Handle and profile, owner-only topics and opt-out, the author dashboard (per blog its language, topics, readers and those new in 30 days, and its live totals of posts, likes, recommendations and notes; per post, the newest twenty, likes, recommendations and notes; readers' notes with their avatars), search past the device's horizon |
 | `GET /api/v1/following`, `GET /api/v1/sites/:id/followed-readers` | What the people a member follows recommended, liked and subscribed to, thirty entries a page behind a (time, offset, key) cursor, a day's likes grouped and placed at the newest; which of them read a blog. Only as far as each shows it (ADR 0031). Readers to follow come from Discover's pool, matched on the device (ADR 0044): `suggested` is always empty, kept for shells cached before that, which read it |
-| `GET /api/v1/export` | "Your data": the member's own rows as one JSON file, their live blogrolls included, private ones too, with their blogs and notes |
-| `GET /api/v1/public/auth` | Which providers the sign-in sheet may offer, `{google, github}`: each once its app is configured (ADR 0036) |
+| `GET /api/v1/export` | "Your data": the member's own rows as one JSON file, their live blogrolls included, private ones too, with their blogs and notes; their claims, invite codes and who joined by them, the invitation they joined by, read states, and their picture's address (ADR 0058) |
+| `POST /api/v1/account/delete/code`, `POST /api/v1/account/delete` | Closing one's own account (ADR 0058): a code mailed from Tela's own `verification` row (`otpSend`), then the code (`otpVerify`, three tries); refused for an admin. `closeAccount` empties the account in one batch, `closures/<id>` is written to R2 first, and the answer clears the browser's cookies |
+| `GET /api/v1/account/usage` | A member's limits, live (ADR 0063): today's translations against `member.translationsPerDay` and how many wait, today's new feeds and how many wait in `pending_feeds`, subscriptions against the cap; null for an exempt admin |
+| `POST /api/v1/claims/:siteId/release` | The claimant lets a blog go (ADR 0058, `releaseClaim`); its switches stay as they set them |
+| `PUT /api/v1/sites/:id/feed-only` | The claimant's "Only use what my feed provides" (ADR 0061); due extractions of the blog go back to `none` |
+| `POST /api/v1/reports` | A member reports a profile, blogroll, blog or note shown now (ADR 0059); one open report per reporter per target, `report` 20 a day |
+| `GET /api/v1/public/sitemap`, `/sitemap/<kind>?page=` | What tela-web's sitemaps list (ADR 0060): the indexable blogs, blogrolls and profiles, with `lastmod`, by the same predicates (`SITE_INDEXABLE`, `BLOGROLL_INDEXABLE`, `profileIndexable`) that give site, blogroll and profile answers their `indexable` |
+| `GET /api/v1/public/feeds/blogrolls/:id`, `/feeds/discover?topic=` | What tela-web's RSS and OPML are made of (ADR 0062): listed blogs only, every language's current titles at once, none for a blog that opted out of translation |
+| `GET`, `POST /api/admin/settings`, `POST /api/admin/closures` | Bearer `ADMIN_TOKEN`: the runtime settings, read and set as the console's `setting.set` does (ADR 0056); close again the accounts whose closures R2 holds, after a restore (ADR 0058) |
+| `GET /api/v1/public/auth` | Which providers the sign-in sheet may offer, `{google, github}`, each once its app is configured (ADR 0036), and `signup` (`open` or `invite`) and `paused` (the day's new accounts reached `signup.maxPerDay`, ADR 0056); cached 60 s |
 | `/api/v1/public/*` | Discover's Blogs at `/discover`, which the page `/discover/blogs` reads (60 blogs a page, `?page=`, with the `total` its filters match), a blog's page (with its claimant and readers' notes), a profile (with follow counts, its public blogrolls newest first, each with its first three blogs and its count, hidden from Discover or not, and liked posts only if shown): listed and featured blogs only; a page tela-web renders from them keeps its copy per colo for their `s-maxage`. A blog's reader count is given from three readers and is null below, in Discover's order as well as its value (`publicReaderCount`, ADR 0041); member search gives it the same way |
 | `GET /api/v1/public/avatars/:userId?v=` | A member's picture, only at the version it is at (ADR 0032, 0033): the one they uploaded, from R2, else their Gravatar while they show it and the check found one, fetched here by the hash of their email, which never leaves tela-api; raster types only, 512 KB, immutable for 30 days; none is a 404 the letter stands in for |
 | `GET /api/v1/public/front` | The front page's edition (ADR 0035): each public blog's newest post, newest first, from the last seven days, or the latest ones when nobody wrote that week, eleven at most, with its titles and translated excerpts, its blog and its claimant; and the counts the copy states, public blogs and the week's distinct blogs, languages and posts. Each blog's newest post is one seek per live feed down `articles_feed_sort_idx`; future-dated posts wait. Cached as a profile is |
@@ -266,7 +288,9 @@ tela-api is Hono, built by `createApp(deps)` from portable dependencies.
 
 Every `/api/v1/*` route but the public ones and `/api/v1/join` needs a session, read from the
 signed five-minute cookie cache; `/api/v1/account/*` reads it from D1 again, so a session ended
-elsewhere changes nothing there. Reader actions are rate-limited per member (`action_limits`).
+elsewhere changes nothing there. A closed or suspended account (ADRs 0058, 0059) is refused a
+session (`session.create.before`), and `guarded` reads its standing from D1 on `/me`, the sync,
+the export and every call that writes, answering 401 within the signed copy's five minutes. Reader actions are rate-limited per member (`action_limits`).
 
 No request body is read past 64 KB, a push past 1 MB (`bodyCap` in `src/app.ts`), a 413
 `too_large` before any route sees it; the picture, an OPML file (1 MB) and a hub's notification
@@ -277,6 +301,18 @@ failure a JSON 500 `internal`, logged with its path, `cf-ray` and member.
 
 The only public Worker, unpinned, with no D1.
 
+- Public pages (the landing, Discover, blogs, blogrolls, profiles, the info pages and For
+  writers) are rendered here in the visitor's language: `?hl=` first, then the `tela_locale`
+  cookie, then Accept-Language; a member always gets their own (ADR 0060). Each page's `<head>`
+  (`src/lib/head.ts`) carries its canonical, hreflang alternates for the four languages and
+  x-default, Open Graph with a share card per language, and JSON-LD; a page nobody has vouched
+  for (a new profile, an unreviewed blog) says `noindex`, mirrored as `X-Robots-Tag`.
+- `/robots.txt`, `/sitemap.xml` with `/sitemap-{pages,sites,blogrolls,profiles}.xml`, and
+  `/llms.txt` are generated here (`worker/robots.ts`, `sitemap.ts`, `llms.ts`, ADR 0060); while
+  `TELA_NOINDEX` is set, robots.txt shuts everything and every answer says noindex.
+- `/l/<id>.rss`, `/l/<id>.opml`, `/discover/articles.rss` and `/discover.opml` are Tela's own
+  feeds (`worker/feeds.ts`, ADR 0062), rendered from tela-api's JSON through the colo copy, with
+  an ETag; titles in the `?hl=` language where one exists, never full text.
 - `/api/*` goes to tela-api; a write must carry this origin (hubs and the admin script exempt).
 - The app's own GET of `/api/v1/public/*` goes to tela-api every time, as every `/api/*` does. The
   public pages rendered here read the same JSON through a copy per colo instead (`pageJson`), keyed
@@ -318,7 +354,9 @@ The only public Worker, unpinned, with no D1.
   the plain shell from the assets, before the cache lookup, with no call to tela-api, never
   cached. Any answer but a 200 from tela-api, a 404 included, is the plain shell, uncached, never
   a 404 page at `/`; so is a call that throws or takes more than three seconds, body included
-  (`PAGE_DEADLINE_MS`), on every public page: a slow D1 never keeps a page blank. Every browser response for `/` carries `Vary: cookie`; the colo's copy
+  (`PAGE_DEADLINE_MS`), on every public page: a slow D1 never keeps a page blank. That fallback
+  is a 503 with `Retry-After: 120` and `no-store` (ADR 0060): the shell's own head says
+  `noindex`, which a crawler would read as the page's answer from a 200. Every browser response for `/` carries `Vary: cookie`; the colo's copy
   carries none (workerd ignores Vary), since only a visitor's copy is stored. A test
   (`apps/reader/test/routes.test.ts`) holds every public page to `run_worker_first`.
 - `/about`, `/privacy` and `/terms` are rendered the same way from the bundle alone: their route
@@ -489,7 +527,8 @@ A Vite + React SPA that renders from the device.
   workerd.
 - `bun run e2e` (`apps/reader/e2e`): the built reader, tela-api and tela-jobs in one `wrangler dev`
   on fresh local D1, R2 and queues, against the fixture feed server. Test mode (`ENV=test`) adds
-  the sign-in outbox and `POST /api/test/cycle`, which runs tela-jobs' sweeps to completion,
-  because local dev fires no crons. Service workers are blocked there, except in the
+  the sign-in outbox, `POST /api/test/cycle`, which runs tela-jobs' sweeps to completion,
+  because local dev fires no crons, and `POST /api/test/age`, which makes a profile older than
+  the week a new account waits before Discover suggests it. Service workers are blocked there, except in the
   `shell-worker` project, where `redirect.e2e.ts` runs the real `public/sw.js` and tela-redirect's
   kill switch in Chromium on two local origins.

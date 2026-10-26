@@ -223,6 +223,7 @@ export function LeadPost({
             article={article}
             source={source}
             member={member}
+            vouched={post.site.vouched}
             className="text-ink hover:text-ink hover:underline hover:decoration-1 hover:underline-offset-[3px]"
           >
             {shown.title}
@@ -241,6 +242,7 @@ export function LeadPost({
             article={article}
             source={source}
             member={member}
+            vouched={post.site.vouched}
             className="rounded-full border border-ink bg-ink px-[18px] py-[7px] text-[13px] font-medium text-paper hover:text-paper hover:no-underline hover:brightness-125"
           >
             {t('week.read')}
@@ -309,6 +311,7 @@ export function RankedPost({
             article={article}
             source={blogName(post)}
             member={member}
+            vouched={post.site.vouched}
             className="text-ink after:absolute after:inset-0 hover:text-ink hover:underline hover:decoration-1 hover:underline-offset-[3px]"
           >
             {shown.title}
@@ -352,6 +355,7 @@ export function PostRow({ post, member, reading, locale, now, followed }: Discov
             article={article}
             source={source}
             member={member}
+            vouched={post.site.vouched}
             className="text-ink after:absolute after:inset-0 hover:text-ink hover:underline hover:decoration-1 hover:underline-offset-[3px]"
           >
             {shown.title}

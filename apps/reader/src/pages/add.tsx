@@ -5,8 +5,9 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { useTranslations } from 'use-intl'
+import { ImportSummary, useAddProblemWords } from '../components/add-words'
 import { readingHref } from '../lib/href'
-import { type AddError, addError, importOpml } from '../lib/opml'
+import { type AddProblem, addProblem, type Imported, importOpml } from '../lib/opml'
 import { useTitle } from '../lib/title'
 import { apiJson } from '../store/api'
 import { useStore } from '../store/hooks'
@@ -42,7 +43,8 @@ function AddFeedForm() {
   const navigate = useNavigate()
   const [url, setUrl] = useState('')
   const [candidates, setCandidates] = useState<Candidate[] | null>(null)
-  const [error, setError] = useState<AddError | null>(null)
+  const [error, setError] = useState<AddProblem | null>(null)
+  const words = useAddProblemWords()
   const [busy, setBusy] = useState<string | null>(null)
 
   const find = async (e: React.FormEvent) => {
@@ -59,9 +61,9 @@ function AddFeedForm() {
       )
       if (status === 200 && body.feeds) setCandidates(body.feeds)
       else if (body?.error === 'not_a_feed') setCandidates([])
-      else setError(addError(body?.error))
+      else setError(addProblem(body))
     } catch {
-      setError('fetch_failed')
+      setError({ error: 'fetch_failed' })
     } finally {
       setBusy(null)
     }
@@ -75,14 +77,14 @@ function AddFeedForm() {
         body: { feedUrl },
       })
       if (status !== 200 || body.feedId === undefined) {
-        setError(addError(body?.error))
+        setError(addProblem(body))
         return
       }
       // The subscription and the feed arrive by sync; the reading page waits for its first posts.
       void engine.pull()
       navigate(readingHref({ feedId: body.feedId }))
     } catch {
-      setError('fetch_failed')
+      setError({ error: 'fetch_failed' })
     } finally {
       setBusy(null)
     }
@@ -112,7 +114,7 @@ function AddFeedForm() {
       </form>
       {error ? (
         <p className={ERROR} data-testid="add-error">
-          {t(`errors.${error}`)}
+          {words(error)}
         </p>
       ) : null}
       {candidates && candidates.length === 0 ? (
@@ -152,8 +154,9 @@ function OpmlForm() {
   const t = useTranslations('add')
   const { engine } = useStore()
   const [file, setFile] = useState<File | null>(null)
-  const [imported, setImported] = useState<number | null>(null)
-  const [error, setError] = useState<AddError | null>(null)
+  const [imported, setImported] = useState<Imported | null>(null)
+  const [error, setError] = useState<AddProblem | null>(null)
+  const words = useAddProblemWords()
   const [busy, setBusy] = useState(false)
 
   const submit = async (e: React.FormEvent) => {
@@ -165,10 +168,10 @@ function OpmlForm() {
     const result = await importOpml(file)
     setBusy(false)
     if ('error' in result) {
-      setError(result.error)
+      setError(result)
       return
     }
-    setImported(result.feeds)
+    setImported(result)
     void engine.pull()
   }
 
@@ -193,10 +196,10 @@ function OpmlForm() {
       </button>
       {imported !== null ? (
         <span className="text-sm text-ink-2" data-testid="opml-result">
-          {t('imported', { n: imported })}
+          <ImportSummary result={imported} />
         </span>
       ) : null}
-      {error ? <span className={ERROR}>{t(`errors.${error}`)}</span> : null}
+      {error ? <span className={ERROR}>{words(error)}</span> : null}
     </form>
   )
 }

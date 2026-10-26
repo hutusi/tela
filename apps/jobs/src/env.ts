@@ -54,9 +54,12 @@ export type Env = {
    * the sweeps are healthy, and at `/fail` with the problems when they are not. Unset, no pings.
    */
   DEADMAN_URL?: string
-  /** Secret: Resend's API key, for the weekly digest. */
+  /** Secret: Resend's API key, for the weekly digest and the operator alerts. */
   RESEND_API_KEY?: string
-  /** Who the weekly digest goes to (the owner); unset, it is built but not sent. */
+  /**
+   * Who the weekly digest and the alerts go to (the owner); unset, the digest is built but not
+   * sent, and the alerts are not checked.
+   */
   DIGEST_TO?: string
   MAIL_FROM?: string
 }

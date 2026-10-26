@@ -512,10 +512,14 @@ test.describe('Settings › Subscriptions, the manager from lg up', () => {
     const { page } = await member(browser)
     await page.goto('/settings/subscriptions')
     await expect(page.getByTestId('settings-subscription')).toHaveCount(3)
-    // The fixture file lists two of the member's blogs under "Tech".
-    await page
-      .getByTestId('opml-file')
-      .setInputFiles(resolve(import.meta.dirname, 'fixtures/subs.opml'))
+    // The fixture file lists two of the member's blogs under "Tech". It names the default fixture
+    // port, and this run's may be another (`E2E_FIXTURE_PORT`).
+    const file = await readFile(resolve(import.meta.dirname, 'fixtures/subs.opml'), 'utf8')
+    await page.getByTestId('opml-file').setInputFiles({
+      name: 'subs.opml',
+      mimeType: 'text/x-opml',
+      buffer: Buffer.from(file.replaceAll('http://127.0.0.1:4790', FIXTURES)),
+    })
     await expect(placeCount(page, 'Tech')).toHaveText('2')
     await expect(settingsRow(page, JVNS).getByTestId('move-to')).toHaveText('Tech')
     await expect(settingsRow(page, HUTUSI).getByTestId('move-to')).toHaveText('No folder')

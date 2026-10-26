@@ -162,12 +162,25 @@ type Device = {
   titles: { lang: string; whole: boolean; after: number }
 }
 
-/** `only` limits the changes a device makes to those `choice`s, so a rare one is met often. */
-async function scenario(seed: number, steps: number, only?: readonly number[]) {
+/**
+ * `only` limits the changes a device makes to those `choice`s, so a rare one is met often. `cap`
+ * sets `member.maxSubscriptions` (ADR 0063), so a subscribe past it is refused by the server while
+ * its device had predicted it.
+ */
+async function scenario(
+  seed: number,
+  steps: number,
+  only?: readonly number[],
+  options: { cap?: number } = {},
+) {
   const random = rng(seed)
   const pick = <T>(xs: readonly T[]): T | undefined => xs[Math.floor(random() * xs.length)]
   const api: TestApi = await createTestApi()
   const member: SignedIn = await signedIn(api)
+  if (options.cap !== undefined) {
+    await api.db.run(sql`insert into settings (key, value, updated_at)
+      values ('member.maxSubscriptions', ${JSON.stringify(options.cap)}, 0)`)
+  }
   let nextArticle = 1
   const write = (...s: ReturnType<typeof api.db.run>[]) =>
     api.db.batch([bumpSeq(api.db), ...s] as never)
@@ -229,6 +242,8 @@ async function scenario(seed: number, steps: number, only?: readonly number[]) {
     titles: { lang: BROWSERS[i] ?? 'en', whole: false, after: 0 },
   }))
   let mids = 0
+  /** Subscribes made while the device's view already held the cap (ADR 0063). */
+  let pastCap = 0
   // The privacy invariant (issue #16): a show with a base never applies over a hide its device had
   // not pulled. The server applies a mutation the first time its id arrives, so the hides applied
   // so far are counted here as they are sent; each show records the count its device had seen.
@@ -357,7 +372,11 @@ async function scenario(seed: number, steps: number, only?: readonly number[]) {
           ? { mid, at, type: 'markAllRead', upTo }
           : { mid, at, type: 'markAllRead', feedId: feed, upTo }
     }
-    if (choice === 3 || choice === 4) m = { mid, at, type: 'subscribe', feedId: feed }
+    if (choice === 3 || choice === 4) {
+      m = { mid, at, type: 'subscribe', feedId: feed }
+      const live = [...shown.subscriptions.values()].filter((s) => s.deletedAt === null)
+      if (live.length >= (options.cap ?? Number.POSITIVE_INFINITY)) pastCap++
+    }
     if (choice === 5) m = { mid, at, type: 'unsubscribe', feedId: feed }
     if (choice === 6)
       m =
@@ -530,6 +549,14 @@ async function scenario(seed: number, steps: number, only?: readonly number[]) {
     expect([...d.confirmed.tables.titles.values()].filter((row) => row.lang !== lang)).toEqual([])
     expect(live(view(d.confirmed, d.pending))).toEqual(live(snapshot.tables))
   }
+  if (options.cap !== undefined) {
+    // Whatever the devices predicted, the server never held more than the cap.
+    const held = await api.db.all<{ n: number }>(sql`select count(*) as n from subscriptions
+      where user_id = ${member.userId} and deleted_at is null`)
+    expect(Number(held[0]?.n)).toBeLessThanOrEqual(options.cap)
+    // And the devices did ask for more than it, so a refusal was met.
+    expect(pastCap).toBeGreaterThan(0)
+  }
 }
 
 describe('sync converges', () => {
@@ -567,6 +594,17 @@ describe("titles converge in each device's reading language (ADR 0052)", () => {
   for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
     test(`seed ${seed}: two devices switching reading language while titles are written`, async () => {
       await scenario(seed, 200, [16, 16, 16, 0, 7, 3, 3])
+    })
+  }
+})
+
+describe('the subscription cap converges (ADR 0063)', () => {
+  // Subscribes and unsubscribes alone, two of the three feeds allowed: a device predicts a
+  // subscribe the server refuses, because the other device's took the last place, and after a pull
+  // holds what the server holds. A refusal is a no-op recorded like any other mutation.
+  for (const seed of [1, 2, 3, 4, 5, 6]) {
+    test(`seed ${seed}: two devices subscribing past a cap of two`, async () => {
+      await scenario(seed, 160, [3, 4, 5], { cap: 2 })
     })
   }
 })

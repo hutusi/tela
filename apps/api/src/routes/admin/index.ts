@@ -75,6 +75,11 @@ export function parseAct(body: unknown): AdminActRequest | null {
     if (typeof a.email !== 'string' || a.email.length > 320) return null
     parsed.email = a.email
   }
+  if ('value' in a) {
+    // A setting's value (`setting.set`): any JSON value, small; its key's rule checks it.
+    if (JSON.stringify(a.value ?? null).length > 1000) return null
+    parsed.value = a.value ?? null
+  }
   return { action, ids, args: parsed }
 }
 

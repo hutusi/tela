@@ -16,6 +16,7 @@ import { useTranslations } from 'use-intl'
 import { blogLabel, type Destination, subscribeAllPlan, undoSubscribeAll } from '../lib/blogrolls'
 import { canMakeFolder, checkFolderName, knownFolders } from '../lib/folders'
 import { newId } from '../lib/id'
+import { useSubscriptionCap } from '../lib/member'
 import { UNDO_HOLD_MS } from '../lib/toasts'
 import { offerUndo } from '../lib/undo'
 import { BELOW_MD, useMediaQuery } from '../lib/use-media'
@@ -109,6 +110,7 @@ function SubscribePanel({
   const tt = useTranslations('toast')
   const { store } = useStore()
   const tables = useTables()
+  const pastCap = useSubscriptionCap()
   const phone = useMediaQuery(BELOW_MD)
   const titleId = useId()
   const nameId = useId()
@@ -163,6 +165,8 @@ function SubscribePanel({
       data.blogs.map((b) => b.feedId),
       to,
     )
+    // Past the member's cap, nothing: the panel stays, and the toast says how many fit (ADR 0063).
+    if (pastCap(plan.fresh.length)) return
     const held = store.mutateMany(plan.inputs, { holdMs: UNDO_HOLD_MS })
     const last = held[held.length - 1]
     done()

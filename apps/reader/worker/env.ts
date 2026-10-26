@@ -10,6 +10,9 @@ export type Env = {
   ASSETS: Fetcher
   /** Secret: the same value tela-api signs sessions with. */
   AUTH_SECRET: string
-  /** `1` while in private beta: robots disallow and noindex on everything (ADR 0015). */
-  TELA_PRIVATE_BETA?: string
+  /**
+   * `1`: nothing is indexed: robots.txt disallows everything and every answer carries noindex
+   * (ADRs 0015, 0060). Apart from the sign-up mode: set until launch day, whatever sign-up says.
+   */
+  TELA_NOINDEX?: string
 }

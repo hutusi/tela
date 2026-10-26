@@ -56,6 +56,8 @@ export const REDUE: Record<LeaseKind, Redue> = {
       db.run(sql`
         update articles set extract_state = 'due', seq = ${currentSeq}
         where id = ${id(key)} and extract_state = 'failed'
+          and not exists (select 1 from feeds f join sites s on s.id = f.site_id
+            where f.id = articles.feed_id and s.feed_only = 1)
       `),
     ],
   },
@@ -87,6 +89,23 @@ export const REDUE: Record<LeaseKind, Redue> = {
     statements: (db, key) => [
       db.run(sql`update profiles set gravatar_checked_at = null where user_id = ${key}`),
     ],
+  },
+  // Not synced: a member's waiting feeds are on no device. Exhausted pushed the wait a day out;
+  // due again as soon as the member's day and cap have room.
+  'member.pendingFeeds': {
+    synced: false,
+    statements: (db, key, now) => [
+      db.run(sql`
+        update pending_feeds set queued_at = ${now} where user_id = ${key} and queued_at > ${now}
+      `),
+    ],
+  },
+  // A closed account's erasure (ADR 0058) waits while its dead letter is unresolved
+  // (`dueErasures`): the console's retry resolves the letter in the same batch, and that alone
+  // makes it due again. Nothing to mark here, and nothing synced.
+  'member.erase': {
+    synced: false,
+    statements: () => [],
   },
   // A member's own re-check does the same (routes/claims.ts); an operator's vouch, if any, stays.
   'site.claim': {
@@ -131,7 +150,7 @@ export const REDUE: Record<LeaseKind, Redue> = {
   // request reserves on theirs, in the same batch and only if this request is the one written,
   // so a second retry sees the first's tokens taken; the job caps the post at the reservation and
   // the settle gives back what it did not spend. A new request id keeps the old run's chunk
-  // objects out of the new one's.
+  // objects out of the new one's. Due at once: a retry never waits for the next day (ADR 0057).
   'translate.body': {
     synced: true,
     statements: (db, key, now, { reserve = 0 }) => {
@@ -141,8 +160,10 @@ export const REDUE: Record<LeaseKind, Redue> = {
       return [
         db.run(sql`
           update body_translations set state = 'requested', request_id = ${requestId},
-            requested_by = null, reserved_tokens = ${reserve}, reserved_day = ${day},
-            used_tokens = 0, chunk_keys = '[]', object_key = null, failed_leaves = '[]',
+            requested_by = null, reserved_tokens = ${reserve}, reserved_spend = 1,
+            reserved_day = ${day},
+            due_at = null, used_tokens = 0, chunk_keys = '[]', object_key = null,
+            failed_leaves = '[]',
             updated_at = ${now}, seq = ${currentSeq}
           where content_key = ${contentKey} and lang = ${lang} and state in ('failed', 'skipped')
         `),

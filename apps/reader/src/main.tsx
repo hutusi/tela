@@ -52,6 +52,9 @@ async function deviceStore() {
 }
 
 async function boot(root: HTMLElement) {
+  // A page the edge rendered is in the language it chose, which the app's first render keeps
+  // (`bootLocale`). Read before anything replaces the page.
+  const rendered = root.childElementCount > 0 ? document.documentElement.lang : null
   // The browser's bar follows a theme this device chose, which the inline script has put on the
   // page; a member's synced one applies again once their rows are in.
   paintChrome(pageTheme())
@@ -83,7 +86,7 @@ async function boot(root: HTMLElement) {
   }
   createRoot(root, { onCaughtError: caught, onUncaughtError: caught }).render(
     <ErrorBoundary fallback={() => <AppFailed locale={bareLocale()} />}>
-      <App store={store} engine={engine} objects={objects} />
+      <App store={store} engine={engine} objects={objects} rendered={rendered} />
     </ErrorBoundary>,
   )
   registerShell.register()

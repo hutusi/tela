@@ -1,11 +1,14 @@
 import { beforeEach, describe, expect, spyOn, test } from 'bun:test'
+import { parseFeedText } from '@tela/content'
+import { feedsFromOpml } from '@tela/content/opml'
 import { bumpSeq, currentSeq } from '@tela/data'
 import type { Blobs } from '@tela/platform'
 import { memoryBlobs } from '@tela/platform/portable'
-import { preferredLanguages, type UiLocale } from '@tela/shared'
+import type { UiLocale } from '@tela/shared'
 import { sql } from 'drizzle-orm'
+import { XMLValidator } from 'fast-xml-parser'
 import { createTestApi, signedIn, type TestApi } from '../../api/test/helpers'
-import { detectLocale } from '../src/i18n'
+import { requestLocale } from '../src/i18n'
 import { type PublicRoute, publicRoute, renderPublicPage } from '../src/ssr'
 import type {
   ArticlesData,
@@ -79,11 +82,7 @@ const TEMPLATE = `<!doctype html>
 
 const pages: PublicPages<PublicRoute> = {
   route: publicRoute,
-  locale: (request) =>
-    detectLocale(
-      request.headers.get('cookie') ?? '',
-      preferredLanguages(request.headers.get('accept-language') ?? ''),
-    ),
+  locale: requestLocale,
   render: ({ route, url, data, locale, template }) =>
     renderPublicPage({ route, url, data, locale: locale as UiLocale, now: 0, template }),
 }
@@ -125,7 +124,7 @@ beforeEach(async () => {
       const found = images.find((i) => i.url === url)
       return found ? found.response() : new Response('nope', { status: 404 })
     },
-    config: { authSecret: 'a-test-secret-that-is-long-enough-for-hmac', privateBeta: true },
+    config: { authSecret: 'a-test-secret-that-is-long-enough-for-hmac', noindex: true },
   })
   const reader = await signedIn(api)
   cookie = reader.cookie
@@ -318,7 +317,7 @@ describe("members' pictures (ADR 0032)", () => {
       pages: pages as unknown as PublicPages,
       cache: local,
       fetchImage: async () => new Response('nope', { status: 404 }),
-      config: { authSecret: 'a-test-secret-that-is-long-enough-for-hmac', privateBeta: true },
+      config: { authSecret: 'a-test-secret-that-is-long-enough-for-hmac', noindex: true },
     })
     const fetchPath = (path: string) => pictureEdge.fetch(new Request(`${ORIGIN}${path}`))
     return { asked, fetchPath }
@@ -432,7 +431,7 @@ describe('security headers (ADR 0051)', () => {
       pages: pages as unknown as PublicPages,
       cache: memoryCache(),
       fetchImage: async () => new Response('nope', { status: 404 }),
-      config: { authSecret: 'a-test-secret-that-is-long-enough-for-hmac', privateBeta: true },
+      config: { authSecret: 'a-test-secret-that-is-long-enough-for-hmac', noindex: true },
     })
     expect(has(await down.fetch(new Request(`${ORIGIN}/discover/blogs`)))).toBe(true)
   })
@@ -501,12 +500,18 @@ describe('public JSON at the colo', () => {
   })
 })
 
-async function listedBlog(id: number, title: string, listing = 'listed') {
+/** A blog an operator listed, unless `review` says nobody has (a claimed blog, say). */
+async function listedBlog(
+  id: number,
+  title: string,
+  listing = 'listed',
+  review: 'listed' | null = 'listed',
+) {
   const db = api.db
   await db.batch([
     bumpSeq(db),
-    db.run(sql`insert into sites (id, home_url, title, listing, primary_lang, created_at, updated_at, seq)
-      values (${id}, ${`https://blog${id}.example`}, ${title}, ${listing}, 'en', 0, 0, ${currentSeq})`),
+    db.run(sql`insert into sites (id, home_url, title, listing, review, primary_lang, created_at, updated_at, seq)
+      values (${id}, ${`https://blog${id}.example`}, ${title}, ${listing}, ${review}, 'en', 0, 0, ${currentSeq})`),
     db.run(sql`insert into feeds (id, site_id, feed_url, host, next_fetch_at, created_at, updated_at, seq)
       values (${id}, ${id}, ${`https://blog${id}.example/feed`}, ${`blog${id}.example`}, 0, 0, 0, ${currentSeq})`),
   ] as never)
@@ -654,7 +659,7 @@ describe('public pages', () => {
     expect(site).toContain('data-testid="claimed-badge"')
   })
 
-  test('a page this build cannot render is the plain shell, not an error', async () => {
+  test('a page this build cannot render is the plain shell as a 503, not an error', async () => {
     const throwing = createEdge({
       blobs,
       api: { fetch: async (req) => api.app.fetch(req) },
@@ -669,7 +674,7 @@ describe('public pages', () => {
       } as unknown as PublicPages,
       cache,
       fetchImage: async () => new Response('nope', { status: 404 }),
-      config: { authSecret: 'a-test-secret-that-is-long-enough-for-hmac', privateBeta: true },
+      config: { authSecret: 'a-test-secret-that-is-long-enough-for-hmac', noindex: true },
     })
     await listedBlog(4, 'Unrenderable')
     const logged: unknown[][] = []
@@ -677,7 +682,9 @@ describe('public pages', () => {
     console.error = (...args: unknown[]) => void logged.push(args)
     try {
       const res = await throwing.fetch(new Request(`${ORIGIN}/s/4`))
-      expect(res.status).toBe(200)
+      expect(res.status).toBe(503)
+      expect(res.headers.get('retry-after')).toBe('120')
+      expect(res.headers.get('cache-control')).toBe('no-store')
       expect(await res.text()).toBe(TEMPLATE)
     } finally {
       console.error = error
@@ -729,7 +736,7 @@ describe('public pages', () => {
     expect(privacy).toMatch(/<meta name="description" content="Tela keeps what it needs/)
     expect(privacy).toContain('id="cookies"')
     expect(privacy).toContain('href="#cookies"')
-    expect(privacy).toContain('Last updated 18 October 2026')
+    expect(privacy).toContain('Last updated 25 October 2026')
     expect(apiCalls).toEqual([])
     // Three pages, once each: the second visit to Privacy came from the cache.
     expect(cache.size).toBe(3)
@@ -802,7 +809,7 @@ describe('public pages', () => {
     expect(zh).toContain('<html lang="zh-Hans"')
     expect(zh).toContain('<title>条款 · Tela</title>')
     expect(zh).toContain('id="writers"')
-    expect(zh).toContain('最后更新：2026年10月18日')
+    expect(zh).toContain('最后更新：2026年10月25日')
     const en = await (await page('/terms')).text()
     expect(en).toContain('<html lang="en"')
     expect(en).toContain('<title>Terms · Tela</title>')
@@ -814,12 +821,56 @@ describe('public pages', () => {
     const hant = await (await page('/privacy', { 'accept-language': 'zh-TW,zh;q=0.8' })).text()
     expect(hant).toContain('<html lang="zh-Hant"')
     expect(hant).toContain('<title>隱私 · Tela</title>')
-    expect(hant).toContain('最後更新：2026年10月18日')
+    expect(hant).toContain('最後更新：2026年10月25日')
     const fr = await (await page('/privacy', { cookie: 'tela_locale=fr' })).text()
     expect(fr).toContain('<html lang="fr"')
     expect(fr).toContain('<title>Confidentialité · Tela</title>')
-    expect(fr).toContain('Dernière mise à jour : 18 octobre 2026')
+    expect(fr).toContain('Dernière mise à jour : 25 octobre 2026')
     expect(fr).toContain('id="cookies"')
+  })
+
+  test('For writers renders here in all four languages, from the bundle alone (ADR 0061)', async () => {
+    const titles: Record<string, string> = {
+      en: 'For writers',
+      'zh-Hans': '写作者',
+      'zh-Hant': '寫作者',
+      fr: 'Pour les auteurs',
+    }
+    for (const [locale, title] of Object.entries(titles)) {
+      const res = await page('/writers', { cookie: `tela_locale=${locale}` })
+      expect(res.status).toBe(200)
+      expect(res.headers.get('x-robots-tag')).toBe('noindex, nofollow')
+      expect(res.headers.get('content-language')).toBe(locale)
+      const html = await res.text()
+      expect(html).toContain(`<html lang="${locale}"`)
+      expect(html).toContain(`<title>${title} · Tela</title>`)
+      expect(html).toContain('data-testid="writers-page"')
+      // A visitor's page: the form, never a member's links.
+      expect(html).toContain('data-testid="writers-form"')
+      expect(html).not.toContain('data-testid="writers-member"')
+      // Each section under its anchor, the same in every language, and robots.txt's two lines.
+      for (const id of ['reading', 'shows', 'claiming', 'opt-out'])
+        expect(html).toContain(`id="${id}"`)
+      expect(html).toContain('User-agent: Tela\nDisallow: /')
+      expect(html).toContain('<code class="')
+      expect(html).toContain('Tela/0.1 (+https://telaread.com; feed reader)')
+      expect(html).toContain('href="mailto:me@hutu.si"')
+      expect(html).not.toContain('id="tela-data"')
+      expect(html).not.toContain('name="robots"')
+    }
+    const en = await (await page('/writers?utm_source=x')).text()
+    expect(en).toMatch(
+      /<meta name="description" content="Your calling card as an independent writer/,
+    )
+    expect(en).toContain('Only use what my feed provides')
+    expect(en).toContain('fetches each new post’s public page once, soon after the feed lists it')
+    const zh = await (await page('/writers', { cookie: 'tela_locale=zh-Hans' })).text()
+    expect(zh).toContain('只用我的订阅源提供的内容')
+    const fr = await (await page('/writers', { cookie: 'tela_locale=fr' })).text()
+    expect(fr).toContain('N’utiliser que ce que fournit mon flux')
+    // Nothing asked of tela-api, and one page per language: the campaign's query is not a page.
+    expect(apiCalls).toEqual([])
+    expect(cache.size).toBe(4)
   })
 
   test('nothing a blog says can close the handover script or become markup', async () => {
@@ -828,6 +879,171 @@ describe('public pages', () => {
     expect(html).not.toContain('<script>alert(1)')
     expect(html).toContain('\\u003c/script>')
     expect(html).toContain('$&amp; $&#39;')
+  })
+})
+
+describe('what search engines may index (ADR 0060)', () => {
+  /** tela-web once TELA_NOINDEX is gone: launch day. */
+  let indexing: ReturnType<typeof createEdge>
+  beforeEach(() => {
+    indexing = createEdge({
+      blobs,
+      api: { fetch: async (req) => api.app.fetch(req) },
+      assets: {
+        fetch: async () => new Response(TEMPLATE, { headers: { 'content-type': 'text/html' } }),
+      },
+      pages: pages as unknown as PublicPages,
+      cache,
+      fetchImage: async () => new Response('nope', { status: 404 }),
+      config: { authSecret: 'a-test-secret-that-is-long-enough-for-hmac', noindex: false },
+    })
+  })
+  const visit = (path: string, headers: Record<string, string> = {}) =>
+    indexing.fetch(new Request(`${ORIGIN}${path}`, { headers }))
+  const metaRobots = (html: string) =>
+    html.match(/<meta name="robots" content="([^"]+)"/)?.[1] ?? null
+
+  test("Tela's own pages and a blog an operator listed are indexed", async () => {
+    await listedBlog(1, 'Garden Notes')
+    for (const path of ['/discover/blogs', '/about', '/s/1', '/s/1']) {
+      const res = await visit(path)
+      expect(res.status).toBe(200)
+      expect(res.headers.get('x-robots-tag')).toBeNull()
+      expect(metaRobots(await res.text())).toBeNull()
+    }
+  })
+
+  test('a claimed blog nobody reviewed is neither indexed nor followed, from the cache too', async () => {
+    await listedBlog(2, 'Claimed Only', 'listed', null)
+    for (const _ of [1, 2]) {
+      const res = await visit('/s/2')
+      expect(res.status).toBe(200)
+      expect(res.headers.get('x-robots-tag')).toBe('noindex, nofollow')
+      const html = await res.text()
+      expect(metaRobots(html)).toBe('noindex, nofollow')
+      expect(html).not.toContain('rel="canonical"')
+    }
+  })
+
+  test('a blog nobody vouched for gets no followed link: its posts and its Visit say ugc nofollow', async () => {
+    await listedBlog(1, 'Garden Notes')
+    await listedBlog(2, 'Claimed Only', 'listed', null)
+    const now = api.clock.now()
+    await api.db.batch([
+      bumpSeq(api.db),
+      api.db.run(sql`insert into articles (id, feed_id, dedup_key, url, title, source_lang,
+          fetched_at, sort_at, seq)
+        values (1, 1, 'k1', 'https://blog1.example/p/1', 'Listed post', 'en', ${now}, ${now - 1},
+            ${currentSeq}),
+          (2, 2, 'k2', 'https://blog2.example/p/2', 'Claimed post', 'en', ${now}, ${now - 2},
+            ${currentSeq})`),
+    ] as never)
+    const links = (html: string, host: string) =>
+      [...html.matchAll(new RegExp(`<a [^>]*href="https://${host}[^"]*"[^>]*>`, 'g'))].map(
+        (m) => m[0].match(/rel="([^"]+)"/)?.[1],
+      )
+    const listed = await (await visit('/s/1')).text()
+    expect(links(listed, 'blog1.example')).toEqual(['noopener noreferrer', 'noopener noreferrer'])
+    const claimed = await (await visit('/s/2')).text()
+    expect(links(claimed, 'blog2.example')).toEqual([
+      'ugc nofollow noopener noreferrer',
+      'ugc nofollow noopener noreferrer',
+    ])
+    // Discover, as tela-api says of each post's blog.
+    const articles = await (await visit('/discover/articles')).text()
+    expect(links(articles, 'blog1.example/p/1')).toEqual(['noopener noreferrer'])
+    expect(links(articles, 'blog2.example/p/2')).toEqual(['ugc nofollow noopener noreferrer'])
+  })
+
+  test("a new member's profile waits a week", async () => {
+    const reader = await signedIn(api, 'fresh@x.test')
+    await api.request('/api/v1/profile', {
+      method: 'PUT',
+      body: { handle: 'fresh' },
+      as: reader,
+    })
+    const res = await visit('/@fresh')
+    expect(res.status).toBe(200)
+    expect(res.headers.get('x-robots-tag')).toBe('noindex, nofollow')
+  })
+
+  test('a page that does not exist, and the API, are never indexed', async () => {
+    const missing = await visit('/s/999')
+    expect(missing.status).toBe(404)
+    expect(missing.headers.get('x-robots-tag')).toBe('noindex')
+    expect((await visit('/api/health')).headers.get('x-robots-tag')).toBe('noindex')
+    expect((await visit('/api/v1/public/discover')).headers.get('x-robots-tag')).toBe('noindex')
+  })
+
+  test('while TELA_NOINDEX is set, nothing is, whatever the page says', async () => {
+    await listedBlog(1, 'Garden Notes')
+    expect((await get('/s/1', null)).headers.get('x-robots-tag')).toBe('noindex, nofollow')
+    expect((await get('/discover/blogs', null)).headers.get('x-robots-tag')).toBe(
+      'noindex, nofollow',
+    )
+  })
+})
+
+describe('the language in the address (ADR 0060)', () => {
+  const page = (path: string, headers: Record<string, string> = {}) =>
+    edge.fetch(new Request(`${ORIGIN}${path}`, { headers }))
+  const langOf = async (res: Response) => (await res.text()).match(/<html lang="([^"]+)"/)?.[1]
+  /** The canonical address, as the attribute's value reads once unescaped. */
+  const canonicalOf = (html: string) =>
+    html.match(/<link rel="canonical" href="([^"]+)" \/>/)?.[1]?.replaceAll('&amp;', '&') ?? null
+
+  test("a visitor's ?hl= beats their cookie and their browser, in any spelling", async () => {
+    const chosen = { cookie: 'tela_locale=zh-Hans', 'accept-language': 'en-US,en;q=0.9' }
+    expect(await langOf(await page('/about?hl=fr', chosen))).toBe('fr')
+    expect(await langOf(await page('/about?hl=ZH-hant', chosen))).toBe('zh-Hant')
+    // A language Tela has no interface in fixes nothing: the cookie decides, then the browser.
+    expect(await langOf(await page('/about?hl=de', chosen))).toBe('zh-Hans')
+    expect(await langOf(await page('/about?hl=de', { 'accept-language': 'fr-CA' }))).toBe('fr')
+  })
+
+  test("a member's own language wins over the address, and the page is then the unpinned one", async () => {
+    const res = await page('/about?hl=fr', { cookie: `tela_locale=zh-Hans; ${cookie}` })
+    const html = await res.text()
+    expect(html).toContain('<html lang="zh-Hans"')
+    expect(canonicalOf(html)).toBe(`${ORIGIN}/about`)
+    expect(res.headers.get('vary')).toBe('cookie, accept-language')
+    // A member with no language of their own on this browser yet: their browser's, still.
+    const fresh = await page('/about?hl=fr', {
+      cookie: 'tela.session_token=abc.def',
+      'accept-language': 'en',
+    })
+    expect(await langOf(fresh)).toBe('en')
+    // A member whose own language is the one named gets the pinned page, as a visitor would.
+    const own = await (await page('/about?hl=fr', { cookie: `tela_locale=fr; ${cookie}` })).text()
+    expect(canonicalOf(own)).toBe(`${ORIGIN}/about?hl=fr`)
+  })
+
+  test('a pinned page is a page of its own, canonical at its ?hl= address, from the same answer', async () => {
+    await listedBlog(1, 'Garden Notes')
+    const pinned = await page('/discover/blogs?hl=fr')
+    expect(pinned.headers.get('vary')).toBe('cookie')
+    expect(pinned.headers.get('content-language')).toBe('fr')
+    expect(canonicalOf(await pinned.text())).toBe(`${ORIGIN}/discover/blogs?hl=fr`)
+    const chosen = await page('/discover/blogs', { cookie: 'tela_locale=fr' })
+    expect(chosen.headers.get('vary')).toBe('cookie, accept-language')
+    expect(canonicalOf(await chosen.text())).toBe(`${ORIGIN}/discover/blogs`)
+    // Another spelling, or noise beside it, is the same pinned page, canonical as it was.
+    const again = await (await page('/discover/blogs?utm_source=x&hl=FR')).text()
+    expect(canonicalOf(again)).toBe(`${ORIGIN}/discover/blogs?hl=fr`)
+    await page('/discover/blogs', { cookie: 'tela_locale=fr' })
+    // One answer from tela-api, two French pages: the JSON's copy and each page's.
+    expect(apiCalls.filter((p) => p.startsWith('/api/v1/public/'))).toEqual([
+      '/api/v1/public/discover',
+    ])
+    expect(cache.size).toBe(3)
+  })
+
+  test("a filter stays in the canonical address beside ?hl=, and a page's own query is kept", async () => {
+    await listedBlog(1, 'Garden Notes')
+    const html = await (await page('/discover/blogs?hl=zh-hans&page=1&topic=nope')).text()
+    expect(canonicalOf(html)).toBe(`${ORIGIN}/discover/blogs?hl=zh-Hans`)
+    const translated = await (await page('/?titles=translated&hl=fr')).text()
+    expect(canonicalOf(translated)).toBe(`${ORIGIN}/?titles=translated&hl=fr`)
   })
 })
 
@@ -904,7 +1120,7 @@ describe('the front page (ADR 0035)', () => {
       fetchImage: async () => new Response('nope', { status: 404 }),
       config: {
         authSecret: 'a-test-secret-that-is-long-enough-for-hmac',
-        privateBeta: true,
+        noindex: true,
         ...(pageDeadlineMs === undefined ? {} : { pageDeadlineMs }),
       },
     })
@@ -918,7 +1134,7 @@ describe('the front page (ADR 0035)', () => {
     const res = await visit(front, '/')
     expect(res.status).toBe(200)
     expect(res.headers.get('cache-control')).toBe('public, max-age=0, must-revalidate')
-    expect(res.headers.get('vary')).toBe('cookie')
+    expect(res.headers.get('vary')).toBe('cookie, accept-language')
     expect(res.headers.get('x-robots-tag')).toBe('noindex, nofollow')
     const html = await res.text()
     expect(html).toContain('<title>Tela</title>')
@@ -938,7 +1154,7 @@ describe('the front page (ADR 0035)', () => {
 
     // A campaign's query string is the same page, and the cache's; the browser still keys by cookie.
     const again = await visit(front, '/?utm_source=x')
-    expect(again.headers.get('vary')).toBe('cookie')
+    expect(again.headers.get('vary')).toBe('cookie, accept-language')
     expect(await again.text()).not.toContain('utm_source')
     expect(apiCalls).toEqual(['/api/v1/public/front'])
     // workerd ignores Vary on what it stores, and refuses `*`: the colo's copy carries none.
@@ -976,13 +1192,16 @@ describe('the front page (ADR 0035)', () => {
     ])
   })
 
-  test('no front page from tela-api, a 404 included, is the plain shell, never kept', async () => {
+  test('no front page from tela-api, a 404 included, is the plain shell as a 503, never kept', async () => {
     for (const status of [404, 503]) {
       const front = frontEdge(() => new Response('no', { status }))
       const res = await visit(front, '/')
-      expect(res.status).toBe(200)
+      // The shell's head says noindex: as a 200 a crawler would drop the page (ADR 0060).
+      expect(res.status).toBe(503)
+      expect(res.headers.get('retry-after')).toBe('120')
+      expect(res.headers.get('cache-control')).toBe('no-store')
       expect(await res.text()).toBe(TEMPLATE)
-      expect(res.headers.get('vary')).toBe('cookie')
+      expect(res.headers.get('vary')).toBe('cookie, accept-language')
       expect(res.headers.get('x-robots-tag')).toBe('noindex, nofollow')
       expect(stored).toEqual([])
     }
@@ -1007,7 +1226,7 @@ describe('the front page (ADR 0035)', () => {
     expect(html).not.toContain(' · </span>')
   })
 
-  test('a tela-api that hangs or throws is the plain shell too, in time, never kept', async () => {
+  test('a tela-api that hangs or throws is the plain shell as a 503 too, in time, never kept', async () => {
     const errors = spyOn(console, 'error').mockImplementation(() => {})
     const answers = {
       hangs: () => new Promise<Response>(() => {}),
@@ -1020,9 +1239,10 @@ describe('the front page (ADR 0035)', () => {
         const started = Date.now()
         const res = await visit(front, '/')
         expect(Date.now() - started, how).toBeLessThan(1_000)
-        expect(res.status, how).toBe(200)
+        expect(res.status, how).toBe(503)
         expect(await res.text(), how).toBe(TEMPLATE)
-        expect(res.headers.get('cache-control'), how).toBe('public, max-age=0, must-revalidate')
+        expect(res.headers.get('cache-control'), how).toBe('no-store')
+        expect(res.headers.get('retry-after'), how).toBe('120')
         expect(stored, how).toEqual([])
       }
       expect(errors).toHaveBeenCalledTimes(3)
@@ -1144,7 +1364,7 @@ describe("Discover's tabs (ADR 0044)", () => {
       pages: pages as unknown as PublicPages,
       cache,
       fetchImage: async () => new Response('nope', { status: 404 }),
-      config: { authSecret: 'a-test-secret-that-is-long-enough-for-hmac', privateBeta: true },
+      config: { authSecret: 'a-test-secret-that-is-long-enough-for-hmac', noindex: true },
     })
   }
   const visit = (e: ReturnType<typeof createEdge>, path: string, headers = {}) =>
@@ -1198,15 +1418,16 @@ describe("Discover's tabs (ADR 0044)", () => {
     expect(cache.size).toBe(0)
   })
 
-  test('no week from tela-api, a 404 included, is the plain shell, never kept', async () => {
+  test('no week from tela-api, a 404 included, is the plain shell as a 503, never kept', async () => {
     for (const status of [404, 503]) {
       const edge = tabsEdge({
         '/api/v1/public/discover/week': () => new Response('no', { status }),
       })
       const res = await visit(edge, '/discover')
-      expect(res.status).toBe(200)
+      expect(res.status).toBe(503)
       expect(await res.text()).toBe(TEMPLATE)
-      expect(res.headers.get('cache-control')).toBe('public, max-age=0, must-revalidate')
+      expect(res.headers.get('cache-control')).toBe('no-store')
+      expect(res.headers.get('retry-after')).toBe('120')
     }
     expect(cache.size).toBe(0)
   })
@@ -1298,7 +1519,7 @@ describe('blogrolls (ADR 0050)', () => {
       pages: pages as unknown as PublicPages,
       cache,
       fetchImage: async () => new Response('nope', { status: 404 }),
-      config: { authSecret: 'a-test-secret-that-is-long-enough-for-hmac', privateBeta: true },
+      config: { authSecret: 'a-test-secret-that-is-long-enough-for-hmac', noindex: true },
     })
   }
   const visit = (e: ReturnType<typeof createEdge>, path: string) =>
@@ -1359,7 +1580,9 @@ describe('blogrolls (ADR 0050)', () => {
     expect(html).toContain('href="/l/abcdefABCDEF"')
     // Whose it is, five blogs as chips (a nameless one by its host), and how many it has.
     expect(html).toContain('Ann K')
-    expect(html.split('Software')[0]).toContain('title="blog2.example"')
+    expect(html.split('<div id="root">')[1]?.split('Software')[0]).toContain(
+      'title="blog2.example"',
+    )
     expect(html.match(/<li title="/g)).toHaveLength(10)
     expect(html).toContain('6 blogs')
     // Why a member sees one is their device's: a visitor's page says nothing of it.
@@ -1390,7 +1613,7 @@ describe('blogrolls (ADR 0050)', () => {
     cache = memoryCache()
     const older = rollsEdge({})
     const res = await visit(older, '/discover/blogrolls')
-    expect(res.status).toBe(200)
+    expect(res.status).toBe(503)
     expect(await res.text()).toBe(TEMPLATE)
     expect(cache.size).toBe(0)
   })
@@ -1505,5 +1728,304 @@ describe('writes to the API', () => {
       403,
     )
     expect((await post(act, { cookie, ...client })).status).toBe(403)
+  })
+})
+
+describe("Tela's own feeds (ADR 0062)", () => {
+  const ROLL = 'abcdefABCDEF'
+  const OWNER = 'member-anna-0000001'
+  const feedOf = (path: string, headers: Record<string, string> = {}) =>
+    edge.fetch(new Request(`${ORIGIN}${path}`, { headers }))
+
+  async function write(...statements: unknown[]) {
+    const db = api.db
+    await db.batch([bumpSeq(db), ...statements] as never)
+  }
+  /** A blog and its feed, both numbered `id`. */
+  async function blog(id: number, o: { listing?: string; optOut?: boolean; title?: string } = {}) {
+    const db = api.db
+    await write(
+      db.run(sql`insert into sites (id, home_url, title, listing, translation_opt_out, created_at,
+          updated_at, seq)
+        values (${id}, ${`https://blog${id}.example`}, ${o.title ?? `Blog ${id}`},
+          ${o.listing ?? 'listed'}, ${o.optOut ? 1 : 0}, 0, 0, ${currentSeq})`),
+      db.run(sql`insert into feeds (id, site_id, feed_url, host, next_fetch_at, created_at,
+          updated_at, seq)
+        values (${id}, ${id}, ${`https://blog${id}.example/feed`}, ${`blog${id}.example`}, 0, 0,
+          0, ${currentSeq})`),
+    )
+  }
+  /** A post `ago` minutes old, its title and excerpt hashed `h<id>`. */
+  async function post(id: number, feedId: number, title: string, ago: number, lang = 'en') {
+    const db = api.db
+    const now = api.clock.now()
+    await write(
+      db.run(sql`insert into articles (id, feed_id, dedup_key, url, title, excerpt, source_lang,
+          fetched_at, sort_at, title_hash, seq)
+        values (${id}, ${feedId}, ${`k${id}`}, ${`https://blog${feedId}.example/p/${id}`},
+          ${title}, ${`About ${title}`}, ${lang}, ${now}, ${now - ago * 60_000}, ${`h${id}`},
+          ${currentSeq})`),
+    )
+  }
+  async function translated(id: number, lang: string, title: string) {
+    const db = api.db
+    await write(
+      db.run(sql`insert into article_titles (article_id, lang, feed_id, title, excerpt, status,
+          source_hash, updated_at, seq)
+        values (${id}, ${lang}, (select feed_id from articles where id = ${id}), ${title},
+          ${`${title} …`}, 'done', ${`h${id}`}, 0, ${currentSeq})`),
+    )
+  }
+  async function blogroll(feeds: number[], o: { isPublic?: boolean; hiddenAt?: number } = {}) {
+    const db = api.db
+    await write(
+      db.run(sql`insert into user (id, name, email, email_verified, created_at, updated_at)
+        values (${OWNER}, 'anna', 'anna@x.test', 1, 0, 0)`),
+      db.run(sql`insert into profiles (user_id, handle, display_name, created_at, updated_at, seq)
+        values (${OWNER}, 'anna', 'Ana & <Co>', 0, 0, ${currentSeq})`),
+      db.run(sql`insert into blogrolls (id, user_id, name, description, is_public, public_version,
+          public_since, hidden_at, created_at, updated_at, seq)
+        values (${ROLL}, ${OWNER}, 'Cities, on foot', '', ${o.isPublic === false ? 0 : 1}, 1, 1,
+          ${o.hiddenAt ?? null}, 1, 1000, ${currentSeq})`),
+      ...feeds.map((feedId, i) =>
+        db.run(sql`insert into blogroll_blogs (blogroll_id, feed_id, user_id, note_at, added_at,
+            updated_at, seq)
+          values (${ROLL}, ${feedId}, ${OWNER}, 0, ${i + 1}, ${i + 1}, ${currentSeq})`),
+      ),
+    )
+  }
+  const rssTitles = (xml: string) => parseFeedText(xml, `${ORIGIN}/feed`).items.map((i) => i.title)
+
+  test("a blogroll's RSS: its listed blogs' newest posts, in the language `hl` pins", async () => {
+    await blog(1)
+    await blog(2, { optOut: true })
+    await blog(3, { listing: 'private' })
+    await blogroll([1, 2, 3])
+    await post(10, 1, 'Walking <Lisbon> & more', 10)
+    await post(11, 2, 'Kerbs', 20)
+    await post(12, 3, 'Unlisted', 5)
+    await post(13, 1, 'Déjà en français', 30, 'fr')
+    await translated(10, 'fr', 'Marcher à Lisbonne')
+    await translated(10, 'zh-Hans', '漫步里斯本')
+    await translated(10, 'zh-Hant', '漫步里斯本（繁）')
+    // A row in the post's own language changes nothing, and an opted-out blog's none.
+    await translated(13, 'fr', 'Ne jamais montrer')
+    await translated(11, 'fr', 'Bordures')
+
+    const res = await feedOf(`/l/${ROLL}.rss?hl=fr`)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toBe('application/rss+xml; charset=utf-8')
+    expect(res.headers.get('x-robots-tag')).toBe('noindex')
+    expect(res.headers.get('content-disposition')).toBeNull()
+    const xml = await res.text()
+    expect(XMLValidator.validate(xml)).toBe(true)
+    const feed = parseFeedText(xml, `${ORIGIN}/l/${ROLL}.rss`)
+    expect(feed.title).toBe('Cities, on foot')
+    expect(feed.homeUrl).toBe(`${ORIGIN}/l/${ROLL}?hl=fr`)
+    expect(feed.selfUrl).toBe(`${ORIGIN}/l/${ROLL}.rss?hl=fr`)
+    expect(feed.language).toBe('fr')
+    expect(feed.description).toBe(
+      'Les derniers articles des blogs de Cities, on foot, une blogroll de Ana & <Co> sur Tela.',
+    )
+    expect(feed.items.map((i) => [i.title, i.url, i.author])).toEqual([
+      ['Marcher à Lisbonne', 'https://blog1.example/p/10', 'Blog 1'],
+      ['Kerbs', 'https://blog2.example/p/11', 'Blog 2'],
+      ['Déjà en français', 'https://blog1.example/p/13', 'Blog 1'],
+    ])
+    // The excerpt goes with the title it belongs to, as text.
+    expect(feed.items[0]?.summaryHtml).toContain('Marcher à Lisbonne …')
+    expect(feed.items[1]?.summaryHtml).toContain('About Kerbs')
+    // Never a body.
+    expect(feed.items.every((i) => i.contentHtml === null)).toBe(true)
+
+    // zh-Hant is the stored conversion, in any case `hl` is written in.
+    expect(rssTitles(await (await feedOf(`/l/${ROLL}.rss?hl=ZH-hant`)).text())[0]).toBe(
+      '漫步里斯本（繁）',
+    )
+    expect(rssTitles(await (await feedOf(`/l/${ROLL}.rss?hl=zh-Hans`)).text())[0]).toBe(
+      '漫步里斯本',
+    )
+    // No `hl`, or one Tela does not have: every post as written, and no language.
+    for (const path of [`/l/${ROLL}.rss`, `/l/${ROLL}.rss?hl=de`]) {
+      const original = await (await feedOf(path)).text()
+      expect(rssTitles(original)).toEqual(['Walking <Lisbon> & more', 'Kerbs', 'Déjà en français'])
+      expect(original).not.toContain('<language>')
+      expect(original).toContain(`<atom:link href="${ORIGIN}/l/${ROLL}.rss" rel="self"`)
+    }
+    // Every language from one read of tela-api: the colo keeps its answer.
+    expect(apiCalls.filter((p) => p.startsWith('/api/v1/public/feeds/'))).toEqual([
+      `/api/v1/public/feeds/blogrolls/${ROLL}`,
+    ])
+  })
+
+  test("a blogroll's OPML: its listed blogs in its order, shown inline", async () => {
+    await blog(1, { title: 'Garden & <Notes>' })
+    await blog(2, { listing: 'private' })
+    await blog(3, { listing: 'featured' })
+    await blogroll([3, 2, 1])
+    const res = await feedOf(`/l/${ROLL}.opml`)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toBe('text/x-opml; charset=utf-8')
+    expect(res.headers.get('content-disposition')).toBe(
+      `inline; filename="tela-blogroll-${ROLL}.opml"`,
+    )
+    const xml = await res.text()
+    expect(XMLValidator.validate(xml)).toBe(true)
+    expect(feedsFromOpml(xml)).toEqual([
+      { url: 'https://blog3.example/feed', folder: null },
+      { url: 'https://blog1.example/feed', folder: null },
+    ])
+    expect(xml).toContain('<title>Cities, on foot</title>')
+    expect(xml).toContain('<ownerName>Ana &amp; &lt;Co&gt;</ownerName>')
+    expect(xml).toContain(`<ownerId>${ORIGIN}/@anna</ownerId>`)
+    expect(xml).toContain('text="Garden &amp; &lt;Notes&gt;"')
+  })
+
+  test('a feed is answered 304 while its bytes are the same, and HEAD has no body', async () => {
+    await blog(1)
+    await blogroll([1])
+    await post(10, 1, 'One', 10)
+    const first = await feedOf(`/l/${ROLL}.rss`)
+    const etag = first.headers.get('etag') ?? ''
+    expect(etag).toMatch(/^"[0-9a-f]{24}"$/)
+    expect(first.headers.get('cache-control')).toBe('public, max-age=60')
+    const again = await feedOf(`/l/${ROLL}.rss`, { 'if-none-match': `W/${etag}` })
+    expect(again.status).toBe(304)
+    expect(await again.text()).toBe('')
+    const head = await edge.fetch(new Request(`${ORIGIN}/l/${ROLL}.rss`, { method: 'HEAD' }))
+    expect(head.status).toBe(200)
+    expect(head.headers.get('etag')).toBe(etag)
+    expect(await head.text()).toBe('')
+  })
+
+  test('a hidden or unknown blogroll has no feeds, and a bad id asks tela-api nothing', async () => {
+    await blog(1)
+    await blogroll([1], { hiddenAt: 5 })
+    for (const path of [`/l/${ROLL}.rss`, `/l/${ROLL}.opml`, '/l/ZZZZZZZZZZZZ.rss']) {
+      const res = await feedOf(path)
+      expect([path, res.status]).toEqual([path, 404])
+      expect(res.headers.get('cache-control')).toBe('public, max-age=60')
+    }
+    const before = apiCalls.length
+    for (const path of ['/l/short.rss', '/l/abcdefABCDE!.opml', '/l/.rss']) {
+      expect([path, (await feedOf(path)).status]).toEqual([path, 404])
+    }
+    expect(apiCalls).toHaveLength(before)
+  })
+
+  test("the blogroll's page is still its page, and a feed's failure is a 503 nobody keeps", async () => {
+    await blog(1)
+    await blogroll([1])
+    const page = await feedOf(`/l/${ROLL}`)
+    expect(page.headers.get('content-type')).toContain('text/html')
+    expect(await page.text()).toContain('data-testid="blogroll-page"')
+    expect(apiCalls).toContain(`/api/v1/public/blogrolls/${ROLL}`)
+    expect(apiCalls).not.toContain(`/api/v1/public/feeds/blogrolls/${ROLL}`)
+
+    const down = createEdge({
+      blobs,
+      api: { fetch: async () => new Response('down', { status: 503 }) },
+      assets: { fetch: async () => new Response(TEMPLATE) },
+      pages: pages as unknown as PublicPages,
+      cache: memoryCache(),
+      fetchImage: async () => new Response('nope', { status: 404 }),
+      config: { authSecret: 'a-test-secret-that-is-long-enough-for-hmac', noindex: false },
+    })
+    const res = await down.fetch(new Request(`${ORIGIN}/discover/articles.rss`))
+    expect(res.status).toBe(503)
+    expect(res.headers.get('cache-control')).toBe('no-store')
+  })
+
+  test('the pages name their feeds in their head, in their language, and link them', async () => {
+    // In the head at Tela's address, as every address there is (ADR 0060); on the page, a path.
+    await blog(1)
+    await blog(2, { listing: 'private' })
+    await blogroll([1, 2])
+    const roll = await (await feedOf(`/l/${ROLL}`)).text()
+    expect(roll).toContain(
+      `<link rel="alternate" type="application/rss+xml" title="Cities, on foot · RSS" href="${ORIGIN}/l/${ROLL}.rss?hl=en" />`,
+    )
+    expect(roll).toContain(
+      `<link rel="alternate" type="text/x-opml" title="Cities, on foot · OPML" href="${ORIGIN}/l/${ROLL}.opml" />`,
+    )
+    expect(roll).toContain(`href="/l/${ROLL}.rss?hl=en" type="application/rss+xml"`)
+
+    const fr = { cookie: 'tela_locale=fr' }
+    const articles = await (await feedOf('/discover/articles?topic=tech', fr)).text()
+    expect(articles).toContain(
+      `<link rel="alternate" type="application/rss+xml" title="Découvrir · Tela · RSS" href="${ORIGIN}/discover/articles.rss?topic=tech&amp;hl=fr" />`,
+    )
+    expect(articles).toContain(
+      `<link rel="alternate" type="text/x-opml" title="Découvrir · Tela · OPML" href="${ORIGIN}/discover.opml?topic=tech&amp;hl=fr" />`,
+    )
+    // And at the foot of the page, for a person.
+    expect(articles).toContain(
+      'href="/discover/articles.rss?topic=tech&amp;hl=fr" type="application/rss+xml"',
+    )
+    for (const tab of [
+      '/discover',
+      '/discover/blogs',
+      '/discover/blogrolls',
+      '/discover/readers',
+    ]) {
+      const html = await (await feedOf(tab)).text()
+      expect([tab, html.includes(`href="${ORIGIN}/discover.opml?hl=en"`)]).toEqual([tab, true])
+      expect(html).toContain('data-testid="feed-links"')
+    }
+  })
+
+  test('a blogroll of unlisted blogs offers no feeds: there would be nothing in them', async () => {
+    await blog(2, { listing: 'private' })
+    await blogroll([2])
+    const html = await (await feedOf(`/l/${ROLL}`)).text()
+    expect(html).toContain('data-testid="blogroll-page"')
+    expect(html).not.toContain('rel="alternate"')
+    expect(html).not.toContain('data-testid="feed-links"')
+  })
+
+  test("Discover's RSS and OPML: its public blogs and newest posts, by topic, titled in `hl`", async () => {
+    await blog(1)
+    await blog(2, { listing: 'featured' })
+    await blog(3, { listing: 'private' })
+    await write(
+      api.db.run(sql`insert into site_topics (site_id, topic) values (1, 'tech'), (3, 'tech')`),
+    )
+    await post(10, 1, 'Rust tips', 10)
+    await post(11, 2, 'Bread', 20)
+    await post(12, 3, 'Hidden', 5)
+    await translated(10, 'fr', 'Astuces Rust')
+
+    const all = await (await feedOf('/discover/articles.rss')).text()
+    expect(XMLValidator.validate(all)).toBe(true)
+    expect(rssTitles(all)).toEqual(['Rust tips', 'Bread'])
+    const allRead = parseFeedText(all, `${ORIGIN}/feed`)
+    expect(allRead.title).toBe('Discover · Tela')
+    expect(allRead.homeUrl).toBe(`${ORIGIN}/discover/articles?sort=new`)
+
+    const tech = await (await feedOf('/discover/articles.rss?hl=fr&topic=tech&utm=x')).text()
+    const read = parseFeedText(tech, `${ORIGIN}/feed`)
+    expect(read.title).toBe('Tech · Découvrir · Tela')
+    expect(read.description).toBe('Les derniers articles des blogs de l’annuaire de Tela.')
+    expect(read.homeUrl).toBe(`${ORIGIN}/discover/articles?topic=tech&sort=new&hl=fr`)
+    expect(read.selfUrl).toBe(`${ORIGIN}/discover/articles.rss?topic=tech&hl=fr`)
+    expect(read.items.map((i) => i.title)).toEqual(['Astuces Rust'])
+
+    const opml = await feedOf('/discover.opml?topic=tech')
+    expect(opml.headers.get('content-disposition')).toBe(
+      'inline; filename="tela-discover-tech.opml"',
+    )
+    const xml = await opml.text()
+    expect(XMLValidator.validate(xml)).toBe(true)
+    expect(feedsFromOpml(xml).map((f) => f.url)).toEqual(['https://blog1.example/feed'])
+    expect(feedsFromOpml(await (await feedOf('/discover.opml')).text()).map((f) => f.url)).toEqual([
+      'https://blog2.example/feed',
+      'https://blog1.example/feed',
+    ])
+    // RSS and OPML of one topic are one read of tela-api; a topic Tela lacks is no topic.
+    expect(apiCalls.filter((p) => p.startsWith('/api/v1/public/feeds/'))).toEqual([
+      '/api/v1/public/feeds/discover',
+      '/api/v1/public/feeds/discover',
+    ])
+    expect(await (await feedOf('/discover/articles.rss?topic=nope')).text()).toBe(all)
   })
 })

@@ -94,10 +94,16 @@ beforeEach(async () => {
     // a's failed claim on blog 2, for the Claims area's record.
     db.run(sql`insert into site_claims (id, site_id, user_id, method, token, status, created_at)
       values (1, 2, ${a.userId}, 'meta', 'guard-token', 'failed', 0)`),
+    // b's verified claim on blog 1, for b to release (ADR 0058).
+    db.run(sql`insert into site_claims (id, site_id, user_id, method, token, status, created_at)
+      values (2, 1, ${b.userId}, 'meta', 'guard-token-b', 'verified', 0)`),
     // a's public blogroll, for Discover's Blogrolls record (ADR 0050).
     db.run(sql`insert into blogrolls (id, user_id, name, is_public, public_version, public_since,
         created_at, updated_at)
       values ('AbCdEf012345', ${a.userId}, 'Guarded', 1, 1, 0, 0, 0)`),
+    // a's report of blog 2, for the Reports area's record (ADR 0059).
+    db.run(sql`insert into reports (reporter_id, target_kind, target_key, reason, state, created_at)
+      values (${a.userId}, 'site', '2', 'spam', 'open', 0)`),
   ] as never)
 })
 
@@ -210,6 +216,8 @@ type MemberRoute = {
   raw?: string | Uint8Array<ArrayBuffer>
   /** What the request does when it runs: writes (a refused one must not), or only reads. */
   effect: 'writes' | 'reads'
+  /** What it answers b when it runs, when that is not 200: a refusal of its own, past the checks. */
+  status?: number
 }
 
 /** The header of a 256 px square PNG: all a picture upload is checked by (ADR 0033). */
@@ -282,6 +290,13 @@ const MEMBER_ROUTES: MemberRoute[] = [
     path: '/api/v1/admin/blogrolls/AbCdEf012345',
     effect: 'reads',
   },
+  { route: 'GET /api/v1/admin/reports', path: '/api/v1/admin/reports?f=open', effect: 'reads' },
+  {
+    route: 'GET /api/v1/admin/reports/:id',
+    path: '/api/v1/admin/reports/site:2',
+    effect: 'reads',
+  },
+  { route: 'GET /api/v1/admin/settings', path: '/api/v1/admin/settings', effect: 'reads' },
   { route: 'GET /api/v1/admin/counts', path: '/api/v1/admin/counts', effect: 'reads' },
   { route: 'GET /api/v1/admin/overview', path: '/api/v1/admin/overview', effect: 'reads' },
   {
@@ -389,6 +404,20 @@ const MEMBER_ROUTES: MemberRoute[] = [
     body: () => ({ optOut: true }),
     effect: 'writes',
   },
+  // Reporting a's profile (ADR 0059).
+  {
+    route: 'POST /api/v1/reports',
+    path: '/api/v1/reports',
+    body: () => ({ targetKind: 'profile', targetKey: a.userId, reason: 'spam' }),
+    effect: 'writes',
+  },
+  {
+    route: 'PUT /api/v1/sites/:siteId/feed-only',
+    path: '/api/v1/sites/1/feed-only',
+    method: 'PUT',
+    body: () => ({ feedOnly: true }),
+    effect: 'writes',
+  },
   { route: 'GET /api/v1/invites', path: '/api/v1/invites', effect: 'reads' },
   { route: 'POST /api/v1/invites', path: '/api/v1/invites', method: 'POST', effect: 'writes' },
   {
@@ -398,6 +427,7 @@ const MEMBER_ROUTES: MemberRoute[] = [
     effect: 'writes',
   },
   { route: 'GET /api/v1/account', path: '/api/v1/account', effect: 'reads' },
+  { route: 'GET /api/v1/account/usage', path: '/api/v1/account/usage', effect: 'reads' },
   {
     route: 'POST /api/v1/account/password',
     path: '/api/v1/account/password',
@@ -422,6 +452,28 @@ const MEMBER_ROUTES: MemberRoute[] = [
     path: '/api/v1/account/sign-out-everywhere',
     body: () => ({}),
     effect: 'reads',
+  },
+  // b runs the console, and an admin is ungranted before deleting the account (ADR 0058): each
+  // runs, past the checks above, to its own refusal, which spends nothing and mails nothing.
+  {
+    route: 'POST /api/v1/account/delete/code',
+    path: '/api/v1/account/delete/code',
+    body: () => ({}),
+    effect: 'reads',
+    status: 403,
+  },
+  {
+    route: 'POST /api/v1/account/delete',
+    path: '/api/v1/account/delete',
+    body: () => ({ code: '123456' }),
+    effect: 'reads',
+    status: 403,
+  },
+  {
+    route: 'POST /api/v1/claims/:siteId/release',
+    path: '/api/v1/claims/1/release',
+    body: () => ({}),
+    effect: 'writes',
   },
 ]
 
@@ -468,7 +520,7 @@ describe('every member route', () => {
       expect(server.requests).toEqual([])
 
       // Naming b, the same request runs, so the refusals above refused something real.
-      expect((await send({ as: b })).status).toBe(200)
+      expect((await send({ as: b })).status).toBe(entry.status ?? 200)
       if (entry.effect === 'writes') expect(await everything()).not.toEqual(before)
     })
   }

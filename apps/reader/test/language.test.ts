@@ -5,7 +5,15 @@
 import { describe, expect, test } from 'bun:test'
 import { READING_LANGUAGES } from '@tela/shared'
 import { type ProfileRow, readingLangOf } from '@tela/sync'
-import { chooseLocale, chosenLocale, detectLocale, localeToAdopt } from '../src/i18n'
+import {
+  bootLocale,
+  chooseLocale,
+  chosenLocale,
+  detectLocale,
+  localeToAdopt,
+  pinnedLocale,
+  requestLocale,
+} from '../src/i18n'
 import { circleLabel, pillLabel } from '../src/lib/format'
 import { memoryPersistence } from '../src/store/db'
 import { LocalStore } from '../src/store/local'
@@ -106,6 +114,71 @@ describe('the language chosen on this browser', () => {
     expect(detectLocale('tela_locale=fr', ['zh-TW', 'en'])).toBe('fr')
     expect(detectLocale('tela_locale=%', ['zh-TW', 'en'])).toBe('zh-Hant')
     expect(detectLocale('', [])).toBe('en')
+  })
+})
+
+describe('the language an address fixes (ADR 0060)', () => {
+  /** A page as the app boots on it: its cookie, address and browser languages. */
+  function onPage(page: { cookie?: string; search?: string; languages?: string[] }) {
+    const saved = ['document', 'window', 'navigator'].map(
+      (name) => [name, Object.getOwnPropertyDescriptor(globalThis, name)] as const,
+    )
+    const set = (name: string, value: unknown) =>
+      Object.defineProperty(globalThis, name, { value, configurable: true, writable: true })
+    set('document', { cookie: page.cookie ?? '' })
+    set('window', { location: { search: page.search ?? '' } })
+    set('navigator', { languages: page.languages ?? ['en-US'], language: 'en-US' })
+    return () => {
+      for (const [name, descriptor] of saved) {
+        if (descriptor) Object.defineProperty(globalThis, name, descriptor)
+        else Reflect.deleteProperty(globalThis, name)
+      }
+    }
+  }
+
+  test('reads ?hl= in any spelling, and nothing else from the address', () => {
+    expect(pinnedLocale('?hl=fr')).toBe('fr')
+    expect(pinnedLocale('?topic=x&hl=ZH-hans')).toBe('zh-Hans')
+    expect(pinnedLocale(new URLSearchParams('hl=zh-TW'))).toBe('zh-Hant')
+    expect(pinnedLocale('?hl=de')).toBeNull()
+    expect(pinnedLocale('?lang=fr')).toBeNull()
+    expect(pinnedLocale('')).toBeNull()
+  })
+
+  test("comes before the cookie and the browser's languages, when it is passed", () => {
+    expect(detectLocale('tela_locale=zh-Hans', ['en'], 'fr')).toBe('fr')
+    expect(detectLocale('tela_locale=zh-Hans', ['en'], null)).toBe('zh-Hans')
+  })
+
+  test("at the edge, is a visitor's to fix and never a member's", () => {
+    const at = (search: string, headers: Record<string, string>) =>
+      requestLocale(new Request(`http://tela.test/discover${search}`, { headers }))
+    const chosen = { cookie: 'tela_locale=zh-Hans', 'accept-language': 'en-US' }
+    expect(at('?hl=fr', chosen)).toBe('fr')
+    expect(at('?hl=FR', { 'accept-language': 'zh-CN' })).toBe('fr')
+    expect(at('?hl=de', chosen)).toBe('zh-Hans')
+    expect(at('', { 'accept-language': 'zh-TW' })).toBe('zh-Hant')
+    // A session cookie, prefixed or not: the member's language, followed by their cookie.
+    for (const session of ['tela.session_token=a.b', '__Secure-tela.session_token=a.b']) {
+      expect(at('?hl=fr', { ...chosen, cookie: `${chosen.cookie}; ${session}` })).toBe('zh-Hans')
+      expect(at('?hl=fr', { cookie: session, 'accept-language': 'en' })).toBe('en')
+    }
+  })
+
+  test('as the app boots, is what the edge rendered, else the same order with the device for the cookie', () => {
+    const restore = onPage({ cookie: 'tela_locale=zh-Hans', search: '?hl=fr', languages: ['en'] })
+    try {
+      // The edge rendered the page: its language, whatever the device would have chosen.
+      expect(bootLocale(false, 'zh-Hant')).toBe('zh-Hant')
+      expect(bootLocale(true, 'fr')).toBe('fr')
+      // The plain shell (no language of a page): a device with no account takes the address's.
+      expect(bootLocale(false, null)).toBe('fr')
+      expect(bootLocale(false, 'x-unknown')).toBe('fr')
+      // One that holds an account takes the cookie, which follows the account.
+      expect(bootLocale(true, null)).toBe('zh-Hans')
+    } finally {
+      restore()
+    }
   })
 })
 

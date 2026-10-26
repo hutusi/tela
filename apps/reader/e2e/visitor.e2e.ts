@@ -130,7 +130,77 @@ test.describe('with JavaScript', () => {
   })
 })
 
+test.describe('the language in the address (ADR 0060)', () => {
+  test.use(VISITOR)
+
+  test('?hl= renders a page in its language, and the app takes it over in the same words', async ({
+    page,
+    context,
+  }) => {
+    // A cookie that says otherwise, and a browser in English: the address wins for a visitor.
+    await context.addCookies([{ name: 'tela_locale', value: 'zh-Hans', url: BASE }])
+    // Every language the page and its first tab were in, from the first byte to the app's last
+    // render: a flash of another language would show here.
+    await page.addInitScript(() => {
+      const seen: string[] = []
+      ;(window as unknown as { seen: string[] }).seen = seen
+      const note = () => {
+        const tab = document.querySelector('[data-testid="discover-tab-week"]')?.textContent
+        seen.push(`${document.documentElement?.lang}|${tab ?? ''}`)
+      }
+      new MutationObserver(note).observe(document, {
+        subtree: true,
+        childList: true,
+        characterData: true,
+        attributes: true,
+        attributeFilter: ['lang'],
+      })
+    })
+    const booted = page.waitForResponse((res) => new URL(res.url()).pathname === '/api/v1/me')
+    const res = await page.goto('/discover?hl=fr')
+    expect(res?.status()).toBe(200)
+    expect(res?.headers()['content-language']).toBe('fr')
+    expect(res?.headers().vary).toBe('cookie')
+    const html = (await res?.text()) ?? ''
+    expect(html).toContain('<html lang="fr"')
+    expect(html).toContain(`<link rel="canonical" href="${BASE}/discover?hl=fr" />`)
+    expect(html).toContain(`hreflang="x-default" href="${BASE}/discover"`)
+    expect(html).toContain(`<meta property="og:image" content="${BASE}/og/fr.png" />`)
+    await booted
+    await expect(page.locator('html')).toHaveAttribute('lang', 'fr')
+    await expect(page.getByTestId('discover-tab-week')).toHaveText('Cette semaine')
+    await expect(page).toHaveTitle('Découvrir · Tela')
+    const seen = await page.evaluate(() => (window as unknown as { seen: string[] }).seen)
+    expect(seen.length).toBeGreaterThan(0)
+    expect(seen.filter((s) => !/^fr\|(Cette semaine)?$/.test(s))).toEqual([])
+
+    // The app keeps the language as it goes, though the next address fixes none.
+    await page.getByTestId('discover-tab-readers').click()
+    await expect(page).toHaveURL(`${BASE}/discover/readers`)
+    await expect(page.getByTestId('discover-tab-readers')).toHaveText('Lecteurs')
+    await expect(page.locator('html')).toHaveAttribute('lang', 'fr')
+    // And the address chose nothing for next time: the cookie is as it was.
+    const cookie = (await context.cookies()).find((c) => c.name === 'tela_locale')
+    expect(cookie?.value).toBe('zh-Hans')
+  })
+
+  test('a language Tela has no interface in fixes nothing', async ({ page }) => {
+    const res = await page.goto('/discover?hl=de')
+    expect(await res?.text()).toContain('<html lang="en"')
+    expect(res?.headers().vary).toBe('cookie, accept-language')
+  })
+})
+
 test.describe('for a member', () => {
+  test("?hl= is a visitor's: a member reads in their own language", async ({ page }) => {
+    const booted = page.waitForResponse((res) => new URL(res.url()).pathname === '/api/v1/me')
+    const res = await page.goto('/discover?hl=fr')
+    expect(await res?.text()).toContain('<html lang="en"')
+    await booted
+    await expect(page.getByTestId('discover-tab-week')).toHaveText('This week')
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en')
+  })
+
   test('the front page is the app, which takes them to their reading', async ({ page }) => {
     const res = await page.goto('/')
     expect(res?.headers().vary).toContain('cookie')

@@ -11,6 +11,7 @@ import type { ClaimReason } from '@tela/shared'
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { useTranslations } from 'use-intl'
+import { useClockTime } from '../components/add-words'
 import { CHECK, Glyph } from '../components/glyph'
 import { LoadFailedPage } from '../components/load-failed'
 import { useTitle } from '../lib/title'
@@ -33,10 +34,22 @@ type Standing =
       proofs: { meta: string; relMe: string }
     }
 
-type StartError = 'invalid_url' | 'fetch_failed' | 'no_feed' | 'rate_limited' | 'feed_too_large'
+type StartError =
+  | 'invalid_url'
+  | 'fetch_failed'
+  | 'no_feed'
+  | 'rate_limited'
+  | 'feed_too_large'
+  | 'feed_limit'
 
 export function claimError(code: string | undefined): StartError {
-  if (code === 'invalid_url' || code === 'rate_limited' || code === 'feed_too_large') return code
+  if (
+    code === 'invalid_url' ||
+    code === 'rate_limited' ||
+    code === 'feed_too_large' ||
+    code === 'feed_limit'
+  )
+    return code
   if (code === 'not_a_feed') return 'no_feed'
   return 'fetch_failed'
 }
@@ -89,6 +102,9 @@ export function ClaimPage() {
   const [url, setUrl] = useState(() => search.get('url') ?? '')
   const taken = search.get('taken') === '1'
   const [error, setError] = useState<StartError | null>(null)
+  // When the day's allowance comes back, for a claim of a blog new to Tela refused past it.
+  const [resetsAt, setResetsAt] = useState(0)
+  const time = useClockTime()
   const [busy, setBusy] = useState(false)
   useTitle(t('title'))
 
@@ -97,11 +113,17 @@ export function ClaimPage() {
     setBusy(true)
     setError(null)
     try {
-      const { status, body } = await apiJson<Standing & { error?: string }>('/api/v1/claims', {
-        body: { url },
-      })
+      const { status, body } = await apiJson<Standing & { error?: string; resetsAt?: number }>(
+        '/api/v1/claims',
+        {
+          body: { url },
+        },
+      )
       if (status === 200 && body.siteId) navigate(`/sites/${body.siteId}/claim`)
-      else setError(claimError(body?.error ?? undefined))
+      else {
+        setResetsAt(body?.resetsAt ?? Date.now())
+        setError(claimError(body?.error ?? undefined))
+      }
     } catch {
       setError('fetch_failed')
     } finally {
@@ -146,7 +168,7 @@ export function ClaimPage() {
             {busy ? t('searching') : t('continue')}
           </button>
         </div>
-        {error ? <p className={ERROR}>{t(`errors.${error}`)}</p> : null}
+        {error ? <p className={ERROR}>{t(`errors.${error}`, { time: time(resetsAt) })}</p> : null}
       </form>
     </main>
   )

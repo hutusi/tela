@@ -93,7 +93,9 @@
     "usePassword": "Log in with a password",
     "useCode": "Email me a code instead",
     "invite": "Invite code",
+    "inviteOptional": "Invite code (optional)",
     "noCode": "No code? Tela is invite-only for now: ask a member for one.",
+    "paused": "Tela has welcomed all the new members it can for today. Joining opens again at {at, time, short}. An invite code still lets you in today.",
     "agree": "By joining you agree to the <terms>Terms</terms>; see <privacy>Privacy</privacy>.",
     "newHere": "New to Tela?",
     "toJoin": "Join",
@@ -131,7 +133,12 @@
       "invite_used": "Everyone this invite was for has joined, or it was withdrawn. Ask for another.",
       "missing_code": "Enter your invite code.",
       "invalid_code": "There is no such invite code, or it was withdrawn.",
+      "invalid_code_optional": "There is no such invite code, or it was withdrawn. Check it, or clear the field to join without one.",
       "code_used": "Everyone this invite code was for has joined.",
+      "invite_only": "Tela is taking new members by invitation only right now. Enter your invite code.",
+      "signups_paused": "Tela cannot take any more new members today. Try again after {at, time, short}, or join with an invite code.",
+      "account_suspended": "This account is suspended. If you think that’s a mistake, write to me@hutu.si.",
+      "account_closed": "This account was deleted.",
       "provider_unlinked": "Verify this address with the provider, or log in by email and link it in Settings → Account.",
       "provider_no_email": "The provider did not share an email address. Log in by email instead.",
       "provider_cancelled": "Sign-in was cancelled.",
@@ -234,8 +241,13 @@
       "opml_invalid": "That file is not an OPML document.",
       "rate_limited": "Too many requests. Please wait a little and try again.",
       "opml_too_large": "That OPML file is larger than 1 MB.",
-      "feed_too_large": "That blog's feed is larger than Tela reads (10 MB)."
-    }
+      "feed_too_large": "That blog's feed is larger than Tela reads (10 MB).",
+      "feed_limit": "{limit, plural, =0 {Tela isn’t taking blogs new to it right now. Blogs already on Tela can still be added.} one {You’ve added a blog new to Tela today, as many as a day allows. You can add another after {time}; blogs already on Tela can be added any time.} other {You’ve added # blogs new to Tela today, as many as a day allows. You can add more after {time}; blogs already on Tela can be added any time.}}",
+      "subscription_limit": "You follow {limit} blogs, the most one account holds. Unsubscribe from one to add another."
+    },
+    "importWaiting": "Tela adds {perDay, plural, one {# new blog} other {# new blogs}} a day for you; {n, plural, one {the other one arrives} other {the other # arrive}} {days, plural, one {tomorrow} other {over the next # days}}.",
+    "importPaused": "{n, plural, one {One more waits} other {# more wait}} until Tela takes new blogs again.",
+    "importOver": "{n, plural, one {One was left out} other {# were left out}}: one account follows {max} blogs at most."
   },
   "translation": {
     "writtenIn": "Written in <b>{source}</b>.",
@@ -257,6 +269,10 @@
     "notTranslated": "Not translated · {language}",
     "rateLimited": "Too many translation requests for now. Please try again in a little while.",
     "budgetExhausted": "You have used today's translation allowance. It resets tomorrow.",
+    "budgetMember": "You've had {n, plural, one {# new post} other {# new posts}} translated today. Open this one again tomorrow.",
+    "budgetSite": "Translation is resting for today. Open this post again tomorrow.",
+    "waitingToday": "Tela will translate this after {time}.",
+    "waitingTomorrow": "Tela will translate this tomorrow, after {time}.",
     "unavailable": "The translation could not be started. Please try again.",
     "retry": "Try translating again"
   },
@@ -544,12 +560,14 @@
       "fetch_failed": "Could not reach that address.",
       "no_feed": "No feed found at that address. Tela lists blogs that publish a feed.",
       "feed_too_large": "That blog's feed is larger than Tela reads (10 MB).",
-      "rate_limited": "Too many claim attempts. Please wait a little and try again."
+      "rate_limited": "Too many claim attempts. Please wait a little and try again.",
+      "feed_limit": "This blog is new to Tela, and you’ve added as many new blogs as a day allows. You can claim it after {time}."
     },
     "taken": "The handle you picked belongs to someone else, so yours is still a temporary one. Choose another in <link>Settings</link>."
   },
   "writers": {
     "title": "For writers",
+    "description": "Your calling card as an independent writer on Tela, how Tela reads your blog, and how to claim it or keep Tela out.",
     "kicker": "For writers",
     "hero": {
       "title": "Your <em>calling card</em> as an independent writer.",
@@ -656,6 +674,88 @@
         "body": "Readers can read your posts translated. If you would rather they didn't, turn it off for your blog from the Dashboard."
       }
     },
+    "reading": {
+      "title": "How Tela reads your blog",
+      "intro": "Tela is a feed reader. It reads the RSS, Atom or JSON feed your blog already publishes, as any feed reader does, and asks your server for as little as it can.",
+      "agent": {
+        "title": "It says who it is",
+        "body": "Every request carries Tela’s user agent, <code>Tela/0.1 (+https://telaread.com; feed reader)</code>, or for images <code>Tela/0.1 (+https://telaread.com; image proxy)</code>."
+      },
+      "often": {
+        "title": "About as often as you post",
+        "body": "Tela checks your feed about twice as often as you published over the past week: every 30 minutes at most, and at least once a day. Each check that finds nothing new waits a little longer for the next. Your feed’s <code>ttl</code> and <code>Cache-Control: max-age</code> can ask it to wait longer, up to a day."
+      },
+      "changed": {
+        "title": "Only what changed",
+        "body": "Each check sends back the <code>ETag</code> and <code>Last-Modified</code> your server gave, so a feed that hasn’t changed costs a 304 and nothing more."
+      },
+      "errors": {
+        "title": "It backs off",
+        "body": "When your server fails or doesn’t answer, Tela waits twice as long after each failure, up to a week, and as long as a <code>Retry-After</code> asks. After a <code>410 Gone</code>, or 30 failures in a row, it tries once a week."
+      },
+      "images": {
+        "title": "Images when someone reads",
+        "body": "The images in your posts are fetched only when someone reads the post, through Tela’s image proxy, and then kept for a week."
+      },
+      "pages": {
+        "title": "Your pages, only when the feed is short",
+        "body": "If your feed carries only summaries, Tela fetches each new post’s public page once, soon after the feed lists it, to show the full text to subscribers in the reader, and again only if the summary changes. It reads your home page once, when your blog is added, to find its icon. Both ask your robots.txt first."
+      }
+    },
+    "shows": {
+      "title": "What Tela shows",
+      "public": {
+        "title": "In public, titles and excerpts",
+        "body": "Tela’s public pages, the ones anyone and any search engine can open, show your posts’ titles and short excerpts, each linking to the post on your blog. They never show a post in full."
+      },
+      "members": {
+        "title": "To subscribers, your posts",
+        "body": "Members who subscribe to your blog read your posts in Tela’s reader, from your feed or the post’s page, as in any feed reader. Tela keeps that copy for signed-in members, never as a page anyone can open."
+      },
+      "translation": {
+        "title": "Translations, labelled",
+        "body": "Titles and excerpts are translated ahead of time into Tela’s reading languages, so readers can find your posts. A post itself is translated only for a reader who asks for it. Every translation is a machine’s, labelled as one and shown beside your original, and you can turn translation off for your blog."
+      }
+    },
+    "claiming": {
+      "title": "Claiming your blog",
+      "intro": "Claiming tells Tela the blog is yours. You need a Tela account and any one of these:",
+      "link": {
+        "title": "A link to your Tela profile",
+        "body": "A link to <code>telaread.com/@you</code> on your home page marked <code>rel=\"me\"</code>, or without it, in a header or footer your 404 page shows too, so it is your blog’s own link and not a mention in a post."
+      },
+      "meta": {
+        "title": "A meta tag",
+        "body": "The <code>tela-site-verification</code> tag Tela gives you, in your home page’s <code>head</code>. You can remove it once the claim is verified."
+      },
+      "github": {
+        "title": "Your GitHub",
+        "body": "Nothing to add, if you sign in with GitHub, your GitHub profile names your blog as its website, and your blog links to that profile in one of the ways above."
+      },
+      "check": "To check, Tela reads your home page and, for a link without <code>rel=\"me\"</code>, one address your blog doesn’t have, to see its 404 page.",
+      "gives": "A claimed blog is listed in Discover under your name. Your Dashboard shows how many read it on Tela, which posts they liked and recommended, and the notes they left; there you choose its topics, whether it is translated, and whether Tela uses only your feed."
+    },
+    "optOut": {
+      "title": "If you’d rather Tela didn’t",
+      "intro": "Each of these holds as soon as it is made. The last two need no claim.",
+      "translation": {
+        "title": "Turn translation off",
+        "body": "On your Dashboard, once your blog is claimed. Readers then see your posts only as you wrote them."
+      },
+      "feedOnly": {
+        "title": "Only use what my feed provides",
+        "body": "Also on your Dashboard. Tela stops fetching your blog’s pages, for full text and for its icon, and reads only your feed. If your feed carries whole posts, subscribers still read them in full, as in any feed reader; if it carries summaries, they read those and follow the link to your blog."
+      },
+      "robots": {
+        "title": "robots.txt",
+        "body": "To keep Tela off your pages without claiming anything, add this to your robots.txt. Tela reads it again within a day.",
+        "after": "As with any crawler, a group naming Tela takes the place of the one for everyone (<code>User-agent: *</code>). Your feed is still read, as every feed reader reads it: a subscriber asked for it."
+      },
+      "email": {
+        "title": "Leave Tela",
+        "body": "Write to <mail>me@hutu.si</mail>, and Tela will take your blog out of Discover, remove its page on Tela and stop fetching it. If you can’t claim the blog, the switches above can be set for you the same way."
+      }
+    },
     "cta": {
       "count": "{n, plural, one {# blog is} other {# blogs are}} already on Tela. <em>Where's yours?</em>",
       "title": "<em>Where's your blog?</em>",
@@ -736,6 +836,10 @@
     "translateHint": "Tela translates your posts for readers in other languages and always shows your original beside the translation. Turned off, readers see your posts only as you wrote them.",
     "translationOn": "Translation is on for {blog}.",
     "translationOff": "Translation is off for {blog}.",
+    "feedOnly": "Only use what my feed provides",
+    "feedOnlyHint": "Tela stops fetching your blog’s pages, for full text and for its icon, and reads only your feed. If your feed carries whole posts, subscribers still read them in full. <link>How Tela reads your blog</link>",
+    "feedOnlyOn": "Tela now uses only what the feed of {blog} provides.",
+    "feedOnlyOff": "Tela may fetch the pages of {blog} again.",
     "listing": {
       "private": "private",
       "listed": "listed in Discover",
@@ -752,6 +856,16 @@
       "likes": "<b>{n}</b> {n, plural, one {like} other {likes}}",
       "recommendations": "<b>{n}</b> {n, plural, one {recommendation} other {recommendations}}",
       "notes": "{n, plural, one {# note} other {# notes}}"
+    },
+    "release": {
+      "label": "Release this blog",
+      "hint": "You stop being its owner on Tela. Its translation setting stays as it is, and you can claim it again.",
+      "open": "Release",
+      "confirm": "Release {blog}? It has no owner on Tela until someone claims it.",
+      "yes": "Release it",
+      "keep": "Keep it",
+      "done": "{blog} is released.",
+      "failed": "That did not work. Try again."
     }
   },
   "settings": {
@@ -905,10 +1019,20 @@
     "privacyDelay": "Your public profile can take a few minutes to catch up with a change.",
     "yourData": "Your data",
     "yourDataHint": "Your profile, subscriptions, likes, recommendations, highlights and the people you follow, as one file.",
-    "download": "Download"
+    "download": "Download",
+    "translationsToday": "New translations",
+    "translationsTodayValue": "{used} of {perDay} today",
+    "translationsHint": "A post Tela has already translated, and a switch between the Chinese scripts, don’t count. The count starts again at {time}.",
+    "translationsFree": "No daily limit applies to your account.",
+    "translationsUnlimited": "No limit",
+    "translationsWaiting": "{n, plural, one {One translation waits} other {# translations wait}} to start after {time}.",
+    "subscriptionsPending": "{n, plural, one {One imported blog waits} other {# imported blogs wait}} to be added. Tela adds {perDay, plural, one {# new blog} other {# new blogs}} a day for you, so {n, plural, one {it arrives} other {they arrive}} {days, plural, one {tomorrow} other {over the next # days}}.",
+    "subscriptionsPendingPaused": "{n, plural, one {One imported blog waits} other {# imported blogs wait}} until Tela takes new blogs again.",
+    "subscriptionsCap": "You follow {count} of the {max} blogs one account holds."
   },
   "invites": {
     "intro": "Tela is invite-only for now. You can invite five people: a code lets one person in, and once used it counts for good. Revoke a code nobody has used to get its place back.",
+    "open": "Anyone can join Tela now, no invite code needed. Your codes are kept, and work again if Tela goes back to invitations.",
     "left": "{n, plural, =0 {You have invited everyone you can.} one {You can invite # more person.} other {You can invite # more people.}}",
     "create": "Create a code",
     "none": "No codes yet. Create one, then send its link to a friend.",
@@ -962,6 +1086,24 @@
       "failed": "That did not work. Try again.",
       "link_failed": "That account could not be linked. Try again.",
       "load": "Your sign-in methods could not be loaded. Try again later."
+    },
+    "delete": {
+      "label": "Delete account",
+      "hint": "Removes your account and what you keep on Tela, for good.",
+      "open": "Delete account",
+      "title": "Delete your account?",
+      "goes": "Your name, bio, picture, notes and blogrolls disappear at once, and so do the people you follow and your followers. Every device is signed out. What you kept for yourself (subscriptions, folders, highlights, likes, what you read) is removed within minutes. Blogs you claimed are released, keeping the settings you chose for them.",
+      "stays": "Your handle {handle} is retired, so nobody can take it to pass as you. Tela’s backups keep a copy for 30 days, then it is gone.",
+      "export": "To keep a copy, <link>download your data</link> first.",
+      "send": "Email me a code",
+      "sent": "We sent a code to {email}. Enter it to delete your account.",
+      "confirm": "Delete my account",
+      "errors": {
+        "admin": "This account runs Tela’s admin console. Hand the console on first, then delete the account.",
+        "bad_code": "That code is not right, or it has expired. Ask for a new one.",
+        "rate_limited": "Too many tries. Try again later.",
+        "failed": "That did not work. Try again."
+      }
     }
   },
   "search": {
@@ -1036,7 +1178,9 @@
     "updated": "Last updated {date}"
   },
   "toast": {
-    "undo": "Undo"
+    "undo": "Undo",
+    "subscriptionLimit": "You follow {max} blogs, the most one account holds. Unsubscribe from one to add another.",
+    "subscriptionLimitMany": "That’s {n} more blogs, and one account holds {max} at most. You can follow {room, plural, one {one more} other {# more}}."
   },
   "firstRun": {
     "title": "Start with a few blogs",
@@ -1046,5 +1190,57 @@
     "more": "More blogs in Discover →",
     "import": "Coming from another reader? <opml>Import an OPML file</opml> or <add>paste a blog’s address</add>.",
     "footer": "More blogs in <discover>Discover</discover>. Coming from another reader? <opml>Import an OPML file</opml> or <add>paste a blog’s address</add>."
+  },
+  "feeds": {
+    "label": "Feeds",
+    "rss": "New posts as RSS, for a feed reader",
+    "opml": "These blogs as OPML, to import into a feed reader",
+    "blogroll": "The newest posts from the blogs in {name}, a blogroll by {owner} on Tela.",
+    "discover": "The newest posts from the blogs in Tela’s directory."
+  },
+  "report": {
+    "link": "Report",
+    "title": {
+      "profile": "Report this profile",
+      "blogroll": "Report this blogroll",
+      "site": "Report this blog",
+      "recommendation": "Report this note"
+    },
+    "byMail": {
+      "profile": "Report this profile by email",
+      "blogroll": "Report this blogroll by email",
+      "site": "Report this blog by email",
+      "recommendation": "Report this note by email"
+    },
+    "mailSubject": {
+      "profile": "Report: a profile on Tela",
+      "blogroll": "Report: a blogroll on Tela",
+      "site": "Report: a blog on Tela",
+      "recommendation": "Report: a note on Tela"
+    },
+    "intro": "Your report goes to the person who runs Tela, and only to them. Nobody is told who sent it.",
+    "why": "What’s wrong with it?",
+    "reasons": {
+      "spam": "Spam or advertising",
+      "abuse": "Abusive or harassing",
+      "impersonation": "Pretends to be someone else",
+      "copyright": "Copies someone else’s work",
+      "illegal": "Illegal",
+      "other": "Something else"
+    },
+    "details": "Anything else to say",
+    "optional": "(optional)",
+    "count": "{n}/{max}",
+    "send": "Send report",
+    "sending": "Sending…",
+    "cancel": "Cancel",
+    "thanks": "Thank you",
+    "thanksBody": "Your report is in. It will be read, and acted on if it needs to be.",
+    "close": "Close",
+    "errors": {
+      "rate_limited": "You’ve sent a lot of reports today. Please try again tomorrow.",
+      "not_found": "This isn’t shown any more, so there’s nothing left to report.",
+      "failed": "Your report couldn’t be sent. Please try again."
+    }
   }
 }

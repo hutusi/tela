@@ -16,6 +16,7 @@ import {
   measureHeader,
   memberHeaders,
   STATE_FILE,
+  setSetting,
   signInRequest,
 } from './helpers'
 
@@ -850,5 +851,77 @@ test.describe('a link with an invite code', () => {
     await sheet.getByTestId('door-close').click()
     await expect(page).toHaveURL(/\/$/)
     await expect(sheet).toHaveCount(0)
+  })
+})
+
+/**
+ * Sign-up opened by the operator (ADR 0056), and closed again: the sheet asks Tela whether joining
+ * needs a code each time it opens, so neither waits for a deploy. Every other spec expects an
+ * invite-only Tela, so each test here puts the switch back however it ends.
+ */
+test.describe('Join, while sign-up is open', () => {
+  test.afterEach(async ({ request }) => {
+    await setSetting(request, 'signup.mode', 'invite')
+  })
+
+  test.describe('with no code', () => {
+    test.use(visitor(233))
+    test('needs only the address, a mailed code and a password, and says nothing of invitations', async ({
+      page,
+      request,
+    }) => {
+      await setSetting(request, 'signup.mode', 'open')
+      const email = `open-joiner-${Date.now()}@e2e.test`
+      await page.goto('/discover')
+      await page.getByTestId('nav-join').click()
+      const sheet = page.getByTestId('front-door')
+      await expect(sheet.getByTestId('join-code')).toHaveCount(0)
+      await expect(sheet).not.toContainText('invite-only')
+      await expect(sheet.getByTestId('login-email')).toBeFocused()
+      await sheet.getByTestId('login-email').fill(email)
+      await sheet.getByTestId('login-submit').click()
+      await expect(sheet.getByTestId('login-code')).toBeFocused()
+      await sheet.getByTestId('login-code').fill(await codeAfter(request, email, 0))
+      await sheet.getByTestId('join-password').fill(`joined openly on ${Date.now()}`)
+      await sheet.getByTestId('login-submit').click()
+      await expect(page).toHaveURL(/\/discover$/)
+      await expect(page.getByTestId('account-menu')).toBeVisible()
+      // Nobody needs an invitation now, so nothing offers to make one.
+      await page.getByTestId('account-menu').click()
+      await expect(page.getByTestId('nav-settings')).toBeVisible()
+      await expect(page.getByTestId('nav-invites')).toHaveCount(0)
+      await page.goto('/settings/invites')
+      await expect(page.getByTestId('invites-open')).toBeVisible()
+      await expect(page.getByTestId('settings-section-invites')).toHaveCount(0)
+    })
+  })
+
+  test.describe('and closed again while the sheet is open', () => {
+    test.use(visitor(234))
+    test('asks for the code it now needs, and mails nothing without one', async ({
+      page,
+      request,
+    }) => {
+      await setSetting(request, 'signup.mode', 'open')
+      const email = `closed-joiner-${Date.now()}@e2e.test`
+      await page.goto('/')
+      await page.getByTestId('front-join').click()
+      const sheet = page.getByTestId('front-door')
+      await expect(sheet.getByTestId('join-code')).toHaveCount(0)
+      await setSetting(request, 'signup.mode', 'invite')
+      await sheet.getByTestId('login-email').fill(email)
+      await sheet.getByTestId('login-submit').click()
+      await expect(sheet.getByTestId('door-error')).toHaveText(
+        'Tela is taking new members by invitation only right now. Enter your invite code.',
+      )
+      await expect(sheet.getByTestId('join-code')).toBeFocused()
+      await expect(sheet.getByTestId('join-code')).toHaveAttribute('required', '')
+      expect(await mails(request, email)).toBe(0)
+      // With a code it goes on as an invite-only join always has.
+      await sheet.getByTestId('join-code').fill(await adminCode(request))
+      await sheet.getByTestId('login-submit').click()
+      await expect(sheet.getByTestId('login-code')).toBeVisible()
+      expect(await mails(request, email)).toBe(1)
+    })
   })
 })

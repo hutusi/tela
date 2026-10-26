@@ -129,3 +129,35 @@ export const opsHeartbeats = sqliteTable(
   },
   (t) => [check('ops_heartbeats_info_check', sql`json_valid(${t.info})`)],
 )
+
+/**
+ * What an operator changed while Tela runs (ADR 0056): one row per setting that differs from its
+ * default in `@tela/shared`'s `SETTINGS`. A statement that enforces a limit reads its row inline
+ * (`settingSql`), so a change holds from the next request. Not synced; every write is audited.
+ */
+export const settings = sqliteTable(
+  'settings',
+  {
+    key: text().primaryKey(),
+    /** The value as JSON: `"open"`, `20`, `null`, `[80,100]`. */
+    value: text().notNull(),
+    updatedAt: ms().notNull(),
+    updatedBy: text().references(() => user.id, { onDelete: 'set null' }),
+  },
+  (t) => [check('settings_value_check', sql`json_valid(${t.value})`)],
+)
+
+/**
+ * Operator mail already sent (ADR 0057): one row per alert and the UTC day (or hour) it is for,
+ * inserted before the mail goes, so a threshold crossed is told once. Coordination, not kept by
+ * the export.
+ */
+export const opsAlerts = sqliteTable(
+  'ops_alerts',
+  {
+    day: text().notNull(),
+    name: text().notNull(),
+    at: ms().notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.day, t.name] })],
+)

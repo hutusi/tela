@@ -2,10 +2,12 @@
  * Sign-in (ADR 0024): better-auth with email codes, passwords, Google and GitHub, through its
  * Drizzle adapter over the same `TelaDb` everything else uses, so it runs on D1 in production and
  * libSQL in tests. An account is made at an address's first code sign-in, at a provider's return,
- * or by the operator's invite, and only for an address that holds an invitation (ADR 0034):
- * `user.create.before` is the gate, and the code mail is sent to nobody else. A provider's return
- * is admitted only by the invite code its sign-in carried. A password is never how an account
- * starts: it is set on a member a code has proved, and a forgotten one is reset by code (ADR 0036).
+ * or by the operator's invite. `user.create.before` is the gate. While sign-up is by invitation
+ * (`signup.mode`, ADR 0056), it admits only an address that holds one (ADR 0034), the code mail is
+ * sent to nobody else, and a provider's return is admitted only by the invite code its sign-in
+ * carried. While sign-up is open, a proved address is enough until the day's cap, and an
+ * invitation it holds is still claimed. A password is never how an account starts: it is set on a
+ * member a code has proved, and a forgotten one is reset by code (ADR 0036).
  */
 import {
   ACTION_LIMITS,
@@ -16,10 +18,12 @@ import {
   currentSeq,
   first,
   holdsInvite,
+  isClosedEmail,
   type LimitedAction,
   liveCode,
   schema,
   settleInvite,
+  signupState,
   type TelaDb,
   waitsOnFullCode,
 } from '@tela/data'
@@ -146,6 +150,15 @@ const REFUSALS = {
   INVITE_USED: 'Everyone this invite code was for has joined.',
   /** A provider's sign-in carried a code that is unknown or revoked: one answer for both. */
   INVALID_CODE: 'No such invite code, or it was withdrawn.',
+  /**
+   * Sign-up is open, and today's new accounts have reached `signup.maxPerDay` (ADR 0056): an
+   * address without an invitation waits for the next UTC day.
+   */
+  SIGNUPS_PAUSED: 'Tela is taking no more new accounts today.',
+  /** The account was closed (ADR 0058): `session.create.before`. */
+  ACCOUNT_CLOSED: 'This account was deleted.',
+  /** An operator suspended the account (ADR 0059): `session.create.before`. */
+  ACCOUNT_SUSPENDED: 'This account is suspended.',
 } as const
 
 const refuse = (code: keyof typeof REFUSALS) =>
@@ -155,13 +168,45 @@ const refuse = (code: keyof typeof REFUSALS) =>
  * Why a provider's return makes no account, as the `error` of its redirect to the page that
  * started it: lowercase, like better-auth's own codes there. `invite_required`: the sign-in carried
  * no invite code. `invite_unavailable`: its code was filled or revoked while the visitor was at the
- * provider. `account_not_linked`: the provider has not verified the address, which is also what
- * better-auth answers a member whose provider is not linked, so the redirect says nothing of who
- * is a member; for that reason none carries a description, as better-auth's does not. The sheet
- * words each.
+ * provider. `signups_paused`: sign-up is open, but takes nobody else new today (ADR 0056).
+ * `account_not_linked`: the provider has not verified the address, which is also what better-auth
+ * answers a member whose provider is not linked, so the redirect says nothing of who is a member;
+ * for that reason none carries a description, as better-auth's does not. `account_suspended` and
+ * `account_closed`: the provider is linked to an account out of good standing (ADRs 0058, 0059),
+ * which only whoever holds that provider account learns. The sheet words each.
  */
-type ReturnRefusal = 'invite_required' | 'invite_unavailable' | 'account_not_linked'
+type ReturnRefusal =
+  | 'invite_required'
+  | 'invite_unavailable'
+  | 'signups_paused'
+  | 'account_not_linked'
+  | 'account_suspended'
+  | 'account_closed'
 const refuseReturn = (code: ReturnRefusal) => new APIError('FORBIDDEN', { code })
+
+/** Why a member may not sign in: closed (ADR 0058) or suspended (ADR 0059); null for neither. */
+type Barred = 'closed' | 'suspended'
+
+/** The member's standing, read from D1. A member with no profile yet is not barred. */
+async function barredAs(db: TelaDb, userId: string): Promise<Barred | null> {
+  const standing = await first<{ closed: number; suspended: number }>(
+    db,
+    sql`select deleted_at is not null as closed, suspended_at is not null as suspended
+      from profiles where user_id = ${userId}`,
+  )
+  if (standing?.closed) return 'closed'
+  if (standing?.suspended) return 'suspended'
+  return null
+}
+
+/**
+ * The refusal of a sign-in to a barred account: a 403 naming the standing, or at a provider's
+ * return the lowercase code its redirect carries, as every refusal there does.
+ */
+const refuseBarred = (barred: Barred, path: string | undefined) =>
+  path === PROVIDER_RETURN
+    ? refuseReturn(barred === 'closed' ? 'account_closed' : 'account_suspended')
+    : refuse(barred === 'closed' ? 'ACCOUNT_CLOSED' : 'ACCOUNT_SUSPENDED')
 
 /**
  * What a provider's sign-in may start with (ADR 0036): only the provider, the three return URLs
@@ -171,7 +216,10 @@ const refuseReturn = (code: ReturnRefusal) => new APIError('FORBIDDEN', { code }
  * signs in with no state at all. An invite is checked here, before the visitor is sent away, and
  * handed to the callback in the OAuth state's server context, which only the server writes and
  * the callback alone reads. A check is a guess at a code like a join's, so it spends a join's
- * limits: per IP before the code is looked up, then per code for a live one.
+ * limits: per IP before the code is looked up, then per code for a live one. While sign-up is open
+ * (ADR 0056) a code records who invited the visitor rather than lets them in: a full one is left
+ * behind instead of refused, as a join leaves it, and an unknown one is still told, so a typo can
+ * be put right.
  */
 async function startWithProvider(
   db: TelaDb,
@@ -213,8 +261,10 @@ async function startWithProvider(
     const { allowed, retryAfterSec } = await consumeLimit(db, 'joinCode', code, now, limit)
     if (!allowed) throw tooMany(retryAfterSec)
   }
-  if (live.full)
+  if (live.full) {
+    if ((await signupState(db, now)).mode === 'open') return
     throw new APIError('CONFLICT', { code: 'INVITE_USED', message: REFUSALS.INVITE_USED })
+  }
   await addOAuthServerContext({ invite: code })
 }
 
@@ -435,16 +485,19 @@ export function createAuth(deps: Pick<ApiDeps, 'db' | 'mail' | 'clock' | 'config
       user: {
         create: {
           /**
-           * The gate (ADR 0034): every path that makes a user runs it, and it admits one only by
-           * claiming an invitation, in one statement. better-auth passes the endpoint it runs in
-           * through AsyncLocalStorage. Inside one, only the code sign-in, which proved the
-           * address, and a provider's return, whose provider verified it, may make an account;
-           * any other, and an address not verified, is refused rather than trusted, so a way in
-           * better-auth adds later makes nobody. Outside one is the admin route, which has written
-           * the operator's invitation first: a missing context grants nothing by itself, since a
-           * refactor or a background task loses it as easily. It refuses by throwing; a `false`
-           * would make `createUser` return null, and the sign-in fail on it with an empty 500. On
-           * a provider's return better-auth turns the throw into a redirect carrying its code.
+           * The gate (ADRs 0034, 0056): every path that makes a user runs it. better-auth passes
+           * the endpoint it runs in through AsyncLocalStorage. Inside one, only the code sign-in,
+           * which proved the address, and a provider's return, whose provider verified it, may
+           * make an account; any other, and an address not verified, is refused rather than
+           * trusted, so a way in better-auth adds later makes nobody. An invitation is claimed
+           * first, in one statement, in either mode: who invited whom is recorded, and an invited
+           * account never waits on the day's cap. Without one, an account is made only while
+           * sign-up is open, read as the gate runs, and only inside an endpoint. Outside one is
+           * the admin route, which has written the operator's invitation first: a missing context
+           * grants nothing by itself, since a refactor or a background task loses it as easily,
+           * and an open sign-up does not change that. It refuses by throwing; a `false` would
+           * make `createUser` return null, and the sign-in fail on it with an empty 500. On a
+           * provider's return better-auth turns the throw into a redirect carrying its code.
            * Whatever the client or the provider sent as a name or picture is dropped, so neither
            * rides in the session cookie, nor reaches a public profile: a profile is the member's
            * to fill.
@@ -459,25 +512,30 @@ export function createAuth(deps: Pick<ApiDeps, 'db' | 'mail' | 'clock' | 'config
             }
             const email = user.email.toLowerCase()
             const now = clock.now()
+            const admitted = { data: { name: '', image: null } }
             if (fromProvider) {
-              // Admitted by the code its sign-in carried, and nothing else (ADR 0036): a hold or
-              // an operator's invitation is for the code sign-in, which proves the address
-              // itself. Someone else may have placed the hold, and only a code from that mailbox
-              // should spend it.
+              // The code its sign-in carried is all it claims (ADR 0036): a hold or an
+              // operator's invitation is for the code sign-in, which proves the address itself.
+              // Someone else may have placed the hold, and only a code from that mailbox should
+              // spend it.
               const state = await getOAuthState().catch(() => null)
               const invite = state?.serverContext?.invite
-              if (typeof invite !== 'string') throw refuseReturn('invite_required')
-              if (!(await claimByCode(db, { code: invite, email, now }))) {
-                throw refuseReturn('invite_unavailable')
-              }
-              return { data: { name: '', image: null } }
+              const carried = typeof invite === 'string'
+              if (carried && (await claimByCode(db, { code: invite, email, now }))) return admitted
+              const signup = await signupState(db, now)
+              if (signup.open) return admitted
+              if (signup.paused) throw refuseReturn('signups_paused')
+              throw refuseReturn(carried ? 'invite_unavailable' : 'invite_required')
             }
-            if (!(await claimInvite(db, { email, now }))) {
-              throw refuse(
-                (await waitsOnFullCode(db, { email, now })) ? 'INVITE_USED' : 'INVITE_REQUIRED',
-              )
+            if (await claimInvite(db, { email, now })) return admitted
+            if (context) {
+              const signup = await signupState(db, now)
+              if (signup.open) return admitted
+              if (signup.paused) throw refuse('SIGNUPS_PAUSED')
             }
-            return { data: { name: '', image: null } }
+            throw refuse(
+              (await waitsOnFullCode(db, { email, now })) ? 'INVITE_USED' : 'INVITE_REQUIRED',
+            )
           },
           // The profile comes in the same step that creates the account (the Postgres stack did
           // this with a trigger on auth.users). The invitation is settled on its own: a failure
@@ -568,13 +626,36 @@ export function createAuth(deps: Pick<ApiDeps, 'db' | 'mail' | 'clock' | 'config
       },
       session: {
         create: {
-          // A user whose profile insert failed is never created again, so a sign-in repairs it.
-          // A repair that fails does not fail the sign-in: a member without a profile is better
-          // off than one who cannot sign in to be given one.
-          after: async (session) =>
-            repairMember(db, session.userId, clock.now()).catch((err) =>
+          /**
+           * No session for an account that was closed or suspended (ADRs 0058, 0059), whichever
+           * way in made it: a code, a password, a provider, or a reset. A closed account has none
+           * of those left, so this is its backstop; a suspended one keeps them and stops here. It
+           * refuses by throwing, as every hook must (`user.create.before`).
+           */
+          before: async (session, context) => {
+            const barred = await barredAs(db, session.userId)
+            if (barred) throw refuseBarred(barred, context?.path)
+          },
+          /**
+           * The standing read again, now the session exists. better-auth inserts the session after
+           * `before` has read the standing, and a suspension or a closing that commits in between
+           * ends every session the member has but this one, which would then be live for as long
+           * as it lasts. So a barred account's sessions are ended here, this one included, and the
+           * sign-in refused as `before` would: the throw comes before better-auth sets a cookie.
+           * A user whose profile insert failed is never created again, so a sign-in also repairs
+           * it. A repair that fails does not fail the sign-in: a member without a profile is
+           * better off than one who cannot sign in to be given one.
+           */
+          after: async (session, context) => {
+            const barred = await barredAs(db, session.userId)
+            if (barred) {
+              await db.delete(schema.session).where(eq(schema.session.userId, session.userId))
+              throw refuseBarred(barred, context?.path)
+            }
+            await repairMember(db, session.userId, clock.now()).catch((err) =>
               console.error('member not repaired', session.userId, err),
-            ),
+            )
+          },
         },
       },
     },
@@ -588,11 +669,25 @@ export function createAuth(deps: Pick<ApiDeps, 'db' | 'mail' | 'clock' | 'config
         storeOTP: 'hashed',
         async sendVerificationOTP({ email, otp, type }, ctx) {
           const address = email.toLowerCase()
-          const member = await first<{ email_verified: number; ui_locale: string | null }>(
+          const member = await first<{
+            email_verified: number
+            ui_locale: string | null
+            closed: number
+          }>(
             db,
-            sql`select u.email_verified, p.ui_locale from user u
-              left join profiles p on p.user_id = u.id where u.email = ${address}`,
+            sql`select u.email_verified, p.ui_locale, p.deleted_at is not null as closed
+              from user u left join profiles p on p.user_id = u.id where u.email = ${address}`,
           )
+          // A closed account's address is a placeholder (ADR 0058) that no mail reaches. Asked for
+          // in lowercase it matches no account, and an open sign-up would mail it a code that makes
+          // one; asked for as it is, it is a closed account's. Either way, whatever the kind, the
+          // code just stored is deleted unsent, and the endpoint answers as for any address.
+          if (isClosedEmail(address) || member?.closed) {
+            await ctx?.context.internalAdapter.deleteVerificationByIdentifier(
+              `${type}-otp-${address}`,
+            )
+            return
+          }
           // In the language the asking browser picked (its cookie), else the account's, else the
           // one its Accept-Language prefers (`mail-locale.ts`). better-auth hands an endpoint the
           // request's headers as `ctx.headers`, both for a request and for tela-api's own
@@ -624,22 +719,33 @@ export function createAuth(deps: Pick<ApiDeps, 'db' | 'mail' | 'clock' | 'config
           }
           // better-auth calls this for an address with no account only for a sign-in code, and
           // with sign-up on would mail one to any address it is given. Only an address the gate
-          // would admit is mailed; for any other the code just stored (the plugin's row
-          // `sign-in-otp-<address>`) is deleted, and the endpoint answers as it does for everyone.
-          // A throw here would refuse nothing: better-auth logs it and answers the same, with the
-          // code left in place.
+          // would admit is mailed: one that holds an invitation, or any while sign-up is open and
+          // the day's cap is not reached (ADR 0056). For any other the code just stored (the
+          // plugin's row `sign-in-otp-<address>`) is deleted, and the endpoint answers as it does
+          // for everyone. A throw here would refuse nothing: better-auth logs it and answers the
+          // same, with the code left in place.
           let invited = member !== undefined && !member.email_verified
+          let joining = false
           if (member === undefined) {
-            if (!(await holdsInvite(db, { email: address, now: clock.now() }))) {
+            const now = clock.now()
+            if (await holdsInvite(db, { email: address, now })) invited = true
+            else if ((await signupState(db, now)).open) joining = true
+            else {
               await ctx?.context.internalAdapter.deleteVerificationByIdentifier(
                 `sign-in-otp-${address}`,
               )
               return
             }
-            invited = true
           }
           await mail.send(
-            signInMail({ to: email, code: otp, publicUrl: config.publicUrl, invited, locale }),
+            signInMail({
+              to: email,
+              code: otp,
+              publicUrl: config.publicUrl,
+              invited,
+              joining,
+              locale,
+            }),
           )
         },
       }),

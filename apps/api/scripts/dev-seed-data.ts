@@ -377,6 +377,22 @@ export function seedStatements({ now, sites, actor }: SeedInput): string[] {
         '529 Overloaded', null)
       on conflict (kind, key) do nothing`)
 
+  // What members reported (ADR 0059): a profile two of them think is spam, a blog one thinks
+  // copies another's posts, and a report an operator already dismissed.
+  const reports: [string, string, string, string, string | null, number, string | null][] = [
+    ['seed_lucia', 'profile', 'seed_growth', 'spam', 'Course ads in every bio and note.', 20, null],
+    ['seed_priya', 'profile', 'seed_growth', 'spam', null, 6, null],
+    ['seed_ana', 'site', String(site(1).id), 'copyright', 'Posts copied from my blog.', 30, null],
+    ['seed_sam', 'profile', 'seed_megumi', 'other', 'Wrong picture?', 72, 'dismissed'],
+  ]
+  for (const [by, kind, key, reason, details, hours, state] of reports) {
+    const at = now - hours * HOUR
+    add(`insert into reports (reporter_id, target_kind, target_key, reason, details, state,
+        created_at, resolved_at, resolved_by) values (${q(by)}, ${q(kind)}, ${q(key)},
+        ${q(reason)}, ${q(details)}, ${q(state ?? 'open')}, ${at},
+        ${q(state ? at + 2 * HOUR : null)}, ${q(state ? owner : null)})`)
+  }
+
   // The runs' heartbeats (the tick writes its own), and what operators did.
   const beat = (name: string, at: number, info: unknown) =>
     add(`insert into ops_heartbeats (name, at, info) values (${q(name)}, ${at},

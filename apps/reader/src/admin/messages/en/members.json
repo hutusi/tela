@@ -12,11 +12,19 @@
     "rejected": "Hidden"
   },
   "people": {
-    "filters": { "admins": "Admins", "members": "Members" },
+    "filters": {
+      "admins": "Admins",
+      "members": "Members",
+      "suspended": "Suspended"
+    },
     "search": "Search by handle, name or email",
     "name": "Member",
     "columns": { "role": "Role", "signIn": "Sign-in", "joined": "Joined" },
-    "role": { "admin": "Admin", "member": "Member" },
+    "role": {
+      "admin": "Admin",
+      "member": "Member",
+      "suspended": "Suspended"
+    },
     "privacy": "Reading history, subscriptions and likes are private. Admins never see them.",
     "kv": {
       "email": "Email",
@@ -24,7 +32,8 @@
       "joined": "Joined",
       "invites": "Invites",
       "sessions": "Sessions",
-      "bio": "Bio"
+      "bio": "Bio",
+      "suspended": "Suspended"
     },
     "separator": ", ",
     "joinedBy": {
@@ -97,5 +106,64 @@
       "created": "Made, for {n, plural, one {# person} other {# people}}",
       "addUses": "Places raised from {from} to {to}"
     }
+  },
+  "reports": {
+    "filters": {
+      "open": "Open",
+      "resolved": "Resolved",
+      "dismissed": "Dismissed"
+    },
+    "search": "Search by name, handle, blog or the words given",
+    "name": "Reported",
+    "kinds": {
+      "profile": "Profile",
+      "blogroll": "Blogroll",
+      "site": "Blog",
+      "recommendation": "Note"
+    },
+    "sub": "{kind} · @{handle}",
+    "gone": "{kind} no longer shown",
+    "columns": {
+      "reason": "Reason",
+      "reporters": "Reported by",
+      "when": "Last reported"
+    },
+    "reasons": {
+      "spam": "Spam",
+      "abuse": "Abuse or harassment",
+      "impersonation": "Impersonation",
+      "copyright": "Copyright",
+      "illegal": "Illegal content",
+      "other": "Something else"
+    },
+    "reporters": "{n, plural, one {# member} other {# members}}",
+    "status": {
+      "open": "Open",
+      "resolved": "Resolved",
+      "dismissed": "Dismissed"
+    },
+    "standing": {
+      "ok": "In good standing",
+      "suspended": "Suspended",
+      "deleted": "Account closed"
+    },
+    "privacy": "Reporters are named here and nowhere else. Nobody they reported is told who did.",
+    "kv": {
+      "what": "What",
+      "page": "Public page",
+      "member": "Whose",
+      "reasons": "Reasons given",
+      "reporters": "Reported by",
+      "first": "First reported",
+      "last": "Last reported",
+      "decided": "Decided"
+    },
+    "notPublic": "Not shown to anyone now",
+    "decidedBy": "{when}, by @{handle}",
+    "openBlog": "Open the blog’s record",
+    "actOn": "Act on it",
+    "entries": "Reports",
+    "gonePerson": "a member whose account is gone",
+    "from": "From {url}"
   }
 }

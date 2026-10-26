@@ -12,6 +12,10 @@ import type { AdminHistoryEntry, AdminPerson, AdminRowBase } from './common'
 
 /** The error a claim an operator removed shows its claimant, and how the console tells it apart. */
 export const CLAIM_REMOVED_ERROR = 'removed by an operator'
+/** The error a claim its claimant let go shows (ADR 0058): a blog released from the Dashboard. */
+export const CLAIM_RELEASED_ERROR = 'released by its claimant'
+/** The error a claim shows once its claimant's account was closed (ADR 0058). */
+export const CLAIM_CLOSED_ERROR = 'its account was closed'
 
 /** A blog as every library ledger shows it. */
 export type AdminSiteRow = AdminRowBase & {
@@ -29,6 +33,8 @@ export type AdminSiteRow = AdminRowBase & {
   claimFailing: boolean
   primaryLang: string | null
   translationOptOut: boolean
+  /** "Only use what my feed provides" (ADR 0061): Tela fetches none of its pages. */
+  feedOnly: boolean
   topics: string[]
   /** When it was added: its first feed. */
   createdAt: number

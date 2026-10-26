@@ -79,6 +79,52 @@ describe("a blog's own settings", () => {
     expect(site?.translation_opt_out).toBe(1)
     expect(site?.seq).toBeGreaterThan(before)
   })
+
+  test('"Only use what my feed provides" is the claimant\'s, and no post waits for its page', async () => {
+    await blog(1, 'listed', reader.userId)
+    await blog(2, 'listed')
+    // A post on each blog is waiting for its page to be fetched for its full text.
+    await db.run(sql`update articles set extract_state = 'due'`)
+    const other = await signedIn(api, 'other@x.test')
+    expect((await put('/api/v1/sites/1/feed-only', { feedOnly: true }, other)).status).toBe(403)
+    expect((await put('/api/v1/sites/2/feed-only', { feedOnly: true })).status).toBe(403)
+    expect((await put('/api/v1/sites/x/feed-only', { feedOnly: true })).status).toBe(403)
+    const seq = async (table: 'sites' | 'articles', id: number) =>
+      (await first<{ seq: number }>(db, sql`select seq from ${sql.raw(table)} where id = ${id}`))
+        ?.seq ?? 0
+    const before = { site: await seq('sites', 1), article: await seq('articles', 1) }
+
+    const on = await put('/api/v1/sites/1/feed-only', { feedOnly: true })
+    expect(await on.json()).toEqual({ feedOnly: true })
+    const rows = await db.all<{ id: number; feed_only: number; extract_state: string }>(sql`
+      select s.id, s.feed_only, a.extract_state from sites s
+      join feeds f on f.site_id = s.id join articles a on a.feed_id = f.id order by s.id
+    `)
+    // The claimant's blog alone: its post is the feed's now, and the other blog's still waits.
+    expect(rows).toEqual([
+      { id: 1, feed_only: 1, extract_state: 'none' },
+      { id: 2, feed_only: 0, extract_state: 'due' },
+    ])
+    // Both rows sync: readers see the post settled, and the blog's row moved.
+    expect(await seq('sites', 1)).toBeGreaterThan(before.site)
+    expect(await seq('articles', 1)).toBeGreaterThan(before.article)
+    const dash = (await (await api.request('/api/v1/dashboard', { as: reader })).json()) as {
+      sites: { id: number; feedOnly: boolean }[]
+    }
+    expect(dash.sites).toMatchObject([{ id: 1, feedOnly: true }])
+
+    // Turned off, Tela may fetch its pages again; what it settled stays settled.
+    expect(await (await put('/api/v1/sites/1/feed-only', { feedOnly: false })).json()).toEqual({
+      feedOnly: false,
+    })
+    expect(
+      await first<{ feed_only: number; extract_state: string }>(
+        db,
+        sql`select s.feed_only, a.extract_state from sites s
+        join feeds f on f.site_id = s.id join articles a on a.feed_id = f.id where s.id = 1`,
+      ),
+    ).toEqual({ feed_only: 0, extract_state: 'none' })
+  })
 })
 
 describe('dashboard', () => {
@@ -583,7 +629,9 @@ describe('public', () => {
       expect(page.notes).toMatchObject([
         { note: 'lovely', person: { handle: 'other', displayName: 'Name other' } },
       ])
-      // Posts carry their titles in the launch languages, for each reader to pick theirs.
+      // Posts carry their titles in the launch languages, for each reader to pick theirs: those
+      // made from the title the post has now.
+      await db.run(sql`update articles set title_hash = 'h' where id = 1`)
       await db.run(sql`insert into article_titles (article_id, feed_id, lang, title, status, source_hash, updated_at, seq)
         values (1, 1, 'zh-Hans', '博客一的文章', 'done', 'h', 0, 1)`)
       const titled = (await (await get('/api/v1/public/sites/1')).json()) as {

@@ -27,6 +27,8 @@ export type AdminPersonRow = AdminRowBase & {
   invitesUsed: number
   sessions: number
   lastSeenAt: number | null
+  /** When an operator suspended them (ADR 0059); null while they are in good standing. */
+  suspendedAt: number | null
 }
 
 export type AdminPersonDetail = {

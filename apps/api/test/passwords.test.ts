@@ -7,7 +7,16 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test'
 import { createOperatorCode, first } from '@tela/data'
 import { sql } from 'drizzle-orm'
-import { codeFor, cookiesOf, createTestApi, type SignedIn, signedIn, type TestApi } from './helpers'
+import {
+  codeFor,
+  cookiesOf,
+  createTestApi,
+  memberHeaders,
+  operatorSets,
+  type SignedIn,
+  signedIn,
+  type TestApi,
+} from './helpers'
 
 const PASSWORD = 'correct horse battery'
 
@@ -85,6 +94,38 @@ describe('a password', () => {
     expect(await res.json()).toMatchObject({ user: { id: user.id } })
     const me = await api.request('/api/v1/me', { cookie: cookiesOf(res) })
     expect(await me.json()).toMatchObject({ id: user.id, email: 'new@x.test' })
+  })
+
+  test('while sign-up is open, is set the same way: after a code has proved the address', async () => {
+    const api = await createTestApi()
+    await operatorSets(api, 'signup.mode', 'open')
+    // A password alone still makes nobody, open or not.
+    expect((await door(api).logIn('new@x.test', PASSWORD)).status).toBe(401)
+    await expect(
+      api.auth.api.signUpEmail({ body: { email: 'new@x.test', password: PASSWORD, name: '' } }),
+    ).rejects.toMatchObject({ statusCode: 400 })
+    expect(await first(api.db, sql`select 1 as x from user`)).toBeUndefined()
+    const joined = await api.request('/api/v1/join', {
+      body: { email: 'new@x.test' },
+      headers: { 'cf-connecting-ip': '198.51.100.200' },
+    })
+    expect(joined.status).toBe(200)
+    const signIn = await api.request('/api/auth/sign-in/email-otp', {
+      body: { email: 'new@x.test', otp: codeFor(api, 'new@x.test') },
+      headers: { 'cf-connecting-ip': '198.51.100.201' },
+    })
+    expect(signIn.status).toBe(200)
+    const { user } = (await signIn.json()) as { user: { id: string } }
+    // As the sheet saves it: on the fresh session the code made, naming the member.
+    const saved = await api.request('/api/v1/account/password', {
+      body: { newPassword: PASSWORD },
+      cookie: cookiesOf(signIn),
+      headers: memberHeaders(user.id),
+    })
+    expect(saved.status).toBe(200)
+    const res = await door(api).logIn('new@x.test', PASSWORD)
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ user: { id: user.id } })
   })
 
   test('never makes an account: signing up with one is closed inside better-auth too', async () => {

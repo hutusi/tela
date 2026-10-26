@@ -1,8 +1,20 @@
 {
   "utc": "{time} UTC",
   "filters": {
-    "translation": { "blogs": "By blog", "jobs": "By job", "models": "By model" },
-    "system": { "dead": "Dead letters", "retrying": "Retrying", "resolved": "Resolved" }
+    "translation": {
+      "blogs": "By blog",
+      "jobs": "By job",
+      "models": "By model"
+    },
+    "system": {
+      "dead": "Dead letters",
+      "retrying": "Retrying",
+      "resolved": "Resolved"
+    },
+    "settings": {
+      "all": "All",
+      "changed": "Changed"
+    }
   },
   "translation": {
     "search": "Search blogs, jobs or models",
@@ -18,9 +30,14 @@
     "backgroundValue": "{used} / {budget}",
     "unlimited": "No daily limit",
     "unknownBudget": "The budget shows once the next tick reports it",
-    "memberCap": "Member cap",
-    "memberCapValue": "{cap} a day",
-    "nearCap": "{n, plural, =0 {Each member. Nobody came within an article of it this week.} one {Each member. # came within an article of it this week.} other {Each member. # came within an article of it this week.}}",
+    "paused": "Paused: the budget is 0",
+    "site": "Site budget today",
+    "memberUnlimited": "No limit",
+    "waiting": "Waiting for tomorrow",
+    "waitingSub": "Body translations put off to the next UTC day, past a member’s limit or the site budget.",
+    "memberCap": "Member limit",
+    "memberCapValue": "{cap, plural, one {# post a day} other {# posts a day}}",
+    "nearCap": "{n, plural, =0 {New body translations per member. Nobody reached it this week.} one {New body translations per member. # reached it this week.} other {New body translations per member. # reached it this week.}}",
     "perDay": "Tokens per day",
     "peak": "peak {n}",
     "today": "Today, so far",
@@ -97,5 +114,102 @@
     "pingedFail": "The dead-man’s switch was told of problems at {time}.",
     "kindsLabel": "Background work by kind",
     "load": "{held} held · {retrying} retrying"
+  },
+  "settings": {
+    "name": "Setting",
+    "search": "Search settings",
+    "separator": ", ",
+    "columns": {
+      "now": "Now",
+      "default": "Default",
+      "changed": "Changed"
+    },
+    "status": {
+      "default": "Default",
+      "changed": "Changed"
+    },
+    "kv": {
+      "now": "Now",
+      "default": "Default",
+      "changed": "Changed"
+    },
+    "never": "Never: the default holds",
+    "change": "Change it",
+    "number": "How many",
+    "percents": "Percentages, separated by commas",
+    "save": "Save",
+    "useDefault": "Use the default",
+    "unchanged": "That is what holds now.",
+    "errors": {
+      "number": "A whole number from 0 to {max}, please.",
+      "percents": "Whole percentages from 1 to 100, at most ten, separated by commas.",
+      "choice": "Pick one of the choices."
+    },
+    "note": "A change holds at once, with no deploy. Admins are exempt from the member limits, never from the site budget.",
+    "keys": {
+      "signup": {
+        "mode": {
+          "name": "Who may join",
+          "about": "Invitation only: every new account needs an invitation. Open: an email address proved with a code is enough.",
+          "choices": {
+            "open": "Open",
+            "invite": "Invitation only"
+          }
+        },
+        "maxPerDay": {
+          "name": "New accounts a day",
+          "about": "Past it, joining waits for the next UTC day, whatever the mode.",
+          "value": "{n, plural, =0 {None: joining is paused} other {# a day}}",
+          "none": "No limit"
+        }
+      },
+      "member": {
+        "translationsPerDay": {
+          "name": "New translations per member",
+          "about": "Posts a member's requests pay to translate in a UTC day. One already translated for someone else is free; the rest wait for the next day.",
+          "value": "{n, plural, =0 {None} other {# a day}}",
+          "none": "No limit"
+        },
+        "feedsPerDay": {
+          "name": "New feeds per member",
+          "about": "Feeds new to Tela a member adds in a UTC day, a claim's included. Following a feed Tela already has is free; an import's extra feeds wait for the next days.",
+          "value": "{n, plural, =0 {None} other {# a day}}",
+          "none": "No limit"
+        },
+        "maxSubscriptions": {
+          "name": "Subscriptions per account",
+          "about": "The most blogs one account follows.",
+          "value": "{n, plural, =0 {None} one {# blog} other {# blogs}}",
+          "none": "No limit"
+        }
+      },
+      "translation": {
+        "siteDailyTokens": {
+          "name": "Site translation budget",
+          "about": "Model tokens for everyone's titles and posts together in a UTC day. Once it is spent, translations already running finish and new ones wait for the next day.",
+          "value": "{n, plural, =0 {None: translation waits} other {{tokens} tokens a day}}",
+          "none": "No limit"
+        },
+        "backgroundDailyTokens": {
+          "name": "Title translation budget",
+          "about": "Model tokens for titles in a UTC day, inside the site budget. Unset, tela-jobs' LLM_DAILY_BUDGET_TOKENS decides, where 0 means no limit.",
+          "value": "{n, plural, =0 {None: titles wait} other {{tokens} tokens a day}}",
+          "none": "As tela-jobs' LLM_DAILY_BUDGET_TOKENS says"
+        }
+      },
+      "alerts": {
+        "signupsPerDay": {
+          "name": "Sign-up alert",
+          "about": "Mails you once when more than this many people join in a UTC day.",
+          "value": "{n, plural, =0 {At the first sign-up} other {More than # in a day}}",
+          "none": "Never"
+        },
+        "budgetPercents": {
+          "name": "Budget alerts",
+          "about": "Mails you once a day as the site budget's spending passes each share.",
+          "none": "Never"
+        }
+      }
+    }
   }
 }

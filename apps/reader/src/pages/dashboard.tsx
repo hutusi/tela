@@ -28,6 +28,8 @@ type Site = {
   /** Members whose first live subscription to the blog is under 30 days old. */
   newReaders30d: number
   translationOptOut: boolean
+  /** "Only use what my feed provides" (ADR 0061). Absent from a tela-api older than it. */
+  feedOnly?: boolean
   /** The whole blog's: every post, and every live like, recommendation and note on them. */
   totals: { posts: number; likes: number; recommendations: number; notes: number }
   /** The newest twenty. */
@@ -208,16 +210,19 @@ export function DashboardPage() {
           site={site}
           notes={dash.notes.filter((n) => n.siteId === site.id)}
           locale={locale}
-          onTranslation={(optOut) =>
+          onChange={(patch) =>
             setDash((held) =>
               held
                 ? {
                     ...held,
-                    sites: held.sites.map((s) =>
-                      s.id === site.id ? { ...s, translationOptOut: optOut } : s,
-                    ),
+                    sites: held.sites.map((s) => (s.id === site.id ? { ...s, ...patch } : s)),
                   }
                 : held,
+            )
+          }
+          onReleased={() =>
+            setDash((held) =>
+              held ? { ...held, sites: held.sites.filter((s) => s.id !== site.id) } : held,
             )
           }
         />
@@ -231,13 +236,16 @@ function SiteDashboard({
   site,
   notes,
   locale,
-  onTranslation,
+  onChange,
+  onReleased,
 }: {
   site: Site
   notes: Note[]
   locale: string
-  /** The blog's translation setting as tela-api answered it. */
-  onTranslation: (optOut: boolean) => void
+  /** The blog's settings as tela-api answered a change to one. */
+  onChange: (patch: Pick<Site, 'translationOptOut'> | Pick<Site, 'feedOnly'>) => void
+  /** The member let the blog go: it is no longer theirs to show here. */
+  onReleased: () => void
 }) {
   const t = useTranslations('dashboard')
   const ts = useTranslations('site')
@@ -278,8 +286,23 @@ function SiteDashboard({
         { method: 'PUT', body: { optOut: !on } },
       )
       if (status !== 200) return
-      onTranslation(body.optOut)
+      onChange({ translationOptOut: body.optOut })
       showToast(t(body.optOut ? 'translationOff' : 'translationOn', { blog: title }))
+    } finally {
+      saving.current = false
+    }
+  }
+  const setFeedOnly = async (on: boolean) => {
+    if (saving.current) return
+    saving.current = true
+    try {
+      const { status, body } = await apiJson<{ feedOnly: boolean }>(
+        `/api/v1/sites/${site.id}/feed-only`,
+        { method: 'PUT', body: { feedOnly: on } },
+      )
+      if (status !== 200) return
+      onChange({ feedOnly: body.feedOnly })
+      showToast(t(body.feedOnly ? 'feedOnlyOn' : 'feedOnlyOff', { blog: title }))
     } finally {
       saving.current = false
     }
@@ -444,7 +467,102 @@ function SiteDashboard({
             testId="dashboard-translate"
           />
         </SettingRow>
+        {/* A tela-api that does not say has no such switch yet: none is shown. */}
+        {site.feedOnly === undefined ? null : (
+          <SettingRow
+            label={t('feedOnly')}
+            hint={t.rich('feedOnlyHint', {
+              link: (chunks) => <Link to="/writers#opt-out">{chunks}</Link>,
+            })}
+          >
+            <Switch
+              checked={site.feedOnly}
+              onChange={(on) => void setFeedOnly(on).catch(() => undefined)}
+              label={t('feedOnly')}
+              testId="dashboard-feed-only"
+            />
+          </SettingRow>
+        )}
+        <ReleaseRow siteId={site.id} title={title} onReleased={onReleased} />
       </section>
     </section>
+  )
+}
+
+/**
+ * Release this blog (ADR 0058): the claim lets go, as an operator's removal does, and the blog
+ * keeps what its writer chose for it. Asked once more in place before it goes, since only a new
+ * claim brings it back.
+ */
+function ReleaseRow({
+  siteId,
+  title,
+  onReleased,
+}: {
+  siteId: number
+  title: string
+  onReleased: () => void
+}) {
+  const t = useTranslations('dashboard')
+  const [asking, setAsking] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [failed, setFailed] = useState(false)
+  const release = async () => {
+    setBusy(true)
+    setFailed(false)
+    try {
+      const res = await api(`/api/v1/claims/${siteId}/release`, { method: 'POST', body: {} })
+      if (!res.ok) throw new Error(`release: ${res.status}`)
+      showToast(t('release.done', { blog: title }))
+      onReleased()
+    } catch {
+      setFailed(true)
+    } finally {
+      setBusy(false)
+    }
+  }
+  const pill =
+    'rounded-full border border-thumb px-3.5 py-[7px] text-[13px] font-medium whitespace-nowrap hover:border-ink disabled:opacity-60'
+  return (
+    <SettingRow
+      label={t('release.label')}
+      hint={asking ? t('release.confirm', { blog: title }) : t('release.hint')}
+      testId="dashboard-release-row"
+    >
+      {asking ? (
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void release()}
+            className={`${pill} border-danger text-danger`}
+            data-testid="dashboard-release-confirm"
+          >
+            {t('release.yes')}
+          </button>
+          <button
+            type="button"
+            onClick={() => setAsking(false)}
+            className={`${pill} text-muted hover:text-ink`}
+          >
+            {t('release.keep')}
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setAsking(true)}
+          className={`${pill} text-ink`}
+          data-testid="dashboard-release"
+        >
+          {t('release.open')}
+        </button>
+      )}
+      {failed ? (
+        <p role="alert" className="m-0 basis-full text-[13px] text-danger">
+          {t('release.failed')}
+        </p>
+      ) : null}
+    </SettingRow>
   )
 }

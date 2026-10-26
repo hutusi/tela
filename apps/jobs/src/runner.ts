@@ -14,10 +14,11 @@ import {
   heartbeat,
   type Lease,
   type LeaseKind,
+  readSettings,
   startLease,
 } from '@tela/data'
 import type { Jobs } from '@tela/platform'
-import { MAX_ARTICLE_TRANSLATION_TOKENS } from '@tela/shared'
+import { MAX_ARTICLE_TRANSLATION_TOKENS, type Settings } from '@tela/shared'
 import type { AdminHeartbeats } from '@tela/shared/admin'
 import { sql } from 'drizzle-orm'
 import { type JobMessage, type JobQueues, KINDS, type KindSpec, type WorkContext } from './kinds'
@@ -76,13 +77,36 @@ async function dispatch(
 export type RunningConfig = NonNullable<AdminHeartbeats['config']>
 
 /**
- * The switches this deployment runs with, as the tick reports them. tela-api learns the
- * background budget from here rather than from a var of its own, which could drift from the one
- * tela-jobs spends by (the budget moved into this Worker's config for that reason).
+ * The day's token budgets as they hold (ADR 0057), null for no limit and 0 for paused: the
+ * background budget's setting, or with none stored the `LLM_DAILY_BUDGET_TOKENS` this Worker was
+ * deployed with (where 0 meant no limit); and the site's.
  */
-export function runningConfig(ctx: WorkContext): RunningConfig {
+export function effectiveBudgets(
+  settings: Pick<Settings, 'translation.backgroundDailyTokens' | 'translation.siteDailyTokens'>,
+  envBudget: number | undefined,
+): { background: number | null; site: number | null } {
+  const env = envBudget ?? 0
   return {
-    backgroundBudget: ctx.backgroundBudget ?? 0,
+    background: settings['translation.backgroundDailyTokens'] ?? (env > 0 ? env : null),
+    site: settings['translation.siteDailyTokens'],
+  }
+}
+
+/**
+ * The switches this deployment runs with, as the tick reports them. tela-api learns the
+ * background budget from here rather than from a var of its own, since only this Worker knows
+ * the env value a background budget of null falls back to. The budgets are the effective ones:
+ * null is no limit and 0 is paused, which no tick before ADR 0057 reported (`siteBudget` tells
+ * the two apart).
+ */
+export function runningConfig(
+  ctx: WorkContext,
+  settings: Parameters<typeof effectiveBudgets>[0],
+): RunningConfig {
+  const budgets = effectiveBudgets(settings, ctx.backgroundBudget)
+  return {
+    backgroundBudget: budgets.background,
+    siteBudget: budgets.site,
     maxArticleTokens: ctx.maxArticleTokens ?? MAX_ARTICLE_TRANSLATION_TOKENS,
     translator: ctx.translator !== undefined,
     relay: ctx.region?.relayAvailable === true,
@@ -128,7 +152,7 @@ export async function tick(ctx: JobsContext): Promise<TickReport> {
   await heartbeat(ctx.db, 'tick', ctx.clock.now(), {
     ...report,
     errors,
-    config: runningConfig(ctx),
+    config: runningConfig(ctx, await readSettings(ctx.db)),
   })
   return report
 }

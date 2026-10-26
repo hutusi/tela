@@ -14,6 +14,23 @@ function isHttp(u: URL): boolean {
   return u.protocol === 'http:' || u.protocol === 'https:'
 }
 
+/**
+ * What a member typed, as a URL: a bare host gets https. tela-jobs registers a feed under this
+ * form, and tela-api looks one up by it, so the two agree on which feed a typed address names.
+ */
+export function asUrl(input: string): URL | null {
+  const trimmed = input.trim()
+  if (!trimmed || trimmed.length > 2048) return null
+  try {
+    const url = new URL(
+      /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed.replace(/^\/+/, '')}`,
+    )
+    return isHttp(url) ? url : null
+  } catch {
+    return null
+  }
+}
+
 /** Resolve `href` against `base` and return an absolute http(s) URL, or null. */
 export function absoluteUrl(href: string, base?: string): string | null {
   const u = parse(href, base)

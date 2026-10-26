@@ -20,6 +20,14 @@ import {
   startLease,
 } from './leases'
 import {
+  type BroughtFeed,
+  duePendingFeeds,
+  feedRoom,
+  importFeeds,
+  memberAllowances,
+} from './queries/allowances'
+import { ERASE_CHUNK, ERASE_STEPS, finishErasure } from './queries/erase'
+import {
   adoptExtractedVersion,
   adoptReprocessedVersion,
   dueReprocessing,
@@ -45,13 +53,24 @@ import {
   listMemberCodes,
   listOperatorCodes,
   liveCode,
+  livePlaces,
   pruneInvites,
   revokeCode,
   revokeOperatorCode,
   settleInvite,
+  waitsOnFullCode,
 } from './queries/invites'
+import { closeAccount, releaseClaim } from './queries/leaving'
 import { avatarOf, dueGravatarChecks } from './queries/people'
 import { compactReadStates, fileImportedFeeds, writeImportFiling } from './queries/reader'
+import {
+  readSettings,
+  restoreSetting,
+  setSetting,
+  settingChangedSince,
+  settingSql,
+} from './queries/settings'
+import { nextUtcDay, signupState, utcDayStart } from './queries/signup'
 import {
   DISCOVER_REVIEW,
   ensureFeed,
@@ -60,7 +79,20 @@ import {
   recountReaders,
 } from './queries/sites'
 import { readPull, readTitles } from './queries/sync'
-import { failDueTitles, settleBodyUsage, upsertArticleTitle, utcDay } from './queries/translation'
+import {
+  admitBodyTranslation,
+  bodyAllowance,
+  CLOSED,
+  dueBodies,
+  dueTitles,
+  failDueTitles,
+  nextUtcMidnight,
+  readBodyAllowance,
+  settleBodyUsage,
+  takeOverBodyTranslation,
+  upsertArticleTitle,
+  utcDay,
+} from './queries/translation'
 import { feeds, sites } from './schema'
 import { bumpSeq, currentSeq, headSeq } from './seq'
 import { blockKey, seedBlockTranslations, writingMeanwhile } from './writes-meanwhile'
@@ -864,6 +896,109 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         next_fetch_at: T0 + MIN,
       })
     })
+
+    it('an extraction that ends after its post was settled adds and moves nothing (ADR 0061)', async () => {
+      const db = await makeDb()
+      await seedFeeds(db, ['h1'])
+      const v = (key: string, version: number, provenance: 'feed' | 'readability') => ({
+        version,
+        provenance,
+        contentKey: key,
+        bodyChars: 900,
+        excerpt: key,
+        wordCount: 150,
+        readingMinutes: 1,
+        lang: 'en',
+        rawKey: null,
+        sourceUrl: null,
+      })
+      await db.batch([
+        bumpSeq(db),
+        insertArticles(
+          db,
+          1,
+          [
+            {
+              dedupKey: 'g:1',
+              url: 'https://h1/p/1',
+              urlHost: 'h1',
+              title: 'Post 1',
+              author: null,
+              publishedAt: T0,
+              sourceLang: 'en',
+              excerpt: 'Excerpt',
+              contentKey: 'key-1',
+              wordCount: 100,
+              readingMinutes: 1,
+              extractState: 'due',
+              titleHash: 'th-1',
+            },
+          ],
+          T0,
+        ),
+        insertVersions(db, 1, [{ ...v('key-1', 1, 'feed'), dedupKey: 'g:1' }], T0),
+      ])
+      const id =
+        (await first<{ id: number }>(db, sql`select id from articles where dedup_key = 'g:1'`))
+          ?.id ?? 0
+      const state = () =>
+        first(
+          db,
+          sql`select current_version, content_key, extract_state,
+                (select count(*) from article_versions where article_id = ${id}) as versions
+              from articles where id = ${id}`,
+        )
+      // The writer turns "Only use what my feed provides" on while the page is being read.
+      await db.run(sql`update articles set extract_state = 'none' where id = ${id}`)
+      const extracted = v('extracted', 2, 'readability')
+      const late = await db.batch([
+        bumpSeq(db),
+        ...adoptExtractedVersion(
+          db,
+          { id, feedId: 1, currentVersion: 1 },
+          extracted,
+          extracted,
+          'th-e',
+          T0,
+        ),
+      ])
+      expect(pointed(late as unknown[], 2)).toBe(false)
+      expect(await state()).toEqual({
+        current_version: 1,
+        content_key: 'key-1',
+        extract_state: 'none',
+        versions: 1,
+      })
+      // A reprocess passes no extraction state: it moves the article whatever that is.
+      const remade = v('remade', 2, 'feed')
+      const reprocess = await db.batch([
+        bumpSeq(db),
+        ...adoptReprocessedVersion(db, { id, currentVersion: 1 }, remade, remade, 'th-r', T0),
+      ])
+      expect(pointed(reprocess as unknown[], 2)).toBe(true)
+      expect(await state()).toEqual({
+        current_version: 2,
+        content_key: 'remade',
+        extract_state: 'none',
+        versions: 2,
+      })
+      // Still due, an extraction lands, and clears a refusal it no longer is.
+      await db.run(
+        sql`update articles set extract_state = 'due', extract_refused = 1 where id = ${id}`,
+      )
+      const now = v('extracted', 3, 'readability')
+      const landed = await db.batch([
+        bumpSeq(db),
+        ...adoptExtractedVersion(db, { id, feedId: 1, currentVersion: 2 }, now, now, 'th-e', T0),
+      ])
+      expect(pointed(landed as unknown[], 2)).toBe(true)
+      expect(
+        await first(
+          db,
+          sql`select current_version, extract_state, extract_refused from articles where id = ${id}`,
+        ),
+      ).toEqual({ current_version: 3, extract_state: 'done', extract_refused: 0 })
+    })
   })
 
   describe('merging a feed into another (ADR 0028)', () => {
@@ -1310,6 +1445,120 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         { homeUrl: 'https://blog.example' },
         { homeUrl: 'https://new.example' },
       ])
+    })
+  })
+
+  describe("a member's allowances (ADR 0063)", () => {
+    const brought = (names: string[]): BroughtFeed[] =>
+      names.map((name) => ({
+        feedUrl: `https://${name}.example/feed`,
+        host: `${name}.example`,
+        origin: `https://${name}.example`,
+      }))
+    const seedMember = async (db: TelaDb, settings: Record<string, unknown> = {}) => {
+      await db.run(sql`insert into user (id, name, email, email_verified, created_at, updated_at)
+        values ('u1', 'u', 'u@x.y', 1, 0, 0)`)
+      await db.run(sql`insert into profiles (user_id, handle, created_at, updated_at)
+        values ('u1', 'reader_one', 0, 0)`)
+      for (const [key, value] of Object.entries(settings)) {
+        await db.run(sql`insert into settings (key, value, updated_at)
+          values (${key}, json(${JSON.stringify(value)}), 0)`)
+      }
+    }
+    const waiting = async (db: TelaDb) =>
+      (
+        (await db.all(
+          sql`select feed_url from pending_feeds where user_id = 'u1' order by feed_url`,
+        )) as { feed_url: string }[]
+      ).map((r) => r.feed_url.replace('https://', '').replace('.example/feed', ''))
+
+    // A room is a subquery in a LIMIT, and in `min()` beside another: both engines must read it.
+    it('an import adds the day’s new feeds, waits the rest within the cap, and leaves the rest out', async () => {
+      const db = await makeDb()
+      await seedMember(db, { 'member.feedsPerDay': 2, 'member.maxSubscriptions': 4 })
+      await ensureFeed(db, {
+        feedUrl: 'https://known.example/feed',
+        host: 'known.example',
+        siteOrigin: 'https://known.example',
+        now: T0,
+      })
+      const result = await importFeeds(db, {
+        userId: 'u1',
+        feeds: brought(['known', 'n1', 'n1', 'n2', 'n3', 'n4', 'n5']),
+        now: T0,
+      })
+      expect(result).toEqual({
+        subscribed: 3,
+        added: 2,
+        waiting: 1,
+        following: 3,
+        over: 2,
+        perDay: 2,
+        maxSubscriptions: 4,
+        exempt: false,
+      })
+      expect(await waiting(db)).toEqual(['n3'])
+      const added = await db.all(sql`
+        select feed_url, added_by from feeds where added_by is not null order by feed_url`)
+      expect(added).toEqual([
+        { feed_url: 'https://n1.example/feed', added_by: 'u1' },
+        { feed_url: 'https://n2.example/feed', added_by: 'u1' },
+      ])
+      // No site for a feed that waits: it is made when the feed is added.
+      expect(
+        await first(db, sql`select 1 as x from sites where home_url = 'https://n3.example'`),
+      ).toBe(undefined)
+    })
+
+    it('a feed new to Tela is created only within the room, and one Tela has is found regardless', async () => {
+      const db = await makeDb()
+      await seedMember(db, { 'member.feedsPerDay': 0 })
+      const feed = (name: string) => ({
+        feedUrl: `https://${name}.example/feed`,
+        host: `${name}.example`,
+        siteOrigin: `https://${name}.example`,
+        addedBy: 'u1',
+        now: T0,
+      })
+      const within = sql`${feedRoom('u1', T0)} > 0`
+      expect(await ensureFeed(db, { ...feed('new'), within })).toBe(null)
+      expect(await first(db, sql`select 1 as x from feeds`)).toBe(undefined)
+      expect(await first(db, sql`select 1 as x from sites`)).toBe(undefined)
+      await ensureFeed(db, { ...feed('known'), addedBy: null })
+      expect(await ensureFeed(db, { ...feed('known'), within })).toEqual({
+        feedId: 1,
+        siteId: 1,
+        created: false,
+      })
+      // An admin's room is never spent.
+      await db.run(sql`update profiles set is_admin = 1 where user_id = 'u1'`)
+      expect((await ensureFeed(db, { ...feed('new'), within }))?.created).toBe(true)
+    })
+
+    it('the waiting member is due when a run would move something', async () => {
+      const db = await makeDb()
+      await seedMember(db, { 'member.feedsPerDay': 1 })
+      await importFeeds(db, { userId: 'u1', feeds: brought(['a', 'b', 'c']), now: T0 })
+      const due = async (now: number) =>
+        ((await db.all(duePendingFeeds(now))) as { key: string }[]).map((r) => r.key)
+      expect(await due(T0)).toEqual([])
+      expect(await due(T0 + 86_400_000)).toEqual(['u1'])
+      // Suspended, their wait is kept and not swept; lifted, it is due again.
+      await db.run(sql`update profiles set suspended_at = ${T0} where user_id = 'u1'`)
+      expect(await due(T0 + 86_400_000)).toEqual([])
+      await db.run(sql`update profiles set suspended_at = null where user_id = 'u1'`)
+      expect(await due(T0 + 86_400_000)).toEqual(['u1'])
+    })
+    it('the usage answer counts the day, what waits and what is held', async () => {
+      const db = await makeDb()
+      await seedMember(db, { 'member.feedsPerDay': 1 })
+      await importFeeds(db, { userId: 'u1', feeds: brought(['a', 'b', 'c']), now: T0 })
+      expect(await memberAllowances(db, 'u1', T0)).toEqual({
+        exempt: false,
+        feeds: { perDay: 1, addedToday: 1, pending: 2 },
+        subscriptions: { max: 300, count: 1 },
+        translations: { perDay: 20, usedToday: 0, waiting: 0 },
+      })
     })
   })
 
@@ -1946,6 +2195,351 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
     })
   })
 
+  describe('translations that wait for their day (ADR 0057)', () => {
+    const D0 = utcDay(T0)
+    const D1 = utcDay(nextUtcMidnight(T0))
+    const MIDNIGHT = nextUtcMidnight(T0)
+
+    async function members(db: TelaDb, ...ids: string[]) {
+      for (const id of ids) {
+        await db.run(sql`insert into user (id, name, email, email_verified, created_at, updated_at)
+          values (${id}, ${id}, ${`${id}@x.y`}, 1, 0, 0)`)
+        await db.run(sql`insert into profiles (user_id, handle, created_at, updated_at)
+          values (${id}, ${`h_${id}`}, 0, 0)`)
+      }
+    }
+    const setting = (db: TelaDb, key: string, value: unknown) =>
+      db.run(sql`insert into settings (key, value, updated_at)
+        values (${key}, ${JSON.stringify(value)}, 0)
+        on conflict (key) do update set value = excluded.value`)
+    const ask = (userId: string, contentKey: string, reserve = 500, requestId = contentKey) => ({
+      contentKey,
+      lang: 'fr',
+      userId,
+      requestId: `${requestId}-${userId}`,
+      reserve,
+      now: T0,
+    })
+    const admit = async (db: TelaDb, a: ReturnType<typeof ask>) => {
+      const results = (await db.batch([
+        bumpSeq(db),
+        ...admitBodyTranslation(db, a),
+        readBodyAllowance(db, a.userId, T0),
+      ] as never)) as unknown as unknown[]
+      return bodyAllowance(results.at(-1), T0)
+    }
+    const row = (db: TelaDb, contentKey: string) =>
+      first<{ requested_by: string; reserved_day: string; due_at: number | null }>(
+        db,
+        sql`select requested_by, reserved_day, due_at from body_translations
+          where content_key = ${contentKey} and lang = 'fr'`,
+      )
+    const ledger = (db: TelaDb) =>
+      db.all(sql`select subject, day, reserved, requests from usage_daily order by subject, day`)
+
+    it("takes today while the member's count has room, then tomorrow, then nothing", async () => {
+      const db = await makeDb()
+      await members(db, 'u1')
+      await setting(db, 'member.translationsPerDay', 1)
+      expect((await admit(db, ask('u1', 'c1'))).usedToday).toBe(1)
+      expect(await row(db, 'c1')).toEqual({ requested_by: 'u1', reserved_day: D0, due_at: null })
+      // Today's one is taken: charged to tomorrow, due at the next UTC midnight.
+      const second = await admit(db, ask('u1', 'c2'))
+      expect([second.usedToday, second.usedTomorrow]).toEqual([1, 1])
+      expect(await row(db, 'c2')).toEqual({
+        requested_by: 'u1',
+        reserved_day: D1,
+        due_at: MIDNIGHT,
+      })
+      // Tomorrow's too: nothing is written, and the count says why.
+      const third = await admit(db, ask('u1', 'c3'))
+      expect(await row(db, 'c3')).toBe(undefined)
+      expect([third.perDay, third.usedTomorrow, third.exempt]).toEqual([1, 1, false])
+      // A conversion between the Chinese scripts is free: today, uncounted.
+      await admit(db, ask('u1', 'c4', 0))
+      expect(await row(db, 'c4')).toEqual({ requested_by: 'u1', reserved_day: D0, due_at: null })
+      expect(await ledger(db)).toEqual([
+        { subject: 'u1', day: D0, reserved: 500, requests: 1 },
+        { subject: 'u1', day: D1, reserved: 500, requests: 1 },
+      ])
+    })
+
+    it("puts off a request the site's tokens have no room for, but never an operator's", async () => {
+      const db = await makeDb()
+      await members(db, 'u1', 'op')
+      await db.run(sql`update profiles set is_admin = 1 where user_id = 'op'`)
+      await setting(db, 'translation.siteDailyTokens', 1000)
+      await setting(db, 'member.translationsPerDay', 1)
+      await db.run(sql`insert into usage_daily (subject, day, reserved, used)
+        values ('*', ${D0}, 0, 900)`)
+      await admit(db, ask('u1', 'c1', 200))
+      expect((await row(db, 'c1'))?.due_at).toBe(MIDNIGHT)
+      // The operator: today, past the member count and the site's tokens, and counted in both.
+      const op = await admit(db, ask('op', 'c2', 200))
+      await admit(db, ask('op', 'c3', 200))
+      expect((await row(db, 'c2'))?.reserved_day).toBe(D0)
+      expect((await row(db, 'c3'))?.due_at).toBe(null)
+      expect([op.exempt, op.perDay]).toEqual([true, null])
+      // A budget of 0 leaves room for nothing paid; null is no limit at all.
+      await setting(db, 'translation.siteDailyTokens', 0)
+      await admit(db, ask('u1', 'c4', 200))
+      expect(await row(db, 'c4')).toBe(undefined)
+      await setting(db, 'translation.siteDailyTokens', null)
+      await setting(db, 'member.translationsPerDay', null)
+      await admit(db, ask('u1', 'c5', 200))
+      expect((await row(db, 'c5'))?.due_at).toBe(null)
+    })
+
+    it('a request asked for again after it failed is put off like a new one', async () => {
+      const db = await makeDb()
+      await members(db, 'u1')
+      await setting(db, 'member.translationsPerDay', 1)
+      await db.run(sql`insert into body_translations (content_key, lang, state, updated_at)
+        values ('c0', 'fr', 'failed', 0)`)
+      await admit(db, ask('u1', 'c1'))
+      await admit(db, ask('u1', 'c0'))
+      expect(await row(db, 'c0')).toEqual({
+        requested_by: 'u1',
+        reserved_day: D1,
+        due_at: MIDNIGHT,
+      })
+    })
+
+    it('one member with room today takes a waiting request over, and only one of two racing', async () => {
+      const db = await makeDb()
+      await members(db, 'u1', 'u2', 'u3')
+      await setting(db, 'member.translationsPerDay', 1)
+      await admit(db, ask('u1', 'c0'))
+      await admit(db, ask('u1', 'c1'))
+      expect((await row(db, 'c1'))?.due_at).toBe(MIDNIGHT)
+      const old = {
+        requestId: 'c1-u1',
+        requestedBy: 'u1',
+        reservedDay: D1,
+        reservedTokens: 500,
+      }
+      // u2 and u3 both read the waiting row, and both ask to take it over.
+      for (const userId of ['u2', 'u3']) {
+        await db.batch([
+          bumpSeq(db),
+          ...takeOverBodyTranslation(db, ask(userId, 'c1', 500, 'take'), old),
+        ] as never)
+      }
+      expect(await row(db, 'c1')).toEqual({ requested_by: 'u2', reserved_day: D0, due_at: null })
+      expect(await ledger(db)).toEqual([
+        { subject: 'u1', day: D0, reserved: 500, requests: 1 },
+        { subject: 'u1', day: D1, reserved: 0, requests: 0 },
+        { subject: 'u2', day: D0, reserved: 500, requests: 1 },
+      ])
+    })
+
+    it('a member with no room today leaves a waiting request where it is', async () => {
+      const db = await makeDb()
+      await members(db, 'u1', 'u2')
+      await setting(db, 'member.translationsPerDay', 1)
+      await admit(db, ask('u1', 'c0'))
+      await admit(db, ask('u1', 'c1'))
+      await admit(db, ask('u2', 'c2'))
+      const old = { requestId: 'c1-u1', requestedBy: 'u1', reservedDay: D1, reservedTokens: 500 }
+      await db.batch([
+        bumpSeq(db),
+        ...takeOverBodyTranslation(db, ask('u2', 'c1', 500, 'take'), old),
+      ] as never)
+      expect(await row(db, 'c1')).toEqual({
+        requested_by: 'u1',
+        reserved_day: D1,
+        due_at: MIDNIGHT,
+      })
+    })
+
+    it('is due at its day, not before', async () => {
+      const db = await makeDb()
+      await members(db, 'u1')
+      await setting(db, 'member.translationsPerDay', 1)
+      await db.run(sql`insert into usage_daily (subject, day, requests) values ('u1', ${D0}, 1)`)
+      await admit(db, ask('u1', 'c1'))
+      const due = (now: number) => db.all(sql`select key from (${dueBodies(now)})`)
+      expect(await due(T0)).toEqual([])
+      expect(await due(MIDNIGHT)).toEqual([{ key: 'c1:fr' }])
+    })
+
+    it('gives the count back for a request that spent nothing, never below zero', async () => {
+      const db = await makeDb()
+      await members(db, 'u1')
+      await admit(db, ask('u1', 'c1'))
+      await admit(db, ask('u1', 'c2'))
+      await db.run(sql`update body_translations set used_tokens = 300 where content_key = 'c2'`)
+      await db.run(sql`insert into body_translations (content_key, lang, state, requested_by,
+          reserved_tokens, reserved_day, updated_at)
+        values ('c3', 'fr', 'running', 'u1', 500, ${D1}, 0)`)
+      const end = (contentKey: string) =>
+        db.batch([
+          settleBodyUsage(db, contentKey, 'fr', T0),
+          db.run(sql`update body_translations set state = 'done', reserved_tokens = 0
+            where content_key = ${contentKey}`),
+        ])
+      await end('c1')
+      await end('c2')
+      // Never counted on its day: given back from nothing, it stays at nothing.
+      await end('c3')
+      expect(
+        await db.all(sql`select day, reserved, used, requests from usage_daily order by day`),
+      ).toEqual([
+        { day: D0, reserved: 0, used: 300, requests: 1 },
+        { day: D1, reserved: 0, used: 0, requests: 0 },
+      ])
+    })
+
+    it("titles stop at the day's budgets: the site's, and the background's over the env", async () => {
+      const db = await makeDb()
+      await seedFeeds(db, ['blog.example'])
+      await db.run(sql`
+        insert into articles (id, feed_id, dedup_key, title, fetched_at, sort_at, title_hash)
+        values (1, 1, 'a', 'Old post', 1, 1, 'th-1'), (2, 1, 'b', 'New post', 2, 2, 'th-2')
+      `)
+      const due = (env: number) => db.all(sql`select key, ord from (${dueTitles(T0, env)})`)
+      // Newest first: the feed is ordered by its newest due post.
+      expect(await due(0)).toEqual([{ key: 1, ord: -2 }])
+      await db.run(sql`insert into usage_daily (subject, day, used) values ('*', ${D0}, 500),
+        ('u1', ${D0}, 400)`)
+      // No setting: the env budget, where 0 is no limit.
+      expect(await due(500)).toEqual([])
+      expect(await due(501)).toHaveLength(1)
+      // A stored budget wins over the env, and 0 pauses.
+      await setting(db, 'translation.backgroundDailyTokens', 0)
+      expect(await due(0)).toEqual([])
+      await setting(db, 'translation.backgroundDailyTokens', null)
+      // The site's day counts every subject: 900 of 900.
+      await setting(db, 'translation.siteDailyTokens', 900)
+      expect(await due(0)).toEqual([])
+      await setting(db, 'translation.siteDailyTokens', 901)
+      expect(await due(0)).toHaveLength(1)
+    })
+  })
+
+  describe('runtime settings (ADR 0056)', () => {
+    const value = (db: TelaDb, key: Parameters<typeof settingSql>[0]) =>
+      first<{ v: unknown }>(db, sql`select ${settingSql(key)} as v`)
+
+    it('reads the default until a row overrides it, a stored null included', async () => {
+      const db = await makeDb()
+      expect(await value(db, 'member.feedsPerDay')).toEqual({ v: 20 })
+      expect(await value(db, 'signup.mode')).toEqual({ v: 'invite' })
+      expect(await value(db, 'translation.backgroundDailyTokens')).toEqual({ v: null })
+      await db.batch([
+        ...setSetting(db, {
+          key: 'member.feedsPerDay',
+          value: null,
+          actor: null,
+          group: 'g1',
+          now: T0,
+        }),
+      ] as never)
+      // A stored null means no limit; it must not fall back to the default.
+      expect(await value(db, 'member.feedsPerDay')).toEqual({ v: null })
+      await db.batch([
+        ...setSetting(db, { key: 'signup.mode', value: 'open', actor: null, group: 'g2', now: T0 }),
+      ] as never)
+      expect(await value(db, 'signup.mode')).toEqual({ v: 'open' })
+      const all = await readSettings(db)
+      expect(all['member.feedsPerDay']).toBe(null)
+      expect(all['signup.mode']).toBe('open')
+      expect(all['member.maxSubscriptions']).toBe(300)
+    })
+
+    it('audits a change once, and an undo puts back the default by deleting the row', async () => {
+      const db = await makeDb()
+      const set = (v: number) =>
+        db.batch([
+          ...setSetting(db, {
+            key: 'member.translationsPerDay',
+            value: v,
+            actor: null,
+            group: `g${v}`,
+            now: T0,
+          }),
+        ] as never) as unknown as Promise<unknown[][]>
+      const first5 = await set(5)
+      expect(first5[1]).toEqual([{ key: 'member.translationsPerDay' }])
+      // The same value again changes nothing and logs nothing.
+      const again = await set(5)
+      expect(again[1]).toEqual([])
+      await set(7)
+      const log = await db.all<{ group_id: string; detail: string }>(
+        sql`select group_id, detail from admin_actions where action = 'setting.set' order by id`,
+      )
+      expect(log.map((r) => [r.group_id, JSON.parse(r.detail)])).toEqual([
+        ['g5', { from: { value: null, stored: 0 }, to: { value: 5, stored: true } }],
+        ['g7', { from: { value: 5, stored: 1 }, to: { value: 7, stored: true } }],
+      ])
+      // Undo the 7: still holding it, so not changed since; the 5 comes back.
+      expect(
+        await first(db, sql`select ${settingChangedSince('member.translationsPerDay', 7)} as c`),
+      ).toEqual({ c: 0 })
+      await db.batch([
+        restoreSetting(db, {
+          key: 'member.translationsPerDay',
+          from: { value: 5, stored: true },
+          now: T0,
+        }),
+      ] as never)
+      expect(await value(db, 'member.translationsPerDay')).toEqual({ v: 5 })
+      // Undo the 5: nothing was stored before it, so the row goes and the default holds.
+      await db.batch([
+        restoreSetting(db, {
+          key: 'member.translationsPerDay',
+          from: { value: null, stored: false },
+          now: T0,
+        }),
+      ] as never)
+      expect(await value(db, 'member.translationsPerDay')).toEqual({ v: 20 })
+      expect(await db.all(sql`select key from settings`)).toEqual([])
+    })
+
+    it('reads a stored value that no longer parses as the default', async () => {
+      const db = await makeDb()
+      await db.batch([
+        db.run(
+          sql`insert into settings (key, value, updated_at) values ('signup.mode', '"closed"', 0), ('nope', '1', 0)`,
+        ),
+      ] as never)
+      expect((await readSettings(db))['signup.mode']).toBe('invite')
+    })
+
+    it('reads the sign-up switch in one statement, and pauses an open day at its cap', async () => {
+      const db = await makeDb()
+      const set = (key: 'signup.mode' | 'signup.maxPerDay', value: string | number | null) =>
+        db.batch([
+          ...setSetting(db, { key, value, actor: null, group: key, now: T0 } as never),
+        ] as never)
+      const join = async (id: string, at: number) => {
+        await db.run(sql`insert into user (id, name, email, email_verified, created_at, updated_at)
+          values (${id}, '', ${`${id}@x.y`}, 1, 0, 0)`)
+        await db.run(sql`insert into profiles (user_id, handle, created_at, updated_at)
+          values (${id}, ${`h_${id}`}, ${at}, ${at})`)
+      }
+      expect(await signupState(db, T0)).toEqual({ mode: 'invite', paused: false, open: false })
+      await set('signup.mode', 'open')
+      expect(await signupState(db, T0)).toEqual({ mode: 'open', paused: false, open: true })
+      // Yesterday's accounts count for nothing today; today's count from the UTC midnight.
+      await set('signup.maxPerDay', 2)
+      await join('u0', utcDayStart(T0) - 1)
+      await join('u1', utcDayStart(T0))
+      expect((await signupState(db, T0)).paused).toBe(false)
+      await join('u2', T0)
+      expect(await signupState(db, T0)).toEqual({ mode: 'open', paused: true, open: false })
+      expect((await signupState(db, nextUtcDay(T0))).open).toBe(true)
+      // No limit is null; a limit of 0 takes nobody new at all.
+      await set('signup.maxPerDay', null)
+      expect((await signupState(db, T0)).open).toBe(true)
+      await set('signup.maxPerDay', 0)
+      expect((await signupState(db, nextUtcDay(T0))).paused).toBe(true)
+      // The invite mode is never paused: nothing it admits is counted.
+      await set('signup.mode', 'invite')
+      expect(await signupState(db, T0)).toEqual({ mode: 'invite', paused: false, open: false })
+    })
+  })
+
   describe('invite codes (ADR 0034)', () => {
     const HOUR = 60 * MIN
     const DAY = 24 * HOUR
@@ -2292,6 +2886,526 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
       const [pruned] = await db.batch([pruneInvites(db, T0)])
       expect(pruned).toHaveLength(2)
       expect((await rows(db)).map((r) => r.email)).toEqual(['lapsed@x.y', 'kept@x.y'])
+    })
+
+    it('admits nobody by the codes of a member suspended or closed, and again once they are back', async () => {
+      const db = await makeDb()
+      await joined(db, 'inviter')
+      await member(db, 'inviter', A)
+      await member(db, 'inviter', B)
+      await createOperatorCode(db, { code: 'WELCOME', maxUses: 5, now: T0 })
+      // A hold placed while the inviter could still invite.
+      expect(await hold(db, A, 'early@x.y')).toBe('held')
+      for (const column of ['suspended_at', 'deleted_at']) {
+        const set = (value: number | null) =>
+          db.run(sql`update profiles set ${sql.raw(column)} = ${value} where user_id = 'inviter'`)
+        await set(T0)
+        // Their codes are as good as withdrawn to every check, and the hold admits nobody: the
+        // gate asks for an invitation, not for a code with room.
+        expect(await livePlaces(db, A)).toBe(null)
+        expect(await liveCode(db, B)).toBe(null)
+        expect(await hold(db, B, 'late@x.y')).toBe('invalid')
+        expect(await holdsInvite(db, { email: 'early@x.y', now: T0 })).toBe(false)
+        expect(await claimInvite(db, { email: 'early@x.y', now: T0 })).toBe(null)
+        expect(await waitsOnFullCode(db, { email: 'early@x.y', now: T0 })).toBe(false)
+        expect(await claimByCode(db, { code: B, email: 'p@x.y', now: T0 })).toBe(null)
+        // The operator's codes stand on nobody's standing.
+        expect(await liveCode(db, 'WELCOME')).toEqual({ places: 5, full: false })
+        await set(null)
+      }
+      // Back in good standing, they admit as they did, the hold placed before included.
+      expect(await livePlaces(db, A)).toBe(1)
+      expect(await holdsInvite(db, { email: 'early@x.y', now: T0 })).toBe(true)
+      expect((await claimInvite(db, { email: 'early@x.y', now: T0 }))?.code).toBe(A)
+      expect((await claimByCode(db, { code: B, email: 'p@x.y', now: T0 }))?.code).toBe(B)
+      expect((await rows(db)).map((r) => [r.code, r.email, r.redeemed])).toEqual([
+        [A, 'early@x.y', 1],
+        [B, 'p@x.y', 1],
+      ])
+    })
+  })
+
+  describe('leaving Tela (ADR 0058)', () => {
+    const DAY = 24 * 60 * MIN
+    const today = utcDay(T0)
+    const A = 'A'.repeat(12)
+    const B = 'B'.repeat(12)
+    const C = 'C'.repeat(12)
+    /** A member with a little of everything, a friend who follows them back, and a stranger. */
+    async function world(db: TelaDb) {
+      const user = (id: string, email: string) =>
+        db.run(sql`insert into user (id, name, email, email_verified, image, created_at, updated_at)
+          values (${id}, 'Name', ${email}, 1, 'https://pic.example/x', 0, 0)`)
+      const profile = (id: string, handle: string) =>
+        db.run(sql`insert into profiles (user_id, handle, display_name, bio, avatar_key, is_admin,
+            public_subscriptions, public_likes, ui_locale, created_at, updated_at, seq)
+          values (${id}, ${handle}, 'Shown', 'A bio', ${`avatars/${id}/a.png`}, 0, 1, 1, 'fr', 0, 0,
+            ${currentSeq})`)
+      await db.batch([
+        bumpSeq(db),
+        // `lea_ver` and `leaxver`: a LIKE would take one for the other.
+        user('leaver', 'lea_ver@x.test'),
+        user('friend', 'leaxver@x.test'),
+        user('stranger', 'stranger@x.test'),
+        profile('leaver', 'leaver'),
+        profile('friend', 'friend'),
+        profile('stranger', 'stranger'),
+        db.run(sql`insert into sites (id, home_url, listing, claimed_by, claimed_at,
+            translation_opt_out, declared_feed_urls, created_at, updated_at, seq)
+          values (1, 'https://mine.example', 'listed', 'leaver', 0, 1,
+              '["https://mine.example/feed"]', 0, 0, ${currentSeq}),
+            (2, 'https://other.example', 'private', null, null, 0, '[]', 0, 0, ${currentSeq})`),
+        db.run(sql`insert into feeds (id, site_id, feed_url, host, next_fetch_at, added_by,
+            created_at, updated_at, seq)
+          values (1, 1, 'https://mine.example/feed', 'mine.example', 0, 'leaver', 0, 0, ${currentSeq}),
+            (2, 2, 'https://other.example/feed', 'other.example', 0, null, 0, 0, ${currentSeq})`),
+        db.run(sql`insert into articles (id, feed_id, dedup_key, title, fetched_at, sort_at,
+            content_key, like_count, recommend_count, seq)
+          values (1, 1, 'a1', 'One', 0, 0, 'ck1', 2, 2, ${currentSeq}),
+            (2, 2, 'a2', 'Two', 0, 0, 'ck2', 1, 0, ${currentSeq})`),
+        db.run(sql`insert into site_claims (id, site_id, user_id, method, token, status, created_at,
+            seq)
+          values (1, 1, 'leaver', 'meta', 't1', 'verified', 0, ${currentSeq}),
+            (2, 2, 'leaver', 'meta', 't2', 'pending', 0, ${currentSeq})`),
+        db.run(
+          sql`insert into leases (kind, key, owner, until) values ('site.claim', '2', 'w', ${T0 + MIN})`,
+        ),
+        db.run(sql`insert into follows (follower_id, followee_id, created_at, updated_at, seq)
+          values ('leaver', 'friend', 0, 0, ${currentSeq}), ('friend', 'leaver', 0, 0, ${currentSeq})`),
+        db.run(sql`insert into recommendations (user_id, article_id, note, created_at, updated_at,
+            seq)
+          values ('leaver', 1, 'my note', 0, 0, ${currentSeq}),
+            ('friend', 1, 'theirs', 0, 0, ${currentSeq})`),
+        db.run(sql`insert into user_article_states (user_id, article_id, read_at, liked_at, seq)
+          values ('leaver', 1, 0, 0, ${currentSeq}), ('friend', 1, 0, 0, ${currentSeq}),
+            ('leaver', 2, 0, 0, ${currentSeq})`),
+        db.run(sql`insert into subscriptions (user_id, feed_id, created_at, updated_at, deleted_at,
+            seq)
+          values ('leaver', 1, 0, 0, null, ${currentSeq}), ('leaver', 2, 0, 0, 5, ${currentSeq}),
+            ('friend', 1, 0, 0, null, ${currentSeq})`),
+        db.run(sql`insert into highlights (id, user_id, article_id, content_key, side, leaf_id,
+            start, "end", quote, note, created_at, updated_at, seq)
+          values ('h1', 'leaver', 1, 'ck1', 'original', 'b1', 0, 3, 'One', 'mine', 0, 0,
+            ${currentSeq})`),
+        db.run(sql`insert into blogrolls (id, user_id, name, description, is_public, public_since,
+            created_at, updated_at, seq)
+          values ('r1', 'leaver', 'My reads', 'All I read', 1, 0, 0, 0, ${currentSeq})`),
+        db.run(sql`insert into blogroll_blogs (blogroll_id, feed_id, user_id, note, note_at,
+            added_at, updated_at, seq)
+          values ('r1', 2, 'leaver', 'why', 1, 0, 0, ${currentSeq})`),
+        db.run(sql`insert into user_prefs (user_id, key, value_json, updated_at, seq)
+          values ('leaver', 'theme', '"dark"', 0, ${currentSeq})`),
+        db.run(sql`insert into session (id, expires_at, token, created_at, updated_at, user_id)
+          values ('s1', ${T0 + DAY}, 'tok1', 0, 0, 'leaver'),
+            ('s2', ${T0 + DAY}, 'tok2', 0, 0, 'friend')`),
+        db.run(sql`insert into account (id, account_id, provider_id, user_id, password, created_at,
+            updated_at)
+          values ('a1', 'leaver', 'credential', 'leaver', 'hash', 0, 0),
+            ('a2', 'friend', 'credential', 'friend', 'hash', 0, 0)`),
+        db.run(sql`insert into verification (id, identifier, value, expires_at, created_at,
+            updated_at)
+          values ('v1', 'sign-in-otp-lea_ver@x.test', 'h:0', ${T0 + DAY}, 0, 0),
+            ('v2', 'sign-in-otp-leaxver@x.test', 'h:0', ${T0 + DAY}, 0, 0),
+            ('v3', 'stateabc',
+              ${JSON.stringify({ link: { email: 'lea_ver@x.test', userId: 'leaver' } })},
+              ${T0 + DAY}, 0, 0),
+            ('v4', 'statedef', 'not json', ${T0 + DAY}, 0, 0)`),
+        db.run(sql`insert into action_limits (key, window_start, count)
+          values ('otpSend:lea_ver@x.test', 0, 1), ('export:leaver', 0, 1),
+            ('otpSend:leaxver@x.test', 0, 1), ('export:friend', 0, 1)`),
+        // Two codes of its own, one a stranger holds and one a stranger joined by; it joined by
+        // the friend's.
+        db.run(sql`insert into invite_codes (code, created_by, max_uses, created_at)
+          values (${A}, 'leaver', 1, 0), (${B}, 'friend', 1, 0), (${C}, 'leaver', 1, 0)`),
+        db.run(sql`insert into invite_redemptions (code, email, expires_at, redeemed_at, user_id,
+            settled_at, created_at)
+          values (${A}, 'held@x.test', ${T0 + DAY}, null, null, null, 0),
+            (${B}, 'lea_ver@x.test', 0, 0, 'leaver', 0, 0),
+            (${C}, 'stranger@x.test', 0, 0, 'stranger', 0, 0)`),
+        // A translation waiting, its tokens reserved, and one running.
+        db.run(sql`insert into body_translations (content_key, lang, state, request_id,
+            requested_by, reserved_tokens, reserved_day, used_tokens, updated_at, seq)
+          values ('ck1', 'fr', 'requested', 'r1', 'leaver', 5000, ${today}, 0, 0, ${currentSeq}),
+            ('ck2', 'fr', 'running', 'r2', 'leaver', 3000, ${today}, 100, 0, ${currentSeq})`),
+        db.run(sql`insert into usage_daily (subject, day, reserved, used)
+          values ('leaver', ${today}, 8000, 100)`),
+        db.run(sql`insert into pending_feeds (user_id, feed_url, queued_at)
+          values ('leaver', 'https://later.example/feed', 0)`),
+      ] as never)
+    }
+    const close = (db: TelaDb, refuseAdmin = true) =>
+      closeAccount(db, {
+        userId: 'leaver',
+        actor: 'leaver',
+        action: 'account.delete',
+        group: 'g1',
+        now: T0,
+        refuseAdmin,
+      })
+    const rows = (db: TelaDb, query: ReturnType<typeof sql>) =>
+      db.all<Record<string, unknown>>(query)
+    const count = (db: TelaDb, query: ReturnType<typeof sql>) =>
+      first<{ n: number }>(db, sql`select count(*) as n from ${query}`).then((r) => r?.n ?? 0)
+
+    /** Every step to its end, each chunk a batch, then the last one: what `member.erase` does. */
+    async function erase(db: TelaDb, now: number) {
+      const sizes: number[] = []
+      for (const step of ERASE_STEPS) {
+        for (;;) {
+          const chunk = step(db, 'leaver', now)
+          const results = (await db.batch([
+            bumpSeq(db),
+            ...chunk.statements,
+          ] as never)) as unknown as unknown[][]
+          const took = (results[1 + chunk.counted] ?? []).length
+          sizes.push(took)
+          if (took < ERASE_CHUNK) break
+        }
+      }
+      const finish = (await db.batch([
+        bumpSeq(db),
+        ...finishErasure(db, 'leaver', now),
+      ] as never)) as unknown as unknown[][]
+      return { sizes, erased: (finish.at(-1) ?? []).length > 0 }
+    }
+
+    it('empties what others can see and ends every way in, in one batch, once', async () => {
+      const db = await makeDb()
+      await world(db)
+      const before = await headSeq(db)
+      expect(await close(db)).toBe('closed')
+      expect(await close(db)).toBe('already')
+      expect(await rows(db, sql`select actor_id, action, target_key from admin_actions`)).toEqual([
+        { actor_id: 'leaver', action: 'account.delete', target_key: 'leaver' },
+      ])
+      // The handle stays; everything shown with it goes.
+      expect(
+        await rows(
+          db,
+          sql`select handle, display_name, bio, avatar_key, public_subscriptions,
+          public_likes, ui_locale, is_admin, gravatar, deleted_at, seq > ${before} as moved
+          from profiles where user_id = 'leaver'`,
+        ),
+      ).toEqual([
+        {
+          handle: 'leaver',
+          display_name: null,
+          bio: null,
+          avatar_key: null,
+          public_subscriptions: 0,
+          public_likes: 0,
+          ui_locale: null,
+          is_admin: 0,
+          gravatar: 0,
+          deleted_at: T0,
+          moved: 1,
+        },
+      ])
+      expect(await rows(db, sql`select email, name, image from user where id = 'leaver'`)).toEqual([
+        { email: 'deleted+leaver@deleted.invalid', name: '', image: null },
+      ])
+      expect(
+        await rows(db, sql`select follower_id, deleted_at from follows order by follower_id`),
+      ).toEqual([
+        { follower_id: 'friend', deleted_at: T0 },
+        { follower_id: 'leaver', deleted_at: T0 },
+      ])
+      expect(
+        await rows(db, sql`select user_id, note, deleted_at from recommendations order by user_id`),
+      ).toEqual([
+        { user_id: 'friend', note: 'theirs', deleted_at: null },
+        { user_id: 'leaver', note: null, deleted_at: T0 },
+      ])
+      expect(
+        await rows(db, sql`select name, description, is_public, deleted_at from blogrolls`),
+      ).toEqual([{ name: '-', description: '', is_public: 0, deleted_at: T0 }])
+      expect(await rows(db, sql`select note from blogroll_blogs`)).toEqual([{ note: null }])
+      expect(await rows(db, sql`select user_id from session`)).toEqual([{ user_id: 'friend' }])
+      expect(await rows(db, sql`select user_id from account`)).toEqual([{ user_id: 'friend' }])
+      expect(await rows(db, sql`select id from verification order by id`)).toEqual([
+        { id: 'v2' },
+        { id: 'v4' },
+      ])
+      expect(await rows(db, sql`select key from action_limits order by key`)).toEqual([
+        { key: 'export:friend' },
+        { key: 'otpSend:leaxver@x.test' },
+      ])
+      // Its codes revoked and their hold gone; the invitation it joined by keeps its place and
+      // its member, not its address; the stranger it invited keeps theirs.
+      expect(await rows(db, sql`select code, revoked_at from invite_codes order by code`)).toEqual([
+        { code: A, revoked_at: T0 },
+        { code: B, revoked_at: null },
+        { code: C, revoked_at: T0 },
+      ])
+      expect(
+        await rows(
+          db,
+          sql`select code, email, user_id, redeemed_at from invite_redemptions
+          order by code`,
+        ),
+      ).toEqual([
+        { code: B, email: 'deleted:leaver', user_id: 'leaver', redeemed_at: 0 },
+        { code: C, email: 'stranger@x.test', user_id: 'stranger', redeemed_at: 0 },
+      ])
+      // Its blog let go with its opt-out kept; its pending claim failed and its check cut off.
+      expect(
+        await rows(
+          db,
+          sql`select claimed_by, declared_feed_urls, translation_opt_out, listing
+          from sites where id = 1`,
+        ),
+      ).toEqual([
+        { claimed_by: null, declared_feed_urls: '[]', translation_opt_out: 1, listing: 'private' },
+      ])
+      expect(
+        await rows(db, sql`select id, status, overruled_at from site_claims order by id`),
+      ).toEqual([
+        { id: 1, status: 'failed', overruled_at: null },
+        { id: 2, status: 'failed', overruled_at: null },
+      ])
+      expect(await rows(db, sql`select key from leases`)).toEqual([])
+      // The waiting translation ended unpaid, its reservation given back; the running one runs.
+      expect(
+        await rows(
+          db,
+          sql`select content_key, state, requested_by, reserved_tokens
+          from body_translations order by content_key`,
+        ),
+      ).toEqual([
+        { content_key: 'ck1', state: 'failed', requested_by: 'leaver', reserved_tokens: 0 },
+        { content_key: 'ck2', state: 'running', requested_by: 'leaver', reserved_tokens: 3000 },
+      ])
+      expect(await rows(db, sql`select reserved, used from usage_daily`)).toEqual([
+        { reserved: 3000, used: 100 },
+      ])
+      expect(await count(db, sql`pending_feeds`)).toBe(0)
+    })
+
+    it("refuses an admin's account and writes nothing", async () => {
+      const db = await makeDb()
+      await world(db)
+      await db.run(sql`update profiles set is_admin = 1 where user_id = 'leaver'`)
+      expect(await close(db)).toBe('admin')
+      expect(await count(db, sql`session`)).toBe(2)
+      expect(await count(db, sql`admin_actions`)).toBe(0)
+      // A restore re-applying a closure does not ask.
+      expect(await close(db, false)).toBe('closed')
+    })
+
+    it('revokes again a code minted as the account closed, and drops its holds', async () => {
+      const db = await makeDb()
+      await world(db)
+      await close(db)
+      // A tab of the member's, its session copy still good, made a code after the closing.
+      const D = 'D'.repeat(12)
+      await db.batch([
+        db.run(sql`insert into invite_codes (code, created_by, max_uses, created_at)
+          values (${D}, 'leaver', 1, ${T0 + MIN})`),
+        db.run(sql`insert into invite_redemptions (code, email, expires_at, created_at)
+          values (${D}, 'late@x.test', ${T0 + DAY}, ${T0 + MIN})`),
+      ] as never)
+      await erase(db, T0 + DAY)
+      expect(
+        await rows(
+          db,
+          sql`select code, revoked_at from invite_codes where created_by = 'leaver'
+          order by code`,
+        ),
+      ).toEqual([
+        { code: A, revoked_at: T0 },
+        { code: C, revoked_at: T0 },
+        { code: D, revoked_at: T0 + DAY },
+      ])
+      expect(await count(db, sql`invite_redemptions where code = ${D}`)).toBe(0)
+      // Who joined by the member's codes stays, as the closing left it.
+      expect(await count(db, sql`invite_redemptions where code = ${C}`)).toBe(1)
+    })
+
+    it('erases what only its devices held, recounting what others see first', async () => {
+      const db = await makeDb()
+      await world(db)
+      await close(db)
+      const before = await headSeq(db)
+      const first1 = await erase(db, T0 + DAY)
+      // A translation still runs for it: everything else is gone, but it is not stamped yet.
+      expect(first1.erased).toBe(false)
+      for (const table of [
+        'user_article_states',
+        'recommendations',
+        'highlights',
+        'subscriptions',
+        'blogrolls',
+        'blogroll_blogs',
+        'user_prefs',
+        'site_claims',
+        'pending_feeds',
+      ]) {
+        expect(await count(db, sql`${sql.raw(table)} where user_id = 'leaver'`)).toBe(0)
+      }
+      // Its own follows go; the friend's of it stays deleted, for a device that has not pulled.
+      expect(await rows(db, sql`select follower_id, deleted_at from follows`)).toEqual([
+        { follower_id: 'friend', deleted_at: T0 },
+      ])
+      expect(
+        await rows(
+          db,
+          sql`select id, like_count, recommend_count, seq > ${before} as moved
+          from articles order by id`,
+        ),
+      ).toEqual([
+        { id: 1, like_count: 1, recommend_count: 1, moved: 1 },
+        { id: 2, like_count: 0, recommend_count: 0, moved: 1 },
+      ])
+      expect(await rows(db, sql`select reader_count from sites where id = 1`)).toEqual([
+        { reader_count: 1 },
+      ])
+      expect(await rows(db, sql`select added_by from feeds where id = 1`)).toEqual([
+        { added_by: null },
+      ])
+      // The running translation keeps its member until it ends, and so does the ledger.
+      expect(await count(db, sql`usage_daily where subject = 'leaver'`)).toBe(1)
+      await db.run(sql`update body_translations set state = 'done' where content_key = 'ck2'`)
+      expect((await erase(db, T0 + DAY)).erased).toBe(true)
+      expect(await count(db, sql`usage_daily where subject = 'leaver'`)).toBe(0)
+      expect(await count(db, sql`body_translations where requested_by is not null`)).toBe(0)
+      expect(await rows(db, sql`select erased_at from profiles where user_id = 'leaver'`)).toEqual([
+        { erased_at: T0 + DAY },
+      ])
+      // Run again, it finds nothing and changes nothing.
+      const third = await erase(db, T0 + 2 * DAY)
+      expect(third.sizes.every((n) => n === 0)).toBe(true)
+      expect(third.erased).toBe(false)
+    })
+
+    it("keeps every day's site total: the ledger is folded into no member's, never dropped", async () => {
+      const db = await makeDb()
+      await world(db)
+      const yesterday = utcDay(T0 - DAY)
+      await db.run(sql`insert into usage_daily (subject, day, reserved, used, requests)
+        values ('leaver', ${yesterday}, 0, 4000, 2), ('friend', ${today}, 0, 700, 1),
+          (${CLOSED}, ${today}, 0, 50, 1)`)
+      await close(db)
+      await db.run(sql`update body_translations set state = 'done' where content_key = 'ck2'`)
+      const totals = () =>
+        rows(
+          db,
+          sql`select day, sum(used + reserved) as n from usage_daily group by day order by day`,
+        )
+      const before = await totals()
+      expect((await erase(db, T0 + DAY)).erased).toBe(true)
+      expect(await totals()).toEqual(before)
+      expect(
+        await rows(
+          db,
+          sql`select subject, day, reserved, used, requests from usage_daily
+          order by subject, day`,
+        ),
+      ).toEqual([
+        { subject: 'friend', day: today, reserved: 0, used: 700, requests: 1 },
+        { subject: CLOSED, day: yesterday, reserved: 0, used: 4000, requests: 2 },
+        { subject: CLOSED, day: today, reserved: 3000, used: 150, requests: 1 },
+      ])
+      // A run again folds nothing twice.
+      await erase(db, T0 + 2 * DAY)
+      expect(await totals()).toEqual(before)
+    })
+
+    it("takes thousands of a member's rows in chunks within D1's limits", async () => {
+      const db = await makeDb()
+      await world(db)
+      const ids = JSON.stringify(Array.from({ length: 2000 }, (_, i) => i + 100))
+      const each = (select: ReturnType<typeof sql>) =>
+        sql`${select} from json_each(${ids}) where true`
+      await db.batch([
+        bumpSeq(db),
+        db.run(sql`insert into feeds (id, site_id, feed_url, host, next_fetch_at, created_at,
+            updated_at, seq)
+          ${each(sql`select value, 2, 'https://other.example/f' || value, 'other.example', 0, 0, 0,
+            ${currentSeq}`)}`),
+        db.run(sql`insert into articles (id, feed_id, dedup_key, title, fetched_at, sort_at,
+            like_count, recommend_count, seq)
+          ${each(sql`select value, 2, 'k' || value, 'P', 0, 0, 2, 1, ${currentSeq}`)}`),
+        db.run(sql`insert into user_article_states (user_id, article_id, read_at, liked_at, seq)
+          ${each(sql`select 'leaver', value, 0, 0, ${currentSeq}`)}`),
+        db.run(sql`insert into user_article_states (user_id, article_id, read_at, liked_at, seq)
+          ${each(sql`select 'friend', value, 0, 0, ${currentSeq}`)}`),
+        db.run(sql`insert into recommendations (user_id, article_id, note, created_at, updated_at,
+            seq)
+          ${each(sql`select 'leaver', value, 'n', 0, 0, ${currentSeq}`)}`),
+        db.run(sql`insert into highlights (id, user_id, article_id, content_key, side, leaf_id,
+            start, "end", quote, created_at, updated_at, seq)
+          ${each(sql`select 'h' || value, 'leaver', value, 'c', 'original', 'b', 0, 1, 'x', 0, 0,
+            ${currentSeq}`)}`),
+        db.run(sql`insert into subscriptions (user_id, feed_id, created_at, updated_at, seq)
+          ${each(sql`select 'leaver', value, 0, 0, ${currentSeq}`)}`),
+        db.run(sql`insert into applied_mutations (user_id, mid, applied_at)
+          ${each(sql`select 'leaver', 'm' || value, 0`)}`),
+        db.run(sql`insert into llm_calls (job, user_id, model, input_tokens, output_tokens,
+            latency_ms, created_at)
+          ${each(sql`select 'translate.body', 'leaver', 'm', 1, 1, 1, 0`)}`),
+      ] as never)
+      expect(await close(db)).toBe('closed')
+      const before = await headSeq(db)
+      await db.run(sql`update body_translations set state = 'done' where content_key = 'ck2'`)
+      const { sizes, erased } = await erase(db, T0 + DAY)
+      expect(erased).toBe(true)
+      expect(Math.max(...sizes)).toBe(ERASE_CHUNK)
+      // Never more than a chunk of posts in one seq, so others' pulls page as ever.
+      const most = await first<{ most: number }>(
+        db,
+        sql`select max(n) as most from (select count(*) as n from articles
+          where seq > ${before} group by seq)`,
+      )
+      expect((most?.most ?? 0) <= ERASE_CHUNK).toBe(true)
+      expect(
+        await count(
+          db,
+          sql`articles where id >= 100 and (like_count <> 1 or recommend_count <> 0)`,
+        ),
+      ).toBe(0)
+      expect(await count(db, sql`llm_calls where user_id is not null`)).toBe(0)
+      for (const table of [
+        'user_article_states',
+        'highlights',
+        'subscriptions',
+        'applied_mutations',
+      ]) {
+        expect(await count(db, sql`${sql.raw(table)} where user_id = 'leaver'`)).toBe(0)
+      }
+    })
+
+    it('releases a claim: only an operator takes back the opt-out and overrules it', async () => {
+      for (const by of ['operator', 'member'] as const) {
+        const db = await makeDb()
+        await world(db)
+        const target = by === 'operator' ? { claimId: 1 } : { siteId: 1, userId: 'leaver' }
+        const release = async () =>
+          (await db.batch([
+            bumpSeq(db),
+            ...releaseClaim(db, { ...target, by, now: T0 }),
+          ] as never)) as unknown as unknown[][]
+        expect((await release())[1]).toEqual([{ id: 1 }])
+        expect(
+          await rows(
+            db,
+            sql`select claimed_by, translation_opt_out, listing from sites
+            where id = 1`,
+          ),
+        ).toEqual([
+          { claimed_by: null, translation_opt_out: by === 'operator' ? 0 : 1, listing: 'private' },
+        ])
+        expect(
+          await rows(db, sql`select status, error, overruled_at from site_claims where id = 1`),
+        ).toEqual([
+          {
+            status: 'failed',
+            error: by === 'operator' ? 'removed by an operator' : 'released by its claimant',
+            overruled_at: by === 'operator' ? T0 : null,
+          },
+        ])
+        // A second release finds no verified claim and moves no blog.
+        expect((await release())[1]).toEqual([])
+      }
     })
   })
 

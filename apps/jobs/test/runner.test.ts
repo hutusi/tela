@@ -101,10 +101,13 @@ describe('tick and runJob', () => {
       'article.extract': 0,
       'article.reprocess': 0,
       'member.gravatar': 0,
+      'member.pendingFeeds': 0,
+      'member.erase': 0,
       'site.claim': 0,
       errors: {},
       config: {
         backgroundBudget: 2_000_000,
+        siteBudget: 10_000_000,
         maxArticleTokens: 40_000,
         translator: false,
         relay: false,
@@ -112,6 +115,27 @@ describe('tick and runJob', () => {
         assets: false,
       },
     })
+  })
+
+  test('the tick reports the budgets as they hold: a stored setting over the env, 0 a pause', async () => {
+    const config = async (backgroundBudget: number) => {
+      await tick({ ...ctx, backgroundBudget })
+      const beat = await first<{ info: string }>(
+        db,
+        sql`select info from ops_heartbeats where name = 'tick'`,
+      )
+      const { config } = JSON.parse(beat?.info ?? '{}') as { config: Record<string, unknown> }
+      return { background: config.backgroundBudget, site: config.siteBudget }
+    }
+    // No setting: the env value, where 0 has always meant no limit.
+    expect(await config(0)).toEqual({ background: null, site: 10_000_000 })
+    await db.run(sql`
+      insert into settings (key, value, updated_at)
+      values ('translation.backgroundDailyTokens', '0', 0),
+        ('translation.siteDailyTokens', 'null', 0)
+    `)
+    // A stored 0 pauses titles, whatever the env says; a stored null site budget is none.
+    expect(await config(2_000_000)).toEqual({ background: 0, site: null })
   })
 
   test('a kind that fails is recorded and passed, and the kinds after it still run', async () => {

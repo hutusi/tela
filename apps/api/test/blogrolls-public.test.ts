@@ -35,7 +35,13 @@ type BlogrollBlog = {
   addedAt: number
 }
 type BlogrollData = {
-  blogroll: { id: string; name: string; description: string; updatedAt: number }
+  blogroll: {
+    id: string
+    name: string
+    description: string
+    updatedAt: number
+    indexable?: boolean
+  }
   owner: Person
   blogs: BlogrollBlog[]
 }
@@ -225,6 +231,8 @@ describe("a public blogroll's page", () => {
       description: 'Blogs\nabout cities',
       // The removal of blog 5 is the latest change.
       updatedAt: 50,
+      // Four blogs others see, by an owner in good standing: Discover shows it (ADR 0060).
+      indexable: true,
     })
     expect(data.owner).toEqual({ id: ANNA, handle: 'anna', displayName: 'Name anna', avatar: null })
     expect(data.blogs.map((b) => b.feedId)).toEqual([2, 1, 3, 7])

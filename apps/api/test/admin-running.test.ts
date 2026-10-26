@@ -5,7 +5,7 @@
  */
 import { beforeEach, describe, expect, test } from 'bun:test'
 import { backUp, bumpSeq, currentSeq, first, heartbeat, LEASE_KINDS } from '@tela/data'
-import { USER_DAILY_TRANSLATION_TOKENS } from '@tela/shared'
+import { bodySpendFor } from '@tela/shared'
 import {
   ADMIN_ACTIONS,
   type AdminCounts,
@@ -105,7 +105,7 @@ describe('the badges and the Overview', () => {
     expect(status).toBe(200)
     // Claim 2 was reviewed after its last check; feed 1 is fine. Site 2 waits for review for
     // Discover; site 3 has no post yet, so there is nothing to review.
-    expect(body).toEqual({ claims: 1, feeds: 2, dead: 1, discover: 1 })
+    expect(body).toEqual({ claims: 1, feeds: 2, dead: 1, discover: 1, reports: 0 })
   })
 
   test('the Discover badge and card count only blogs waiting for review (ADR 0041)', async () => {
@@ -229,6 +229,7 @@ describe('the badges and the Overview', () => {
         claimFailing: true,
         primaryLang: null,
         translationOptOut: false,
+        feedOnly: false,
         topics: ['art', 'tech'],
         createdAt: 0,
         postsLast30d: 1,
@@ -345,22 +346,42 @@ describe('Translation', () => {
     expect((await get('translation?f=nope')).status).toBe(400)
   })
 
-  test('the report: thirty days, the totals, the budgets and who came near the cap', async () => {
+  test('the report: thirty days, the totals, the budgets and who reached the limit', async () => {
     const today = new Date(now).toISOString().slice(0, 10)
     const yesterday = new Date(now - DAY).toISOString().slice(0, 10)
+    // The claimant reached the day's 20 yesterday; the operator went past it today, exempt; and
+    // closed accounts' ledgers, folded together past 20, are no member's (ADR 0058).
     await api.db.run(sql`
-      insert into usage_daily (subject, day, reserved, used)
-      values ('*', ${today}, 1000, 3000),
-        (${claimant.userId}, ${yesterday}, 0, ${USER_DAILY_TRANSLATION_TOKENS - 1000}),
-        (${ops.userId}, ${today}, 0, 1000)
+      insert into usage_daily (subject, day, reserved, used, requests)
+      values ('*', ${today}, 1000, 3000, 0),
+        (${claimant.userId}, ${yesterday}, 0, 200000, 20),
+        (${ops.userId}, ${today}, 500, 1000, 25),
+        ('~closed', ${yesterday}, 0, 9000, 30)
+    `)
+    // One body waits for tomorrow, one fell due and is starting.
+    await api.db.run(sql`
+      insert into body_translations (content_key, lang, state, requested_by, reserved_tokens,
+        reserved_day, due_at, updated_at)
+      values ('w1', 'fr', 'requested', ${claimant.userId}, 500, ${today}, ${now + HOUR}, 0),
+        ('w2', 'fr', 'requested', ${claimant.userId}, 500, ${today}, ${now - HOUR}, 0)
     `)
     const before = await get<AdminTranslationReport>('translation/report')
-    // No tick has reported its config yet.
-    expect(before.body.background).toEqual({ day: today, used: 3000, reserved: 1000, budget: null })
+    // No tick has reported its config yet, and no budget is stored: tela-jobs' is not known.
+    expect(before.body.background).toEqual({
+      day: today,
+      used: 3000,
+      reserved: 1000,
+      budget: null,
+      budgetKnown: false,
+    })
+    expect(before.body.site).toEqual({ day: today, used: 4000, reserved: 1500, budget: 10_000_000 })
+    expect(before.body.memberCap).toBe(20)
+    expect(before.body.waiting).toBe(1)
 
     await heartbeat(api.db, 'tick', now, {
       config: {
         backgroundBudget: 2_000_000,
+        siteBudget: 10_000_000,
         maxArticleTokens: 40_000,
         translator: true,
         relay: false,
@@ -376,10 +397,21 @@ describe('Translation', () => {
     expect(body.days[0]?.day).toBe(new Date(now - 29 * DAY).toISOString().slice(0, 10))
     expect(body.totals).toEqual({ inputTokens: 1750, outputTokens: 1260, calls: 5 })
     expect(body.unattributed).toBe(60)
-    expect(body.background.budget).toBe(2_000_000)
-    expect(body.memberCap).toBe(USER_DAILY_TRANSLATION_TOKENS)
-    // How many, never who: a member's tokens are what they read.
+    expect(body.background).toMatchObject({ budget: 2_000_000, budgetKnown: true })
+    // How many, never who: what a member reads is not the console's to show.
     expect(body.nearCap).toBe(1)
+
+    // A stored budget holds as it is, a pause included, whatever the last tick said; a member
+    // limit of none is none, and nobody reaches it.
+    await api.db.run(sql`
+      insert into settings (key, value, updated_at)
+      values ('translation.backgroundDailyTokens', '0', ${now}),
+        ('member.translationsPerDay', 'null', ${now})
+    `)
+    const set = (await get<AdminTranslationReport>('translation/report')).body
+    expect(set.background).toMatchObject({ budget: 0, budgetKnown: true })
+    expect(set.memberCap).toBe(null)
+    expect(set.nearCap).toBe(0)
   })
 })
 
@@ -443,6 +475,7 @@ describe('System', () => {
       'feed.fetch': 1,
       config: {
         backgroundBudget: 2_000_000,
+        siteBudget: 10_000_000,
         maxArticleTokens: 40_000,
         translator: true,
         relay: true,
@@ -467,6 +500,7 @@ describe('System', () => {
       digest: null,
       config: {
         backgroundBudget: 2_000_000,
+        siteBudget: 10_000_000,
         maxArticleTokens: 40_000,
         translator: true,
         relay: true,
@@ -574,8 +608,11 @@ describe('acting on dead work', () => {
   test('a bulk of body retries reserves as it goes, and stops where the budget does', async () => {
     const today = new Date(now).toISOString().slice(0, 10)
     await heartbeat(api.db, 'tick', now, {
-      config: { backgroundBudget: 100_000, maxArticleTokens: 40_000 },
+      config: { backgroundBudget: 80_000, maxArticleTokens: 10_000 },
     })
+    // A post at the ceiling is reckoned at its whole spend, prompts and output too.
+    const each = bodySpendFor(10_000)
+    expect(each).toBe(30_000)
     await api.db.run(sql`insert into usage_daily (subject, day, reserved, used)
       values ('*', ${today}, 0, 10000)`)
     const ids: string[] = []
@@ -586,7 +623,7 @@ describe('acting on dead work', () => {
       `)
       ids.push(`dead:${await deadLetter('translate.body', `${ck}:fr`)}`)
     }
-    // 10,000 spent of 100,000: room for two posts at the 40,000 ceiling, not a third.
+    // 10,000 spent of 80,000: room for two posts at 30,000, not a third.
     expect(await act('dead.retry', ids)).toMatchObject({
       done: [ids[0], ids[1]],
       failed: [{ id: ids[2], error: 'limit' }],
@@ -596,13 +633,13 @@ describe('acting on dead work', () => {
         api.db,
         sql`select reserved, used from usage_daily where subject = '*'`,
       ),
-    ).toEqual({ reserved: 80_000, used: 10_000 })
+    ).toEqual({ reserved: 2 * each, used: 10_000 })
     const rows = await api.db.all<{ content_key: string; state: string; reserved_tokens: number }>(
       sql`select content_key, state, reserved_tokens from body_translations order by content_key`,
     )
     expect(rows).toEqual([
-      { content_key: 'b1', state: 'requested', reserved_tokens: 40_000 },
-      { content_key: 'b2', state: 'requested', reserved_tokens: 40_000 },
+      { content_key: 'b1', state: 'requested', reserved_tokens: each },
+      { content_key: 'b2', state: 'requested', reserved_tokens: each },
       { content_key: 'b3', state: 'failed', reserved_tokens: 0 },
     ])
     // Another kind is not background translation, and is retried whatever the budget.
@@ -673,5 +710,80 @@ describe('acting on dead work', () => {
     for (const action of ['dead.retry', 'dead.dismiss', 'lease.retryNow']) {
       expect(ADMIN_ACTIONS).toContain(action as (typeof ADMIN_ACTIONS)[number])
     }
+  })
+})
+
+describe('the Settings area (ADR 0056)', () => {
+  const setting = async (key: string, value: unknown) => {
+    const res = await api.request('/api/v1/admin/act', {
+      as: ops,
+      body: { action: 'setting.set', ids: [key], args: { value } },
+    })
+    expect(res.status).toBe(200)
+    return (await res.json()) as {
+      done: string[]
+      failed: { id: string; error: string }[]
+      undo: { group: string } | null
+    }
+  }
+  const rows = async () =>
+    (await get<{ settings: { key: string; value: unknown; stored: boolean }[] }>('settings')).body
+      .settings
+
+  test('lists every setting with its default, and sets one, audited and undoable', async () => {
+    const before = await rows()
+    expect(before.find((r) => r.key === 'signup.mode')).toMatchObject({
+      value: 'invite',
+      stored: false,
+    })
+    const set = await setting('signup.mode', 'open')
+    expect(set.done).toEqual(['signup.mode'])
+    expect((await rows()).find((r) => r.key === 'signup.mode')).toMatchObject({
+      value: 'open',
+      stored: true,
+    })
+    // The same value again is nothing to do.
+    expect((await setting('signup.mode', 'open')).failed).toEqual([
+      { id: 'signup.mode', error: 'not_applicable' },
+    ])
+    const undone = await api.request('/api/v1/admin/undo', { as: ops, body: set.undo })
+    expect(undone.status).toBe(200)
+    expect((await rows()).find((r) => r.key === 'signup.mode')).toMatchObject({
+      value: 'invite',
+      stored: false,
+    })
+  })
+
+  test('refuses a value its rule does not take, and a key that is not a setting', async () => {
+    expect((await setting('member.feedsPerDay', -3)).failed).toEqual([
+      { id: 'member.feedsPerDay', error: 'invalid' },
+    ])
+    expect((await setting('nope', 1)).failed).toEqual([{ id: 'nope', error: 'not_found' }])
+  })
+
+  test('an undo refuses once the setting moved on', async () => {
+    const first = await setting('member.maxSubscriptions', 500)
+    await setting('member.maxSubscriptions', 600)
+    const undone = await api.request('/api/v1/admin/undo', { as: ops, body: first.undo })
+    expect(undone.status).toBe(409)
+  })
+
+  test("the operator's CLI reads and sets them with the token", async () => {
+    const auth = { authorization: `Bearer ${ADMIN_TOKEN}` }
+    const set = await api.request('/api/admin/settings', {
+      body: { key: 'member.translationsPerDay', value: null },
+      headers: auth,
+    })
+    expect(await set.json()).toEqual({ key: 'member.translationsPerDay', changed: true })
+    const list = await api.request('/api/admin/settings', { method: 'GET', headers: auth })
+    const body = (await list.json()) as { settings: { key: string; value: unknown }[] }
+    expect(body.settings.find((r) => r.key === 'member.translationsPerDay')?.value).toBeNull()
+    const refused = await api.request('/api/admin/settings', {
+      body: { key: 'signup.mode', value: 'closed' },
+      headers: auth,
+    })
+    expect(refused.status).toBe(400)
+    const anon = await api.request('/api/admin/settings', { method: 'GET' })
+    expect(anon.status).toBe(403)
   })
 })

@@ -113,10 +113,11 @@ describe("a guest's blogroll, as the edge renders it", () => {
     expect(html.split(`href="${LOGIN}"`).length - 1).toBe(3)
   })
 
-  test('a blog with a page on Tela links there; one without, to the blog itself', () => {
+  test('a blog with a page on Tela links there; one without, to the blog itself, unfollowed', () => {
     expect(html).toContain('href="/s/11"')
+    // A member's list: nobody vouched for the blogs on it (ADR 0060).
     expect(html).toContain(
-      'href="https://www.kerb.example/" target="_blank" rel="noopener noreferrer"',
+      'href="https://www.kerb.example/" target="_blank" rel="ugc nofollow noopener noreferrer"',
     )
     // No name: its host.
     expect(html).toContain('>kerb.example</a>')
@@ -129,6 +130,27 @@ describe("a guest's blogroll, as the edge renders it", () => {
     expect(html).toContain('kerb.example · Not updating')
     expect(html).toContain('“Every Sunday.”')
     expect(count(html, 'blogroll-row')).toBe(2)
+  })
+
+  test('its feeds, as plain links, when the page offers them and a listed blog fills them', () => {
+    // Not offered: the owner's page of a private one gives none.
+    expect(count(html, 'feed-links')).toBe(0)
+    const offered = wrap(<BlogrollView data={DATA} locale="en" now={NOW} feeds={{ hl: 'fr' }} />)
+    expect(count(offered, 'feed-links')).toBe(1)
+    expect(offered).toContain(`href="/l/${ID}.rss?hl=fr" type="application/rss+xml"`)
+    expect(offered).toContain(`href="/l/${ID}.opml" type="text/x-opml"`)
+    expect(offered).toContain('>RSS</a>')
+    expect(offered).toContain('>OPML</a>')
+    // A blogroll of unlisted blogs only has nothing in its feeds to offer.
+    const unlisted = wrap(
+      <BlogrollView
+        data={{ ...DATA, blogs: DATA.blogs.map((b) => ({ ...b, listed: false })) }}
+        locale="en"
+        now={NOW}
+        feeds={{ hl: 'fr' }}
+      />,
+    )
+    expect(count(unlisted, 'feed-links')).toBe(0)
   })
 
   test('empty, it says so and offers nothing to subscribe to', () => {
@@ -327,6 +349,13 @@ describe("the owner's own blogroll, from the store", () => {
     const html = page(await storeWith({ ...OWN, blogrolls: [ownRow({ isPublic: true })] }))
     expect(html).toContain('<span class="sr-only">Who can see it: Public</span>')
     expect(html).toContain('Public. It shows on your profile and can appear in Discover.')
+  })
+
+  test('its feeds are offered only while others can see it (ADR 0062)', async () => {
+    expect(count(page(await storeWith(OWN)), 'feed-links')).toBe(0)
+    const html = page(await storeWith({ ...OWN, blogrolls: [ownRow({ isPublic: true })] }))
+    expect(html).toContain(`href="/l/${ID}.rss?hl=en"`)
+    expect(html).toContain(`href="/l/${ID}.opml"`)
   })
 
   test('made just now with nothing in it, it opens on Add blogs, each subscription a tick box', async () => {

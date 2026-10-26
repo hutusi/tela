@@ -24,6 +24,7 @@ export function DiscoverBlogrollsView({
   onMore,
   loadingMore = false,
   onRetry,
+  hl,
 }: {
   /** Null while the first page is on its way. */
   cards: readonly BlogrollCardData[] | null
@@ -35,10 +36,12 @@ export function DiscoverBlogrollsView({
   loadingMore?: boolean
   /** Set once the first page failed to come: Try again, in the skeleton's place. */
   onRetry?: (() => void) | undefined
+  /** The language the page's feeds are titled in: the reading language. */
+  hl?: string | undefined
 }) {
   const t = useTranslations('discover.blogrolls')
   return (
-    <DiscoverFrame tab="blogrolls">
+    <DiscoverFrame tab="blogrolls" hl={hl}>
       <p className="m-0 mb-6 max-w-[620px] text-[14px] leading-normal text-muted md:-mt-3 md:mb-7">
         {t('intro')}
       </p>

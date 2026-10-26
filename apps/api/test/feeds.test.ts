@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
-import { ACTION_LIMITS, first } from '@tela/data'
+import { ACTION_LIMITS, duePendingFeeds, first } from '@tela/data'
 import { MAX_FOLDERS } from '@tela/shared'
 import type { PullResponse } from '@tela/sync'
 import { sql } from 'drizzle-orm'
@@ -161,7 +161,15 @@ describe('OPML', () => {
     const res = await importOpml(
       opml(['https://a.example/feed', 'https://b.example/rss', 'https://a.example/feed']),
     )
-    expect(await res.json()).toEqual({ feeds: 2, subscribed: 2, folders: 0, filed: 0 })
+    expect(await res.json()).toMatchObject({
+      feeds: 2,
+      subscribed: 2,
+      added: 2,
+      waiting: 0,
+      over: 0,
+      folders: 0,
+      filed: 0,
+    })
     expect(server.requests).toHaveLength(0)
     const due = await first<{ n: number }>(
       api.db,
@@ -173,9 +181,10 @@ describe('OPML', () => {
       { home_url: 'https://b.example' },
     ])
     // Importing again adds nothing.
-    expect(await (await importOpml(opml(['https://a.example/feed']))).json()).toEqual({
+    expect(await (await importOpml(opml(['https://a.example/feed']))).json()).toMatchObject({
       feeds: 1,
       subscribed: 0,
+      added: 0,
       folders: 0,
       filed: 0,
     })
@@ -197,9 +206,16 @@ describe('OPML', () => {
     )
     const res = await api.request('/api/v1/feeds/opml', { as: reader })
     expect(res.headers.get('content-type')).toContain('text/x-opml')
+    expect(res.headers.get('content-disposition')).toBe(
+      'attachment; filename="tela-subscriptions.opml"',
+    )
     const text = await res.text()
     expect(text).toContain('xmlUrl="https://a.example/feed"')
     expect(text).not.toContain('b.example')
+    // The head as it always was: its title and when it was made, nobody's name.
+    expect(text).toContain(
+      `  <head>\n    <title>Tela subscriptions</title>\n    <dateCreated>${new Date(api.clock.now()).toUTCString()}</dateCreated>\n  </head>`,
+    )
   })
 })
 
@@ -270,7 +286,7 @@ describe('OPML folders (ADR 0048)', () => {
     const before = await pull(0)
     const body = `${folder('Tech', ['a', 'b'])}${folder('  Cities ', ['c'])}${blog('d')}`
     // A blog listed twice stays in the first folder, and one left holding nothing is not made.
-    expect(await importOpml(`${body}${folder('Again', ['a'])}`)).toEqual({
+    expect(await importOpml(`${body}${folder('Again', ['a'])}`)).toMatchObject({
       feeds: 4,
       subscribed: 4,
       folders: 2,
@@ -386,12 +402,178 @@ describe('OPML folders (ADR 0048)', () => {
     ])
     expect(text).not.toContain('Gone')
     const other = await signedIn(api, 'other@x.test')
-    expect(await importRaw(text, other)).toEqual({
+    expect(await importRaw(text, other)).toMatchObject({
       feeds: 5,
       subscribed: 5,
       folders: 2,
       filed: 3,
     })
     expect(await filed(other)).toEqual({ a: 'Tech', b: 'Tech', c: 'Cities & <Towns>' })
+  })
+})
+
+/** A runtime setting as the console's `setting.set` leaves one (ADR 0056). */
+const setting = (key: string, value: unknown) =>
+  api.db.run(sql`
+    insert into settings (key, value, updated_at) values (${key}, json(${JSON.stringify(value)}), 0)
+    on conflict (key) do update set value = excluded.value
+  `)
+const makeAdmin = (who: SignedIn) =>
+  api.db.run(sql`update profiles set is_admin = 1 where user_id = ${who.userId}`)
+/** A feed of its own at `path`, on the fixture's one origin. */
+const serveFeed = (path: string) =>
+  server.text(
+    path,
+    rss({ title: path, link: server.url('/'), items: [{ guid: path, title: path }] }),
+  )
+const DAY = 86_400_000
+/** The fixture clock's day ends at midnight UTC: when a day's allowance comes back. */
+const NEXT_DAY = Date.UTC(2026, 8, 29)
+
+describe('new feeds per day (ADR 0063)', () => {
+  test('only a feed new to Tela counts, and past the day one is refused until midnight', async () => {
+    await setting('member.feedsPerDay', 1)
+    for (const path of ['/one.xml', '/two.xml', '/three.xml']) serveFeed(path)
+    expect((await post('/api/v1/feeds', { feedUrl: server.url('/one.xml') })).status).toBe(200)
+    const refused = await post('/api/v1/feeds', { feedUrl: server.url('/two.xml') })
+    expect(refused.status).toBe(429)
+    expect(await refused.json()).toEqual({ error: 'feed_limit', limit: 1, resetsAt: NEXT_DAY })
+    expect(await count('feeds')).toBe(1)
+    // Someone else adds it on their own day; for the reader it is then a feed Tela has, and free.
+    const other = await signedIn(api, 'other@x.test')
+    const theirs = await api.request('/api/v1/feeds', {
+      body: { feedUrl: server.url('/two.xml') },
+      as: other,
+    })
+    expect(theirs.status).toBe(200)
+    expect((await post('/api/v1/feeds', { feedUrl: server.url('/two.xml') })).status).toBe(200)
+    expect((await post('/api/v1/feeds', { feedUrl: server.url('/three.xml') })).status).toBe(429)
+    // The next UTC day, the allowance is back.
+    api.clock.set(NEXT_DAY)
+    expect((await post('/api/v1/feeds', { feedUrl: server.url('/three.xml') })).status).toBe(200)
+    expect(
+      await api.db.all(sql`
+        select f.feed_url from subscriptions s join feeds f on f.id = s.feed_id
+        where s.user_id = ${reader.userId} order by f.id
+      `),
+    ).toEqual(['/one.xml', '/two.xml', '/three.xml'].map((p) => ({ feed_url: server.url(p) })))
+  })
+
+  test('a limit of 0 adds nothing new, and an admin is not held to it', async () => {
+    await setting('member.feedsPerDay', 0)
+    serveFeed('/one.xml')
+    expect((await post('/api/v1/feeds', { feedUrl: server.url('/one.xml') })).status).toBe(429)
+    await makeAdmin(reader)
+    expect((await post('/api/v1/feeds', { feedUrl: server.url('/one.xml') })).status).toBe(200)
+  })
+
+  test('no limit (null) holds nobody back', async () => {
+    await setting('member.feedsPerDay', null)
+    for (const path of ['/one.xml', '/two.xml']) {
+      serveFeed(path)
+      expect((await post('/api/v1/feeds', { feedUrl: server.url(path) })).status).toBe(200)
+    }
+  })
+})
+
+describe('the subscription cap (ADR 0063)', () => {
+  test('a member who holds the most is refused before anything is fetched or added', async () => {
+    await setting('member.maxSubscriptions', 1)
+    for (const path of ['/one.xml', '/two.xml']) serveFeed(path)
+    expect((await post('/api/v1/feeds', { feedUrl: server.url('/one.xml') })).status).toBe(200)
+    const refused = await post('/api/v1/feeds', { feedUrl: server.url('/two.xml') })
+    expect(refused.status).toBe(409)
+    expect(await refused.json()).toEqual({ error: 'subscription_limit', limit: 1 })
+    expect(server.requestsFor('/two.xml')).toEqual([])
+    expect(await count('feeds')).toBe(1)
+    // A feed they follow already takes no place: adding it again is answered as ever.
+    expect(await (await post('/api/v1/feeds', { feedUrl: server.url('/one.xml') })).json()).toEqual(
+      { feedId: 1, siteId: 1 },
+    )
+    // An admin holds as many as they like.
+    await makeAdmin(reader)
+    expect((await post('/api/v1/feeds', { feedUrl: server.url('/two.xml') })).status).toBe(200)
+  })
+})
+
+describe('an import past the day (ADR 0063)', () => {
+  const doc = (urls: string[]) =>
+    `<?xml version="1.0"?><opml version="2.0"><head><title>s</title></head><body>${urls
+      .map((u) => `<outline text="x" xmlUrl="${u}"/>`)
+      .join('')}</body></opml>`
+  const importAs = async (urls: string[], as = reader) => {
+    const res = await api.request('/api/v1/feeds/opml', {
+      raw: doc(urls),
+      as,
+      headers: { 'content-type': 'text/x-opml' },
+    })
+    expect(res.status).toBe(200)
+    return res.json()
+  }
+  const url = (name: string) => `https://${name}.example/feed`
+  const waiting = async (as = reader) =>
+    (
+      await api.db.all<{ feed_url: string }>(
+        sql`select feed_url from pending_feeds where user_id = ${as.userId} order by feed_url`,
+      )
+    ).map((r) => r.feed_url)
+
+  test('subscribes what Tela has, adds the day’s new ones, and the rest wait', async () => {
+    const other = await signedIn(api, 'other@x.test')
+    await importAs([url('known')], other)
+    await setting('member.feedsPerDay', 2)
+    const names = ['known', 'n1', 'n2', 'n3', 'n4']
+    expect(await importAs(names.map(url))).toEqual({
+      feeds: 3,
+      subscribed: 3,
+      added: 2,
+      waiting: 2,
+      over: 0,
+      perDay: 2,
+      maxSubscriptions: 300,
+      resetsAt: NEXT_DAY,
+      folders: 0,
+      filed: 0,
+    })
+    expect(await waiting()).toEqual([url('n3'), url('n4')])
+    // The two added count against the day; a feed Tela has never waits.
+    expect(await count('feeds')).toBe(3)
+    // The same file again adds nothing twice, and keeps one wait per feed.
+    expect(await importAs(names.map(url))).toMatchObject({ subscribed: 0, added: 0, waiting: 2 })
+    expect(await waiting()).toEqual([url('n3'), url('n4')])
+  })
+
+  test('past the subscription cap a feed is left out, and what waits fits the cap', async () => {
+    await setting('member.feedsPerDay', 1)
+    await setting('member.maxSubscriptions', 3)
+    expect(await importAs(['a', 'b', 'c', 'd', 'e'].map(url))).toMatchObject({
+      feeds: 1,
+      subscribed: 1,
+      added: 1,
+      waiting: 2,
+      over: 2,
+      maxSubscriptions: 3,
+    })
+    expect(await waiting()).toEqual([url('b'), url('c')])
+  })
+
+  test('an admin’s import adds every feed at once', async () => {
+    await setting('member.feedsPerDay', 1)
+    await makeAdmin(reader)
+    expect(await importAs(['a', 'b', 'c'].map(url))).toMatchObject({
+      added: 3,
+      waiting: 0,
+      perDay: null,
+      maxSubscriptions: null,
+    })
+  })
+
+  test('a day later, what waits is due for member.pendingFeeds', async () => {
+    await setting('member.feedsPerDay', 1)
+    await importAs(['a', 'b'].map(url))
+    const due = (now: number) => api.db.all<{ key: string }>(duePendingFeeds(now))
+    // The day's allowance is spent: nothing a run could add.
+    expect(await due(api.clock.now())).toEqual([])
+    expect(await due(api.clock.now() + DAY)).toMatchObject([{ key: reader.userId }])
   })
 })

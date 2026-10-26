@@ -33,11 +33,11 @@ directory.
 | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | tela-api (secret) | Tela's GitHub OAuth app (ADR 0036), its callback URL `PUBLIC_URL/api/auth/callback/github`. GitHub sign-in is offered only while both are set |
 | `MAIL_FROM` | tela-api, tela-jobs | Sender, `Tela <noreply@telaread.com>`, a domain Resend has verified (ainaive.com is verified too, and was the sender until 2026-10-08) |
 | `PUBLIC_URL` | tela-api, tela-jobs | The one public origin, `https://telaread.com`: better-auth's base URL and trusted origin, the profile links a claim looks for (with `www.` and the old `tela.ainaive.com`, ADR 0045), the WebSub callback |
-| `TELA_PRIVATE_BETA` | tela-web | `1`: robots.txt disallows everything and every response the Worker serves carries `X-Robots-Tag: noindex, nofollow` (ADR 0015). The SPA shell is a static asset the Worker never sees, so it is noindex by its own meta tag, always: it is the app, with nothing of its own to index. Public pages drop that tag and follow this var. `/` now passes the Worker (the front page, ADR 0035), so both of its answers, a visitor's page and a member's plain shell, carry the header too |
+| `TELA_NOINDEX` | tela-web | `1`: robots.txt is `Disallow: /` and every answer the Worker serves carries `X-Robots-Tag: noindex, nofollow` (ADR 0060; it was `TELA_PRIVATE_BETA`, ADR 0015). Unset: each public page follows its own rule (its meta robots, mirrored as `X-Robots-Tag`), and robots.txt welcomes search engines and answer tools but not training crawlers. The SPA shell is a static asset the Worker never sees, so it is noindex by its own meta tag, always. Set until launch day, whatever `signup.mode` says |
 | `GRAVATAR_URL` | tela-api, tela-jobs | Where members' pictures are fetched from (tela-api, ADR 0032) and asked about (tela-jobs, ADR 0033), default `https://gravatar.com/avatar`. The e2e points it at its fixture server. A picture is cached for 30 days in each colo and browser under an address with its version, and turning the switch off cannot purge a colo: a copy already held stays, at an address nothing links to any more |
 | `GITHUB_TOKEN` | tela-jobs (secret, optional) | A fine-grained GitHub token with no repository access and no permissions, for a claim by GitHub (ADR 0045): it asks `api.github.com/user/<id>` for a member's login and website, which needs no permission. Unset, GitHub allows 60 requests an hour per egress IP, and Cloudflare's egress IPs are shared with other customers, so a check may find GitHub refusing (`github_unavailable`) for reasons of someone else's making. Set, 5,000 an hour. Make it under the owner's account, with the longest expiry GitHub allows, and diary its renewal: an expired token answers 401, which a claim also reads as `github_unavailable` |
 | `GITHUB_API_URL` | tela-jobs | Where GitHub's API answers, default `https://api.github.com`. For a test stack only |
-| `ENV` | tela-api, tela-jobs | `test` in local dev and e2e only: the sign-in outbox, `POST /api/test/cycle`, and fetches to private addresses. Never deployed |
+| `ENV` | tela-api, tela-jobs | `test` in local dev and e2e only: the sign-in outbox, `POST /api/test/cycle`, `POST /api/test/age` (a profile made older, past the week a new account waits), and fetches to private addresses. Never deployed |
 | `WORKER_USER_AGENT` | tela-jobs | Sent on every fetch; keep a contact URL in it, and keep it starting `Tela/`: a claim page tells a writer whose site turns Tela away to let that through |
 | `FETCH_TIMEOUT_MS` | tela-jobs, the relay | Per-request timeout, default 20000 |
 | `WEBSUB_ENABLED` | tela-jobs | `1` subscribes at feeds' hubs; hubs verify by calling `PUBLIC_URL/api/websub/<feedId>` |
@@ -46,14 +46,14 @@ directory.
 | `BAILIAN_API_KEY`, `BAILIAN_BASE_URL` | tela-jobs (key secret) | The key is a mainland one: leave the base URL unset (`dashscope.aliyuncs.com`; the international endpoint refuses it) |
 | `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL` | tela-jobs (key secret) | Anthropic, if ever used |
 | `LLM_JSON_MODE` | tela-jobs | `text` (parse JSON from the reply; Bailian's default) or `schema` (structured output; Anthropic's) |
-| `LLM_DAILY_BUDGET_TOKENS` | tela-jobs | Day cap for background title translation; `0` = unlimited. Production sets 2,000,000 in `apps/jobs/wrangler.jsonc`, so every deploy carries it (until 2026-10-04 it was set nowhere, and titles ran uncapped). Reader requests are metered per member instead |
+| `LLM_DAILY_BUDGET_TOKENS` | tela-jobs | Day cap for background title translation; `0` = unlimited. Production sets 2,000,000 in `apps/jobs/wrangler.jsonc`, so every deploy carries it (until 2026-10-04 it was set nowhere, and titles ran uncapped). Read only while the runtime setting `translation.backgroundDailyTokens` is null (ADR 0057); body requests are counted per member and held to `translation.siteDailyTokens` instead |
 | `LLM_MAX_ARTICLE_TOKENS` | tela-jobs | Source tokens translated per body (default 40,000); the rest stays as source and the translation is `partial` |
 | `LLM_MOCK_DROP_MARKER` | tela-jobs, tests only | With `LLM_PROVIDER=mock`, the mock drops every block containing this text, so a run can reach `partial` |
 | `RELAY_URL`, `RELAY_SECRET` | tela-jobs (secret) | The relay's origin and shared signing secret. Unset (as now): feeds never change region |
 | `RELAY_CONTROL_URL` | tela-jobs | Fetched before flipping a feed to the relay; if it fails too, the problem is Cloudflare's network, not the feed (default: Cloudflare's trace endpoint) |
 | `RELAY_SECRET`, `RELAY_SECRET_PREVIOUS`, `RELAY_PORT` | the relay | Accepted secrets (the previous one during rotation) and the listen port (8787) |
 | `DEADMAN_URL` | tela-jobs (secret) | The healthchecks.io ping URL; see *Knowing it runs* |
-| `DIGEST_TO` | tela-jobs (secret) | Who gets the Monday digest (the owner). Unset, it is built but not sent |
+| `DIGEST_TO` | tela-jobs (secret) | Who gets the Monday digest and the operator's alerts (the owner). Unset, the digest is built but not sent, and no alert is checked |
 | `VITE_ASSETS_URL` | tela-web build | Public base of `tela-assets`; defaults to `https://assets.telaread.com` |
 | `TELA_URL` | the admin script | Where `bun run admin` talks to; defaults to `https://telaread.com` |
 
@@ -313,6 +313,28 @@ The account is on Workers Paid. Run wrangler from a real terminal (`wrangler log
        - switching the reading language in Settings shows posts as written, then their titles in
          the new language, with no `cursor=0` request;
        - Workers Logs show no new `client error` lines.
+   - The public-launch round (ADRs 0056–0063, migration 0014) bumps `MIN_CLIENT` to 4: a cached
+     shell would poll a translation that waits for tomorrow every 1.5 s, and word a site-wide pause
+     as the member's own allowance. Migration 0014 only adds tables, columns and indexes (no table
+     is rebuilt). Apply it, then deploy tela-jobs, then tela-web, then tela-api, within minutes:
+     - tela-jobs first, because an older one claims a waiting body at once and reports no
+       `siteBudget`, and it is the new one that knows `member.pendingFeeds` and `member.erase`. It
+       reads a body the older tela-api reserved meanwhile as that one meant it, source tokens
+       (`reserved_spend` unset, ADR 0057);
+     - tela-web before tela-api, as every `MIN_CLIENT` bump. tela-web may not go back while the
+       new tela-api is live; tela-api may go back alone.
+     - Deploy with `signup.mode` at its default, `invite`, and `TELA_NOINDEX` still set: nothing a
+       visitor sees changes until launch day (*Launching*).
+     - After deploy, check that:
+       - `bun run admin settings` lists every setting with its default;
+       - the console's Settings, Reports and Translation areas open, and Translation shows today
+         against the site budget;
+       - `curl -s https://telaread.com/robots.txt` still says `Disallow: /` and `/sitemap.xml`
+         answers;
+       - opening a post in another language translates it, and a member's Settings › Language
+         shows how many of the day's 20 are used (an admin's shows none: admins are exempt);
+       - the health check stays ok through the first 00:00 UTC (waiting bodies start then).
+     - Run `bun run restore-drill` after the next nightly export, so the new tables are covered.
    - Protocol 2 (2026-09-29) keeps each device's copy in IndexedDB `tela-2`; earlier shells use
      `tela`, which the newer shell empties at each boot and marks as seen. A tela-web rollback
      leaves the `tela-2` copies in place, and the older shell starts over in `tela`. On the way
@@ -447,7 +469,7 @@ because their configs name the same ones.
 S=$(openssl rand -hex 32)
 printf "AUTH_SECRET=$S\nADMIN_TOKEN=local\nENV=test\nPUBLIC_URL=http://localhost:5173\n" > apps/api/.dev.vars
 printf "ENV=test\nLLM_PROVIDER=mock\nPUBLIC_URL=http://localhost:5173\n" > apps/jobs/.dev.vars
-printf "AUTH_SECRET=$S\nTELA_PRIVATE_BETA=1\n" > apps/reader/.dev.vars
+printf "AUTH_SECRET=$S\nTELA_NOINDEX=1\n" > apps/reader/.dev.vars
 apps/reader/node_modules/.bin/wrangler d1 migrations apply tela --local \
   --persist-to apps/reader/.wrangler/state -c apps/api/wrangler.jsonc
 bun run dev   # http://localhost:5173
@@ -519,10 +541,10 @@ is tela-api.
   colo's five, then the browser's one), while a page already open keeps what it shows. The owner's
   own blogroll renders from their device over the 404 page, so a private one opens for them on any
   device that has pulled it. `/` is rendered only for a request without `tela.session_token`; a
-  member's is the plain shell. If `/` shows the plain shell to signed-out visitors, tela-api's
-  `/api/v1/public/front` is not answering 200 within three seconds (deploy tela-api before
-  tela-web when it is new): tela-web logs `public page data late` or `public page data failed`
-  with the endpoint, which says which.
+  member's is the plain shell. If `/` shows the plain shell to signed-out visitors (a 503 with
+  `Retry-After`, ADR 0060), tela-api's `/api/v1/public/front` is not answering 200 within three
+  seconds (deploy tela-api before tela-web when it is new): tela-web logs `public page data late`
+  or `public page data failed` with the endpoint, which says which.
 - **Hashed assets** (`/assets/*`) are kept a day by the browser (`public/_headers`, ADR 0051),
   not a year: the single-page fallback answers a name a deploy lacks 200 with `index.html` under
   the same rule. After a tela-web rollback, a browser without the service worker that was handed
@@ -799,14 +821,16 @@ says who holds it:
 | Kind | Due when |
 |---|---|
 | `feed.fetch` | `next_fetch_at` has passed, or a WebSub ping asked |
-| `article.extract` | `extract_state = 'due'`: a summary-only post waiting for its page |
+| `article.extract` | `extract_state = 'due'`: a summary-only post waiting for its page, set when the feed lists it; never on a blog that chose "Only use what my feed provides" (one left due there is settled to `none` unfetched), and fetched only where the origin's robots.txt lets Tela in (ADR 0061) |
 | `article.reprocess` | the article's current version was made under an older `PIPELINE_VERSION` (ADR 0055) |
 | `site.assets` | a site's favicon has never been checked |
 | `member.gravatar` | a member shows their Gravatar and it was never asked about, or the answer has run out: 30 days after a picture, 7 after none (ADR 0033). Refresh asks again at once |
 | `site.claim` | a member asked for their claim to be checked |
 | `websub.subscribe` | a hub subscription is new, failed, or near its lease's end |
 | `translate.title` | a feed has articles without titles in every launch language |
-| `translate.body` | a member asked for a post in their language |
+| `translate.body` | a member asked for a post in their language, and its `due_at` has passed or it has none (ADR 0057) |
+| `member.pendingFeeds` | a member in good standing has imported feeds waiting (`pending_feeds`) and their day and cap have room, or a waiting feed is now one Tela has (ADR 0063); a suspended member's wait is kept until the suspension is lifted. Exhausted: the wait moves a day out; Retry brings it back |
+| `member.erase` | an account closed at least 10 minutes ago and not yet erased: what its own devices held, in chunks (ADR 0058). Out of attempts it waits on its dead letter; Retry in System makes it due again. A run that finds one of the member's translations still running ends without stamping and comes back next tick |
 
 **Day 2, all plain SQL** (`wrangler d1 execute tela --remote --command "…"`):
 
@@ -905,12 +929,27 @@ Nothing here needs watching; three things speak up when something is wrong (ADR 
   reach (the case for the relay). Without `DIGEST_TO` or `RESEND_API_KEY` it is built and not sent;
   `wrangler tail tela-jobs` on a Monday at 08:00 UTC shows the run.
 - **Resend's and Bailian's own consoles** for their quotas; the digest shows Tela's side of both.
+- **Operator alerts** (ADR 0063): every fifth minute, beside the health check, tela-jobs mails
+  `DIGEST_TO` (through `RESEND_API_KEY`) when something needs you before Monday's digest. With
+  either unset, nothing is checked. Each mail carries only counts and console links.
+  - **"Tela: 80% of today's translation budget used"**, or **"…budget is spent"**: today's tokens,
+    everyone's together, reached that share of `translation.siteDailyTokens` (the shares are
+    `alerts.budgetPercents`). Once a day per share; it resets at 00:00 UTC. Look at
+    /admin/translation, or raise the budget under /admin/settings.
+  - **"Tela: N new accounts today"**: more than `alerts.signupsPerDay` joined. If they look like
+    spam, set `signup.mode` to `invite` (*Members and limits*); it applies at once.
+  - **"Tela: N reports wait for a look"**: at most one an hour, and only when a report is new
+    since the last. Review them at /admin/reports.
+
+  A failed send is retried on the next run. What was sent: `select * from ops_alerts order by at
+  desc`.
 
 ## The admin console
 
 `/admin` (ADR 0039) is where the operator acts on what the digest and the dead-man's switch
-report: claims to review, feeds to fetch, pause or move to the relay, the blogs members added and
-Discover's listings, members, invite codes, translation spend and dead letters. It reads from
+report: claims to review, reports of public content (ADR 0059), feeds to fetch, pause or move to
+the relay, the blogs members added and Discover's listings, members (suspend, delete), invite
+codes, translation spend, dead letters, and the runtime settings (ADR 0056). It reads from
 tela-api over the network, unlike the rest of the reader, and every change it makes is audited in
 `admin_actions`.
 
@@ -949,9 +988,9 @@ tela-api over the network, unlike the rest of the reader, and every change it ma
 - **Sign out everywhere** deletes the member's sessions; a device's signed copy of one still
   answers for up to five minutes wherever only that copy is read.
 - **Retry** on a dead letter makes its row due again for the next tick, with fresh attempts. A body
-  translation retried runs as background work: the background budget pays, up to
-  `LLM_MAX_ARTICLE_TOKENS` for the post, and once the day's budget is spent the console refuses
-  one until tomorrow. The health check counts only unresolved dead letters, and
+  translation retried runs as background work: the background budget pays, reserving the whole
+  spend of `LLM_MAX_ARTICLE_TOKENS` source tokens (about 2.9 tokens each, input and output: 115k
+  at 40,000), and once the day's budget is spent the console refuses one until tomorrow. The health check counts only unresolved dead letters, and
   the digest says how many of the week's were resolved.
 - **Heartbeats** (`ops_heartbeats`): `tick` (each kind dispatched, `errors` for each kind it
   could not run, and the switches tela-jobs runs with: the background budget, the article cap,
@@ -966,7 +1005,10 @@ tela-api over the network, unlike the rest of the reader, and every change it ma
 
 - **Time Travel** is the point-in-time copy: `wrangler d1 time-travel restore tela --timestamp=…`
   rolls the database back to any minute of the last 30 days. It restores in place; export first
-  if the current state matters.
+  if the current state matters. **Then run `bun run admin closures`** at once: accounts closed
+  since that minute come back with the rollback, and their closures in R2 close them again
+  (ADR 0058). It is idempotent, and a request handles a few dozen closures; run it again until it
+  reports none closed.
 - **The nightly export** is the portable one. After the upkeep, every table worth keeping goes to
   `tela-content` under `backup/<date>/` as JSON lines (`<table>.<part>.jsonl`, 5,000 rows a part),
   with a `manifest.json` of row counts and SHA-256 hashes. A second pass reads it back to verify,
@@ -983,10 +1025,111 @@ tela-api over the network, unlike the rest of the reader, and every change it ma
      `@tela/platform/portable`). Restore into an empty database: it refuses one that holds any
      row of an exported table. A restore that fails partway keeps what it wrote, so start again
      from a fresh database rather than running it twice.
-  3. Serve `createApp` (`apps/api/src/app.ts`) from any Hono runtime on `libsqlDb` and `s3Blobs`,
+  3. **Close again the accounts closed since the backup** before the stack serves anyone: they
+     come back with it. Each closing wrote `closures/<id>` (the id and when) to `tela-content`;
+     `reapplyClosures(db, blobs, Date.now())` from `@tela/data` re-applies every one, idempotently
+     (on the live stack, `bun run admin closures` does the same), and `member.erase` erases them
+     again 10 minutes later (ADR 0058). Never delete `closures/`.
+  4. Serve `createApp` (`apps/api/src/app.ts`) from any Hono runtime on `libsqlDb` and `s3Blobs`,
      run `runPortable` (`apps/jobs/src/portable.ts`) beside it for the sweeps, and serve the
      built SPA and `createEdge` (`apps/reader/worker/edge.ts`) in front. Every dependency is
      already an interface with a portable adapter.
+- **The restore drill:** `bun run restore-drill` (`apps/api/scripts/restore-drill.ts`) takes the
+  newest export (or `--date`) from R2 through `wrangler r2 object get --remote` (the deploy login,
+  no S3 keys), restores it into a fresh, migrated libSQL file as step 2 does, and checks it: every
+  table's count against the manifest, `pragma integrity_check` and `foreign_key_check`, the public
+  pages' answers through `createApp`, and an admin's first sync. The scratch directory is deleted
+  at the end (`--keep` keeps it): the export holds addresses and password hashes. Run it after a
+  migration lands, and whenever the export changes.
+
+  | Date | Export | Rows | Restore | Result |
+  | --- | --- | --- | --- | --- |
+  | 2026-10-25 | 2026-10-25 (migrations to 0013, restored under 0014) | 76,330 in 32 tables, 42 parts, 40 MB | download 91 s, restore 1.2 s | whole: counts, integrity and foreign keys clean; public pages 200; an admin's first sync |
+
+## Members and limits
+
+- **Runtime settings** (ADR 0056): `bun run admin settings` lists every one, what holds and its
+  default; `bun run admin set <key> <value>` changes one (a number, `null` for no limit, a word,
+  or JSON), audited like any console action, and the console's Settings area does the same with
+  an undo. A setting holds from the next request: no deploy, no cache. `0` means nothing at all
+  and `null` means no limit, so setting a budget to 0 stops spending, never unlimits it.
+- **Sign-up:** `bun run admin set signup.mode open|invite`, or the console. A sheet shows the
+  change within a minute (`/api/v1/public/auth` is cached 60 s); the gate enforces it at once.
+  `signup.maxPerDay` (200) pauses joins without an invitation until 00:00 UTC; invitations and
+  `bun run admin invite` are never capped, and every account made counts toward it. Spam: set
+  `signup.mode invite`; members' invite codes work again at once.
+- **Feeds and subscriptions** (ADR 0063): `member.feedsPerDay` (20) counts feeds new to Tela per
+  UTC day (adding by URL, a claim, an import); subscribing to one Tela has is free.
+  `member.maxSubscriptions` (300) caps subscriptions. Admins are exempt from both. Refusals are
+  `429 feed_limit` and `409 subscription_limit`. An import's overflow waits in `pending_feeds`,
+  and `member.pendingFeeds` adds it on the days after: `select user_id, count(*) from pending_feeds
+  group by 1`. Raising the day or the cap lets the next tick move them.
+- **Deleting an account** (ADR 0058) is the member's own, from Settings › Account with a mailed
+  code; an operator's `member.delete` (People) does the same to a spam account. Neither works on
+  an admin: `bun run admin ungrant <email>` first. What others see goes in that batch; the rest
+  goes within minutes (`member.erase`). The `user` and `profiles` rows stay for good as empty
+  shells holding the handle. Caches keep a picture up to 30 days and a profile page a few
+  minutes. Backups keep everything for their 30 days, which is why a restore runs
+  `bun run admin closures`.
+- **Releasing a blog:** its claimant does it from the Dashboard; the blog keeps its switches.
+  An operator's Remove claim (Claims) also takes back the switches, since a false claimant could
+  have set them.
+- **Reports** (ADR 0059): members report a profile, blogroll, blog or note (20 a day each);
+  visitors mail me@hutu.si. Work the queue at /admin/reports, one row per thing reported: act from
+  its record (hide from Discover, suspend, delete), then Resolve; Dismiss when there is nothing to
+  do. Both undo.
+- **Suspension:** People › a member › Suspend ends their sessions and refuses sign-in, and their
+  profile, notes and blogrolls leave every public page; cached pages linger up to 5 minutes per
+  colo, pictures longer. Their body translations not yet started end, given back; their waiting
+  imported feeds stay and arrive once it is lifted. Lift it from People › Suspended. An admin is
+  never suspended.
+
+## Search engines and AI
+
+- **What is indexed** (ADR 0060): the landing page, Discover, the info pages, For writers, blogs
+  an operator listed or curated, public blogrolls that Discover would list, and profiles of
+  accounts in good standing at least 7 days old. Everything else says `noindex`. While
+  `TELA_NOINDEX` is set, nothing is.
+- **robots.txt** welcomes search engines and AI answer tools (OAI-SearchBot, ChatGPT-User,
+  Claude-SearchBot, Claude-User, PerplexityBot…) on every public page, and lets AI training
+  crawlers read only Tela's own copy (`/about`, `/privacy`, `/terms`, `/writers`, `/llms.txt`;
+  not `/`, whose edition is writers' work): writers' titles and excerpts are not Tela's to give
+  for training. It ends with
+  `Content-Signal: search=yes, ai-input=yes, ai-train=no` and the sitemap.
+- **Cloudflare's AI Crawl Control** can replace that file: keep "managed robots.txt" and "Block AI
+  bots" off for telaread.com, and check with `curl -s https://telaread.com/robots.txt` after any
+  change there.
+- **Sitemaps:** `/sitemap.xml` indexes `/sitemap-{pages,sites,blogrolls,profiles}.xml`, each page
+  under its four `?hl=` addresses and the bare one. A sitemap 503 means tela-api is not answering
+  `/api/v1/public/sitemap`. `/llms.txt` describes Tela for AI tools.
+- **Tela's own feeds** (ADR 0062): `/l/<id>.rss|.opml`, `/discover/articles.rss`, `/discover.opml`,
+  each with an optional `?hl=` (and `?topic=` for Discover). Rendered at the edge from
+  `/api/v1/public/feeds/*` through the colo cache, so a blogroll made private stops being served
+  within about 6 minutes. They never trigger a translation. A 503 means tela-api failed.
+- **Writers' pages** (ADR 0061): page fetches (extraction, a favicon's home page) read the origin's
+  robots.txt, kept in `robots_rules` for a day (an hour when it was unreachable); feeds never do.
+  A post refused this way shows `failed` with `extract_refused = 1` and keeps its excerpt; new
+  rules on its origin make only those due again. To retry one by hand, delete its origin's
+  `robots_rules` row and set the article `due`. A writer's "Only use what my feed
+  provides" is `sites.feed_only`; an operator sets it from the blog's record.
+
+## Launching
+
+What opening Tela to everyone takes, in this order (ADRs 0056, 0060):
+
+1. **Before:** deploy the round (*Provisioning*, step 7's public-launch notes) with `signup.mode` at
+   `invite` and `TELA_NOINDEX` set. Verify telaread.com in Google Search Console and Bing Webmaster
+   Tools (a DNS TXT record: the owner's), and Baidu if wanted. Check Cloudflare's AI Crawl Control
+   as above. Read Privacy and Terms once more.
+2. **Launch day:** `bun run admin set signup.mode open`; remove `TELA_NOINDEX` from
+   `apps/reader/wrangler.jsonc` and deploy tela-web; submit `https://telaread.com/sitemap.xml` in
+   both consoles; spot-check a `?hl=fr` page with Google's Rich Results Test.
+3. **After:** the alerts mail the budget, sign-ups and reports. Spam sign-ups: `bun run admin set
+   signup.mode invite`, which applies at once, and suspend or delete what got in.
+
+Out of order, the site says the wrong thing: indexed while it still refuses everyone without an
+invitation (step 2's deploy first), or admitting everyone while it tells search engines to stay
+away (stopping before that deploy).
 
 ## Curation
 
@@ -1048,18 +1191,39 @@ A public reader count is shown only from three readers.
 ## Translation
 
 - **Spend:** `select * from usage_daily order by day desc limit 14` (subject `'*'` is background
-  titles, anything else a member), and per call `select job, model, count(*), sum(input_tokens),
-  sum(output_tokens) from llm_calls where created_at > … group by job, model`. The digest has the
+  titles, `'~closed'` erased accounts' spend, kept so a closing gives no budget back, anything else
+  a member), and per call `select job, model, count(*), sum(input_tokens), sum(output_tokens)
+  from llm_calls where created_at > … group by job, model`. The digest has the
   week's totals. A call whose reply could not be read (no JSON, or not the schema) was still
   billed, so it is logged and charged like any other: a title job's to the background budget, a
   body's to what that translation has spent (`used_tokens`). A provider that keeps answering
   that way shows as `llm_calls` rows growing while `article_titles` does not, with the job
   retrying `reply contains no JSON object`. A call that timed out or never connected bills
   nothing Tela can see and is not logged.
-- **Budget:** `LLM_DAILY_BUDGET_TOKENS` stops the title sweep for the rest of the UTC day once
-  spent. Reader requests still run, metered per member (30 requests an hour, a daily token
-  allowance). A body converted between the Chinese scripts costs nothing and has its own limit
-  (`convert`, 600 an hour), so reading Simplified posts in Traditional never uses up the paid one.
+- **Budgets and limits** (ADR 0057), all runtime settings (*Members and limits*):
+  - `translation.siteDailyTokens` (10,000,000) is the day's model tokens, everyone's together,
+    titles and bodies. Once spent, titles stop and new body requests wait for 00:00 UTC; bodies
+    already running finish. An admin's own requests are never deferred by it, but count in it.
+  - `translation.backgroundDailyTokens` caps titles inside it; null reads tela-jobs'
+    `LLM_DAILY_BUDGET_TOKENS` (2,000,000 in production). Titles take the newest posts first, so an
+    archive a newcomer imported never holds up today's titles.
+  - `member.translationsPerDay` (20) counts the body translations a member's requests pay for. A
+    post already translated for anyone, a conversion between the Chinese scripts (its own limit,
+    `convert`, 600 an hour), one script of a post already translated into the other (the same,
+    made from the cache) and a request that cost nothing do not count. Past it, a request waits
+    for the next UTC day, one day deep, and a member with room today who opens a waiting post
+    takes it over. The hourly `translate` bucket (30) still guards against a runaway client.
+  - Pause titles: `bun run admin set translation.backgroundDailyTokens 0`. Stop paid bodies for
+    members: `bun run admin set translation.siteDailyTokens 0` (operators still pass). `null`
+    means no limit; `0` never does.
+  - Day 2: waiting now, `select count(*), min(due_at) from body_translations where state =
+    'requested' and due_at > unixepoch() * 1000`; the site today, `select coalesce(sum(used +
+    reserved), 0) from usage_daily where day = date('now')`; members at their count, `select
+    subject, requests from usage_daily where day = date('now') and subject not in ('*',
+    '~closed') order by requests desc limit 20`; stuck after midnight, `select content_key, lang, due_at from
+    body_translations where state in ('requested', 'running') and max(updated_at, coalesce(due_at,
+    0)) < unixepoch() * 1000 - 1800000`. At 00:00 UTC the waiting bodies start, 20 a minute: watch
+    the stuck check on the first nights.
 - **A Chinese body paid for twice** (ADR 0038): the Simplified and Traditional requests for one
   post that overlap each pay the model for the same blocks. This finds them (a request cut short
   by its reservation, and finished by the other, shows too):
@@ -1123,19 +1287,9 @@ cannot reach) is the reason to run the box.
 
 ## Later
 
-- **To open Tela up**, three steps in this order (ADR 0034):
-  1. **A large operator code**, posted where newcomers will see it:
-     `ADMIN_TOKEN=… bun run admin code <TEXT> --uses 100000`. Everyone with the link can join,
-     the gate still counts them, and `bun run admin revoke <TEXT>` closes it again.
-  2. **Lift the invitation gate**: a code change, with an ADR of its own, to `user.create.before`
-     and the mail gate in `apps/api/src/auth.ts`, so an address with no invitation is mailed a
-     code and given an account. Deploy tela-api.
-  3. **Remove `TELA_PRIVATE_BETA`** from `apps/reader/wrangler.jsonc` and deploy tela-web, which
-     lets search engines in.
-
-  Out of order, the site says the wrong thing: indexed while it still refuses everyone without
-  an invitation (step 3 first), or admitting everyone while it tells search engines to ignore it
-  (stopping before step 3).
+- **Restore into a fresh D1**, as the restore drill does into libSQL: `restoreDatabase` turns
+  foreign keys off with a pragma D1 may ignore, and sends 200 rows a statement in one JSON
+  parameter, which D1's statement size may refuse for wide tables.
 - **The next Node LTS**, for the relay only, **after 2026-10-28**, when Node 26 reaches LTS; Node 24 <!-- node-pin:planned -->
   enters maintenance on 2026-10-20, so the two dates make one clean move. Five pins change <!-- node-pin:planned -->
   together: `.node-version`, `engines`, the relay Dockerfile's runtime stage, the CI

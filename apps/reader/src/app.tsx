@@ -2,13 +2,13 @@
 import { isUiLocale, type UiLocale } from '@tela/shared'
 import { readingLangOf } from '@tela/sync'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router'
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { AppHeader } from './components/app-header'
 import { ErrorBoundary, PageFailed, RouteFailed } from './components/error-boundary'
 import { FrontDoorProvider, ToReading } from './components/front-door'
 import { Toast } from './components/toast'
-import { chooseLocale, detectLocale, I18n, localeCookie, localeToAdopt } from './i18n'
+import { bootLocale, chooseLocale, I18n, localeCookie, localeToAdopt } from './i18n'
 import { applyTheme, deviceTheme, PREFS, themeToAdopt, typographyOf } from './lib/typography'
 import { useForgetBlogrolls } from './lib/use-forget-blogrolls'
 import { forgetPublic } from './lib/use-public'
@@ -170,8 +170,9 @@ function HandleOrMissing() {
   return location.pathname.startsWith('/@') ? <ProfilePage /> : <NotFoundPage />
 }
 
-function Routed() {
+function Routed({ rendered }: { rendered: string | null }) {
   const { store } = useStore()
+  const navigate = useNavigate()
   // A follow the server now has, or an unfollow: the profile page held for this visit, and the one
   // the browser cached, still count the old state. Forgotten here, wherever the member is, so a
   // return to that profile fetches it again past the cache (ADR 0031).
@@ -199,8 +200,10 @@ function Routed() {
     if (ownHandle && ownHandle !== last.handle) forgetPublic(profilePath(ownHandle))
   }, [ownSeq, ownHandle])
   useForgetBlogrolls()
+  // Chosen once, at boot: a page the edge rendered keeps its language, and so does every page
+  // the app goes to from it, `?hl=` or not (ADR 0060).
   const [locale, setLocaleState] = useState<UiLocale>(() =>
-    detectLocale(document.cookie, navigator.languages ?? [navigator.language]),
+    bootLocale(store.userId !== null, rendered),
   )
   const applyLocale = useCallback((next: UiLocale) => {
     // biome-ignore lint/suspicious/noDocumentCookie: the edge reads it to render public pages.
@@ -212,9 +215,19 @@ function Routed() {
   const setLocale = useCallback(
     (next: UiLocale) => {
       const shown = chooseLocale(store, next)
-      if (shown) applyLocale(shown)
+      if (!shown) return
+      applyLocale(shown)
+      // An address that fixes the language (`?hl=`) names the one now shown, or reloading it
+      // would put back the language just left (ADR 0060). Read as the address is now, not as it
+      // was rendered, and replaced in place with whatever state its entry holds.
+      const { pathname, search, hash } = window.location
+      const query = new URLSearchParams(search)
+      if (!query.has('hl') || query.get('hl') === shown) return
+      query.set('hl', shown)
+      const state = (window.history.state as { usr?: unknown } | null)?.usr
+      navigate({ pathname, search: `?${query}`, hash }, { replace: true, state })
     },
-    [store, applyLocale],
+    [store, applyLocale, navigate],
   )
   // A member's interface language is their profile's, so a choice made on another device or in
   // another tab arrives here with the sync, and the cookie follows it for the edge. Applied when
@@ -397,13 +410,24 @@ function Routed() {
   )
 }
 
-export function App(props: { store: LocalStore; engine: SyncEngine; objects: Objects }) {
-  const handle = useMemo(() => props, [props])
+export function App({
+  store,
+  engine,
+  objects,
+  rendered = null,
+}: {
+  store: LocalStore
+  engine: SyncEngine
+  objects: Objects
+  /** The language of the page the edge rendered, if it rendered this one (`<html lang>`). */
+  rendered?: string | null
+}) {
+  const handle = useMemo(() => ({ store, engine, objects }), [store, engine, objects])
   return (
     <StoreProvider value={handle}>
-      <SessionProvider store={props.store} engine={props.engine}>
+      <SessionProvider store={store} engine={engine}>
         <BrowserRouter>
-          <Routed />
+          <Routed rendered={rendered} />
         </BrowserRouter>
       </SessionProvider>
     </StoreProvider>

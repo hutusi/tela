@@ -10,7 +10,15 @@
  * says how a blog was listed: nothing public renders it, and beside a held-back count it would
  * tell a blog an operator listed from the queue from an editorial pick (ADR 0041).
  */
-import { ARTICLE_COLUMNS, avatarOf, consumeLimit, first, isShown } from '@tela/data'
+import {
+  ARTICLE_COLUMNS,
+  avatarOf,
+  consumeLimit,
+  first,
+  isShown,
+  signupState,
+  standingOk,
+} from '@tela/data'
 import { HANDLE, isTopic, RESERVED_HANDLES } from '@tela/shared'
 import { getIP } from 'better-auth/api'
 import { sql } from 'drizzle-orm'
@@ -28,8 +36,10 @@ import {
   PUBLIC_CACHE,
   PUBLIC_LISTING,
   parseLangMap,
+  profileIndexable,
   publicNotFound,
   READER_COUNT,
+  SITE_INDEXABLE,
   siteCard,
   TITLES,
   withTitles,
@@ -57,16 +67,25 @@ export function publicRoutes(deps: ApiDeps, auth: Auth) {
   const cached = { 'cache-control': PUBLIC_CACHE }
 
   /**
-   * Which providers the sign-in sheet may offer (ADR 0036): each only once its app is configured.
-   * A browser may keep the answer five minutes, so a provider switched on shows within that.
+   * What the sign-in sheet offers: each provider only once its app is configured (ADR 0036), and
+   * whether joining needs an invite code (`signup: 'invite'`) or not (`'open'`), and if not,
+   * whether today's new accounts have filled the day (`paused`, ADR 0056). A browser may keep the
+   * answer a minute, so a switch the operator flips shows in the sheet within that; the gate reads
+   * the switch itself whatever the sheet thought.
    */
-  routes.get('/auth', (c) =>
-    c.json(
-      { google: Boolean(deps.config.oauth?.google), github: Boolean(deps.config.oauth?.github) },
+  routes.get('/auth', async (c) => {
+    const signup = await signupState(db, deps.clock.now())
+    return c.json(
+      {
+        google: Boolean(deps.config.oauth?.google),
+        github: Boolean(deps.config.oauth?.github),
+        signup: signup.mode,
+        paused: signup.paused,
+      },
       200,
-      { 'cache-control': 'public, max-age=300' },
-    ),
-  )
+      { 'cache-control': 'public, max-age=60' },
+    )
+  })
 
   routes.get('/discover', async (c) => {
     const topic = c.req.query('topic')
@@ -132,12 +151,12 @@ export function publicRoutes(deps: ApiDeps, auth: Auth) {
       db.all(sql`
         select s.id, s.title, s.home_url as "homeUrl", s.description, s.favicon_key as "faviconKey",
           s.primary_lang as "primaryLang", ${READER_COUNT} as "readerCount",
-          p.handle as "claimedBy", p.display_name as "claimantName", p.bio as "claimantBio",
+          ${SITE_INDEXABLE} as indexable, p.handle as "claimedBy", p.display_name as "claimantName", p.bio as "claimantBio",
           ${avatarOf('p')} as "claimantAvatar",
           (select count(*) from articles a join feeds f on f.id = a.feed_id
             where f.site_id = s.id and f.merged_into is null and a.sort_at >= ${since})
             as "postsLast30d"
-        from sites s left join profiles p on p.user_id = s.claimed_by
+        from sites s left join profiles p on p.user_id = s.claimed_by and ${standingOk('p')}
         where s.id = ${siteId} and s.listing in ${PUBLIC_LISTING}
       `),
       db.all(sql`
@@ -157,23 +176,25 @@ export function publicRoutes(deps: ApiDeps, auth: Auth) {
       db.all(sql`select topic from site_topics where site_id = ${siteId}`),
       // What readers said recommending its posts: recommendations are public (ADR 0031).
       db.all(sql`
-        select r.note, r.created_at as "createdAt", p.handle, p.display_name as "displayName",
-          ${ARTICLE_COLUMNS}, ${TITLES}
+        select r.note, r.created_at as "createdAt", p.user_id as "userId", p.handle,
+          p.display_name as "displayName", ${ARTICLE_COLUMNS}, ${TITLES}
         from recommendations r join articles a on a.id = r.article_id
         join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
         join profiles p on p.user_id = r.user_id
-        where f.site_id = ${siteId} and s.listing in ${PUBLIC_LISTING}
+        where f.site_id = ${siteId} and s.listing in ${PUBLIC_LISTING} and ${standingOk('p')}
           and r.deleted_at is null and r.note is not null and r.note <> ''
         order by r.created_at desc limit 5
       `),
     ] as never)) as unknown as Record<string, unknown>[][]
     const row = sites?.[0]
     if (!row) return publicNotFound()
-    const { claimantName, claimantBio, claimantAvatar, ...site } = row
+    const { claimantName, claimantBio, claimantAvatar, indexable, ...site } = row
     return c.json(
       {
         site: {
           ...site,
+          // Whether search engines may index its page (ADR 0060).
+          indexable: indexable === 1,
           // Who writes it, for the page's About: the claimant's own name and bio.
           claimant: site.claimedBy
             ? {
@@ -188,8 +209,14 @@ export function publicRoutes(deps: ApiDeps, auth: Auth) {
         posts: (posts ?? []).map(withTitles),
         topics: (topics ?? []).map((t) => t.topic),
         notes: (notes ?? []).map((n) => {
-          const { note, createdAt, handle, displayName, ...article } = n
-          return { note, createdAt, person: { handle, displayName }, article: withTitles(article) }
+          const { note, createdAt, userId, handle, displayName, ...article } = n
+          return {
+            note,
+            createdAt,
+            // The account id: what a report of the note names (ADR 0059).
+            person: { id: userId, handle, displayName },
+            article: withTitles(article),
+          }
         }),
       },
       200,
@@ -208,11 +235,12 @@ export function publicRoutes(deps: ApiDeps, auth: Auth) {
       public_subscriptions: number
       public_likes: number
       avatar: string | null
+      indexable: number
     }>(
       db,
       sql`select user_id, handle, display_name, bio, created_at, public_subscriptions, public_likes,
-            ${avatarOf('p')} as avatar
-          from profiles p where handle = ${handle}`,
+            ${avatarOf('p')} as avatar, ${profileIndexable(deps.clock.now())} as indexable
+          from profiles p where handle = ${handle} and ${standingOk('p')}`,
     )
     if (!profile) return publicNotFound()
     const id = profile.user_id
@@ -224,8 +252,8 @@ export function publicRoutes(deps: ApiDeps, auth: Auth) {
       `),
       db.all(sql`
         select r.note, r.created_at as "createdAt", s.id as "siteId", s.title as "siteTitle",
-          s.home_url as "homeUrl", (s.listing in ${PUBLIC_LISTING}) as listed, ${ARTICLE_COLUMNS},
-          ${TITLES}
+          s.home_url as "homeUrl", (s.listing in ${PUBLIC_LISTING}) as listed,
+          ${SITE_INDEXABLE} as vouched, ${ARTICLE_COLUMNS}, ${TITLES}
         from recommendations r join articles a on a.id = r.article_id
         join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
         where r.user_id = ${id} and r.deleted_at is null
@@ -243,8 +271,8 @@ export function publicRoutes(deps: ApiDeps, auth: Auth) {
       profile.public_likes
         ? db.all(sql`
             select st.liked_at as "likedAt", s.id as "siteId", s.title as "siteTitle",
-              s.home_url as "homeUrl", (s.listing in ${PUBLIC_LISTING}) as listed, ${ARTICLE_COLUMNS},
-              ${TITLES}
+              s.home_url as "homeUrl", (s.listing in ${PUBLIC_LISTING}) as listed,
+              ${SITE_INDEXABLE} as vouched, ${ARTICLE_COLUMNS}, ${TITLES}
             from user_article_states st join articles a on a.id = st.article_id
             join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
             where st.user_id = ${id} and st.liked_at is not null
@@ -253,8 +281,12 @@ export function publicRoutes(deps: ApiDeps, auth: Auth) {
         : db.all(none),
       db.all(sql`
         select
-          (select count(*) from follows where follower_id = ${id} and deleted_at is null) as following,
-          (select count(*) from follows where followee_id = ${id} and deleted_at is null) as followers,
+          (select count(*) from follows fo join profiles fp on fp.user_id = fo.followee_id
+            where fo.follower_id = ${id} and fo.deleted_at is null and ${standingOk('fp')})
+            as following,
+          (select count(*) from follows fo join profiles fp on fp.user_id = fo.follower_id
+            where fo.followee_id = ${id} and fo.deleted_at is null and ${standingOk('fp')})
+            as followers,
           (select count(*) from recommendations where user_id = ${id} and deleted_at is null)
             as recommendations,
           (select count(*) from user_article_states where user_id = ${id} and liked_at is not null)
@@ -275,13 +307,16 @@ export function publicRoutes(deps: ApiDeps, auth: Auth) {
       : null
     // The post as the reader holds one, beside the note (or when it was liked) and its blog.
     const withArticle = (r: Record<string, unknown>) => {
-      const { note, createdAt, likedAt, siteId, siteTitle, homeUrl, listed, ...article } = r
+      const { note, createdAt, likedAt, siteId, siteTitle, homeUrl, listed, vouched, ...article } =
+        r
       return {
         ...(likedAt === undefined ? { note, createdAt } : { likedAt }),
         siteId,
         siteTitle,
         homeUrl,
         listed: listed === 1,
+        // An operator listed the blog: the post's link is followed (ADR 0060).
+        vouched: vouched === 1,
         article: withTitles(article),
       }
     }
@@ -295,6 +330,8 @@ export function publicRoutes(deps: ApiDeps, auth: Auth) {
           bio: profile.bio,
           avatar: profile.avatar,
           memberSince: profile.created_at,
+          // Whether search engines may index it (ADR 0060).
+          indexable: profile.indexable === 1,
         },
         counts: {
           following: Number(count.following ?? 0),
@@ -356,6 +393,7 @@ export function publicRoutes(deps: ApiDeps, auth: Auth) {
               homeUrl,
               faviconKey,
               primaryLang,
+              siteVouched,
               claimantHandle,
               claimantName,
               excerpts,
@@ -363,7 +401,15 @@ export function publicRoutes(deps: ApiDeps, auth: Auth) {
             } = r
             return {
               article: { ...withTitles(article), excerpts: parseLangMap(excerpts) },
-              site: { id: siteId, title: siteTitle, homeUrl, faviconKey, primaryLang },
+              site: {
+                id: siteId,
+                title: siteTitle,
+                homeUrl,
+                faviconKey,
+                primaryLang,
+                // An operator listed it: the post's link is followed (ADR 0060).
+                vouched: siteVouched === 1,
+              },
               claimant: claimantHandle
                 ? { handle: claimantHandle, displayName: claimantName }
                 : null,

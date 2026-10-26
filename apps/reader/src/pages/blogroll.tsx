@@ -25,7 +25,7 @@ import { UNDO_HOLD_MS } from '../lib/toasts'
 import { offerUndo } from '../lib/undo'
 import { usePublic } from '../lib/use-public'
 import { selectBlogrollPage } from '../store/blogrolls'
-import { useNow, useStore, useTables } from '../store/hooks'
+import { useNow, useReadingLang, useStore, useTables } from '../store/hooks'
 import { useUi } from '../ui'
 import { BlogrollView, QUIET_PILL, ROW_PILL } from '../views/blogroll'
 import { blogrollDataOf } from '../views/public-data'
@@ -68,6 +68,7 @@ function OthersBlogroll({ data }: { data: BlogrollData }) {
   const now = useNow()
   // The owner, on a device that has not pulled the blogroll yet: theirs, but not from the store.
   const readOnly = member !== undefined && store.userId === data.owner.id
+  const hl = useReadingLang(locale)
   return (
     <BlogrollView
       data={data}
@@ -76,6 +77,7 @@ function OthersBlogroll({ data }: { data: BlogrollData }) {
       now={now}
       readOnly={readOnly}
       subscribe={member && !readOnly ? <SubscribeAll data={data} /> : undefined}
+      feeds={{ hl }}
     />
   )
 }
@@ -122,6 +124,7 @@ function OwnBlogroll({ id }: { id: string }) {
   const now = useNow()
   const location = useLocation()
   const owner = useOwner()
+  const hl = useReadingLang(locale)
   const page = selectBlogrollPage(tables, id, owner)
   const row = tables.blogrolls.get(id)
   // A blogroll just made with nothing in it opens with Add blogs (its page is told so). Only while
@@ -228,6 +231,7 @@ function OwnBlogroll({ id }: { id: string }) {
         </div>
       }
       footer={row.isPublic ? t('owner.footerPublic') : t('owner.footerPrivate')}
+      feeds={row.isPublic ? { hl } : undefined}
     />
   )
 }

@@ -1,8 +1,20 @@
 {
   "utc": "UTC {time}",
   "filters": {
-    "translation": { "blogs": "按博客", "jobs": "按任务", "models": "按模型" },
-    "system": { "dead": "死信", "retrying": "重试中", "resolved": "已处理" }
+    "translation": {
+      "blogs": "按博客",
+      "jobs": "按任务",
+      "models": "按模型"
+    },
+    "system": {
+      "dead": "死信",
+      "retrying": "重试中",
+      "resolved": "已处理"
+    },
+    "settings": {
+      "all": "全部",
+      "changed": "已修改"
+    }
   },
   "translation": {
     "search": "搜索博客、任务或模型",
@@ -18,9 +30,14 @@
     "backgroundValue": "{used} / {budget}",
     "unlimited": "不设每日上限",
     "unknownBudget": "下一次定时任务上报后显示预算",
+    "paused": "已暂停：预算为 0",
+    "site": "今日全站预算",
+    "memberUnlimited": "不设上限",
+    "waiting": "等待明天",
+    "waitingSub": "超出成员当天上限或全站预算、推迟到下一个 UTC 日的全文翻译。",
     "memberCap": "成员上限",
-    "memberCapValue": "每天 {cap}",
-    "nearCap": "{n, plural, =0 {按成员计。本周无人接近上限（差一篇文章以内）。} other {按成员计。本周有 # 人接近上限（差一篇文章以内）。}}",
+    "memberCapValue": "每天 {cap} 篇",
+    "nearCap": "{n, plural, =0 {每位成员每天可新译的全文篇数。本周无人达到上限。} other {每位成员每天可新译的全文篇数。本周有 # 人达到上限。}}",
     "perDay": "每日 Token",
     "peak": "峰值 {n}",
     "today": "今天（截至目前）",
@@ -97,5 +114,102 @@
     "pingedFail": "{time} 已向失联报警服务报告问题。",
     "kindsLabel": "按类型的后台任务",
     "load": "进行中 {held} · 重试中 {retrying}"
+  },
+  "settings": {
+    "name": "设置",
+    "search": "搜索设置",
+    "separator": "、",
+    "columns": {
+      "now": "当前",
+      "default": "默认",
+      "changed": "修改于"
+    },
+    "status": {
+      "default": "默认",
+      "changed": "已修改"
+    },
+    "kv": {
+      "now": "当前",
+      "default": "默认",
+      "changed": "修改于"
+    },
+    "never": "从未修改，沿用默认",
+    "change": "修改",
+    "number": "数量",
+    "percents": "百分比，用逗号隔开",
+    "save": "保存",
+    "useDefault": "恢复默认",
+    "unchanged": "和现在的一样。",
+    "errors": {
+      "number": "请填写 0 到 {max} 之间的整数。",
+      "percents": "请填写 1 到 100 之间的整数百分比，最多十个，用逗号隔开。",
+      "choice": "请从选项中选一个。"
+    },
+    "note": "改动即刻生效，不用重新部署。管理员不受成员限额约束，但全站预算同样算他们。",
+    "keys": {
+      "signup": {
+        "mode": {
+          "name": "谁可以加入",
+          "about": "仅限邀请：每个新账号都需要邀请。开放：用验证码验证过的邮箱就能加入。",
+          "choices": {
+            "open": "开放",
+            "invite": "仅限邀请"
+          }
+        },
+        "maxPerDay": {
+          "name": "每天新账号上限",
+          "about": "超过之后，无论哪种方式，加入都要等到下一个 UTC 日。",
+          "value": "{n, plural, =0 {为零：暂停加入} other {每天 # 个}}",
+          "none": "不限"
+        }
+      },
+      "member": {
+        "translationsPerDay": {
+          "name": "每位成员的新翻译",
+          "about": "一个 UTC 日内，成员的请求能付费翻译的文章数。已经替别人翻译过的不计；超出的等到第二天。",
+          "value": "{n, plural, =0 {为零} other {每天 # 篇}}",
+          "none": "不限"
+        },
+        "feedsPerDay": {
+          "name": "每位成员的新订阅源",
+          "about": "一个 UTC 日内，成员能添加的 Tela 尚未收录的订阅源，认领博客带来的也算。订阅 Tela 已有的不计；导入时多出来的，在之后几天陆续加入。",
+          "value": "{n, plural, =0 {为零} other {每天 # 个}}",
+          "none": "不限"
+        },
+        "maxSubscriptions": {
+          "name": "每个账号的订阅上限",
+          "about": "一个账号最多能订阅多少个博客。",
+          "value": "{n, plural, =0 {为零} other {# 个博客}}",
+          "none": "不限"
+        }
+      },
+      "translation": {
+        "siteDailyTokens": {
+          "name": "全站翻译预算",
+          "about": "一个 UTC 日内，所有人的标题和正文翻译合起来能用的模型 token。用完之后，进行中的翻译照常完成，新的等到第二天。",
+          "value": "{n, plural, =0 {为零：翻译暂停} other {每天 {tokens} token}}",
+          "none": "不限"
+        },
+        "backgroundDailyTokens": {
+          "name": "标题翻译预算",
+          "about": "一个 UTC 日内标题翻译能用的模型 token，算在全站预算之内。不设置时，由 tela-jobs 的 LLM_DAILY_BUDGET_TOKENS 决定，其中 0 表示不限。",
+          "value": "{n, plural, =0 {为零：标题暂停} other {每天 {tokens} token}}",
+          "none": "按 tela-jobs 的 LLM_DAILY_BUDGET_TOKENS"
+        }
+      },
+      "alerts": {
+        "signupsPerDay": {
+          "name": "注册提醒",
+          "about": "一个 UTC 日内加入的人超过这个数时，给你发一封邮件。",
+          "value": "{n, plural, =0 {有人注册就提醒} other {一天超过 # 个}}",
+          "none": "不提醒"
+        },
+        "budgetPercents": {
+          "name": "预算提醒",
+          "about": "全站预算每用到一个比例，当天给你发一封邮件。",
+          "none": "不提醒"
+        }
+      }
+    }
   }
 }

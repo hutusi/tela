@@ -9,6 +9,7 @@
 export const ADMIN_AREAS = [
   'overview',
   'claims',
+  'reports',
   'sites',
   'feeds',
   'discover',
@@ -16,22 +17,28 @@ export const ADMIN_AREAS = [
   'invites',
   'translation',
   'system',
+  'settings',
 ] as const
 export type AdminArea = (typeof ADMIN_AREAS)[number]
 
 /** Each ledger's filters; the first is where the area opens. */
 export const ADMIN_FILTERS = {
   claims: ['review', 'checking', 'verified'],
+  // Reports of public content (ADR 0059), one row per thing reported: `open` is the queue.
+  reports: ['open', 'resolved', 'dismissed'],
   sites: ['discover', 'private', 'attention', 'hidden'],
   feeds: ['failing', 'timeout', 'dead', 'paused', 'merged', 'fetching'],
   // `candidates` is the review queue (ADR 0041), "To review"; `dismissed`, the blogs judged not
   // for Discover, which three readers can still list. `blogrolls` lists members' public
   // blogrolls (ADR 0050), not blogs: its rows are `AdminBlogrollRow`s.
   discover: ['candidates', 'featured', 'listed', 'dismissed', 'hidden', 'blogrolls'],
-  people: ['admins', 'members'],
+  // `suspended`: members an operator suspended (ADR 0059), who are in neither of the others.
+  people: ['admins', 'members', 'suspended'],
   invites: ['codes', 'waiting', 'revoked'],
   translation: ['blogs', 'jobs', 'models'],
   system: ['dead', 'retrying', 'resolved'],
+  // Every runtime setting (ADR 0056), and those a stored row overrides.
+  settings: ['all', 'changed'],
 } as const satisfies Record<Exclude<AdminArea, 'overview'>, readonly string[]>
 export type LedgerArea = keyof typeof ADMIN_FILTERS
 export type AdminFilter<A extends LedgerArea = LedgerArea> = (typeof ADMIN_FILTERS)[A][number]
@@ -67,6 +74,8 @@ export const ADMIN_ACTIONS = [
   'site.topics',
   'site.translationOff',
   'site.translationOn',
+  'site.feedOnly',
+  'site.feedAll',
   'site.fetchAll',
   'claim.recheck',
   'claim.vouch',
@@ -85,6 +94,12 @@ export const ADMIN_ACTIONS = [
   'dead.dismiss',
   'lease.retryNow',
   'member.signOut',
+  'member.suspend',
+  'member.unsuspend',
+  'member.delete',
+  'report.resolve',
+  'report.dismiss',
+  'setting.set',
   'code.create',
   'code.addUses',
   'code.revoke',
@@ -111,6 +126,8 @@ export const UNDOABLE_ACTIONS = [
   'site.topics',
   'site.translationOff',
   'site.translationOn',
+  'site.feedOnly',
+  'site.feedAll',
   'claim.dismiss',
   'claim.remove',
   'feed.pause',
@@ -120,6 +137,11 @@ export const UNDOABLE_ACTIONS = [
   'blogroll.hide',
   'blogroll.restore',
   'dead.dismiss',
+  'member.suspend',
+  'member.unsuspend',
+  'report.resolve',
+  'report.dismiss',
+  'setting.set',
   'code.revoke',
   'code.restore',
 ] as const satisfies readonly AdminActionName[]
@@ -142,6 +164,9 @@ export const ACTION_WRITES = {
   'site.topics': 'topics',
   'site.translationOff': 'translation',
   'site.translationOn': 'translation',
+  // "Only use what my feed provides" (ADR 0061), as its writer can set it on the Dashboard.
+  'site.feedOnly': 'feedOnly',
+  'site.feedAll': 'feedOnly',
   'site.fetchAll': null,
   'claim.recheck': 'claim',
   'claim.vouch': 'claim',
@@ -161,6 +186,13 @@ export const ACTION_WRITES = {
   'dead.dismiss': 'resolution',
   'lease.retryNow': null,
   'member.signOut': null,
+  // A member's standing (ADR 0059): suspended or not; a deletion ends it for good.
+  'member.suspend': 'standing',
+  'member.unsuspend': 'standing',
+  'member.delete': 'standing',
+  'report.resolve': 'report',
+  'report.dismiss': 'report',
+  'setting.set': 'value',
   'code.create': 'code',
   'code.addUses': 'uses',
   'code.revoke': 'revoked',
@@ -206,6 +238,8 @@ export const ACTION_CONFIRM = [
   'claim.vouch',
   'claim.remove',
   'member.signOut',
+  'member.suspend',
+  'member.delete',
   'code.revoke',
   'hold.cancel',
 ] as const satisfies readonly AdminActionName[]
@@ -231,6 +265,8 @@ export type AdminActArgs = {
   code?: string
   /** `invite.address`. */
   email?: string
+  /** `setting.set`: the new value, checked by `parseSetting` for the key the request names. */
+  value?: unknown
 }
 
 export type AdminActRequest = {
@@ -265,8 +301,16 @@ export type AdminUndoResponse = { restored: number } | { error: 'not_found' | 'c
 /** A member as the console names them; never more than the public card plus the handle. */
 export type AdminPerson = { id: string; handle: string; name: string | null }
 
-/** What an audit row records: a console action, an undo, or the CLI granting the console. */
-export type AdminAuditAction = AdminActionName | 'undo' | 'admin.grant' | 'admin.ungrant'
+/**
+ * What an audit row records: a console action, an undo, the CLI granting the console, or a member
+ * closing their own account (ADR 0058), which the console shows beside an operator's deletion.
+ */
+export type AdminAuditAction =
+  | AdminActionName
+  | 'undo'
+  | 'admin.grant'
+  | 'admin.ungrant'
+  | 'account.delete'
 
 /** One audit row: who did what to which target, and what it replaced. */
 export type AdminHistoryEntry = {

@@ -33,7 +33,13 @@ export type AdminHeartbeats = {
   digest: number | null
   /** From the tick's heartbeat; null until a tick that reports it has run. */
   config: {
-    backgroundBudget: number
+    /**
+     * The day's background (title) budget in tokens as it holds (ADR 0057): the setting, or the
+     * env value it falls back to. Null is no limit, 0 is paused.
+     */
+    backgroundBudget: number | null
+    /** `translation.siteDailyTokens`: every subject's tokens together. Null is no limit. */
+    siteBudget: number | null
     maxArticleTokens: number
     translator: boolean
     relay: boolean
@@ -119,13 +125,29 @@ export type AdminTranslationReport = {
   totals: { inputTokens: number; outputTokens: number; calls: number }
   /** Tokens no blog can be charged with: title calls that batched several feeds' posts. */
   unattributed: number
-  background: { day: string; used: number; reserved: number; budget: number | null }
-  memberCap: number
   /**
-   * How many members came within one article of their daily cap this week. A count, never who:
-   * a member's tokens are what they opened, and what a member reads is not the console's to show.
+   * Titles' tokens today against the background budget as it holds (ADR 0057): null is no limit
+   * and 0 paused. With no setting stored it is tela-jobs' env value, known once a tick has said
+   * it (`budgetKnown`).
+   */
+  background: {
+    day: string
+    used: number
+    reserved: number
+    budget: number | null
+    budgetKnown: boolean
+  }
+  /** Every subject's tokens today, members' and titles', against `translation.siteDailyTokens`. */
+  site: { day: string; used: number; reserved: number; budget: number | null }
+  /** `member.translationsPerDay`: paid body translations a member may ask for a day; null none. */
+  memberCap: number | null
+  /**
+   * How many members reached their day's count this week, so a request of theirs waited. A count,
+   * never who: what a member reads is not the console's to show. Operators are exempt and left out.
    */
   nearCap: number
+  /** Body translations waiting for the next UTC day now. */
+  waiting: number
 }
 
 /** The sidebar's badges, `GET /api/v1/admin/counts`: what waits in each queue. */
@@ -138,6 +160,8 @@ export type AdminCounts = {
   dead: number
   /** Blogs members added that wait for review for Discover (ADR 0041). */
   discover: number
+  /** Things reported that wait for an operator (ADR 0059): one per thing, however many reported it. */
+  reports: number
 }
 
 export type AdminOverview = {
@@ -157,3 +181,16 @@ export type AdminOverview = {
   }
   activity: (AdminHistoryEntry & { label: string | null })[]
 }
+
+/** One runtime setting as the console's Settings area shows it (ADR 0056). */
+export type AdminSettingRow = {
+  key: import('../settings').SettingKey
+  /** What holds now: the stored value, or the default. */
+  value: unknown
+  default: unknown
+  /** Whether a row overrides the default. */
+  stored: boolean
+  updatedAt: number | null
+}
+
+export type AdminSettings = { settings: AdminSettingRow[] }

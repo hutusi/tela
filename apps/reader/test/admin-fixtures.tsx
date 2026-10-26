@@ -172,6 +172,7 @@ export const candidate: AdminSiteRow = {
   claimFailing: false,
   primaryLang: 'ja',
   translationOptOut: false,
+  feedOnly: false,
   topics: [],
   createdAt: 1_759_000_000_000,
   postsLast30d: 6,

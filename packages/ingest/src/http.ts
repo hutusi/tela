@@ -36,6 +36,8 @@ export type HttpResponse = {
   /** Set when every redirect hop was permanent (301/308): the caller may adopt it. */
   permanentRedirectTo: string | null
   elapsedMs: number
+  /** Set when `truncate` cut the body at the cap. */
+  truncated?: boolean
 }
 
 export type HttpGetOptions = {
@@ -47,6 +49,11 @@ export type HttpGetOptions = {
   timeoutMs?: number
   /** Override the client's body cap for this request (extraction parses in a 128 MB isolate). */
   maxBytes?: number
+  /**
+   * Past the cap, keep what came before it instead of failing with `too_large`: a robots.txt is
+   * read to its first 500 KiB (RFC 9309), however long it is. `truncated` says it was cut.
+   */
+  truncate?: boolean
 }
 
 export type HttpClient = {
@@ -164,6 +171,30 @@ function wholeRange(response: Response): boolean {
   if (response.status !== 206) return false
   const range = response.headers.get('content-range')?.match(/^bytes\s+0-(\d+)\/(\d+)$/i)
   return range !== null && range !== undefined && Number(range[1]) + 1 === Number(range[2])
+}
+
+/**
+ * The first `maxBytes` of a body, and whether there was more: the rest is never read, and the
+ * stream is cancelled.
+ */
+async function readPrefix(
+  message: { body: ReadableStream<Uint8Array> | null },
+  maxBytes: number,
+): Promise<{ bytes: Uint8Array; truncated: boolean }> {
+  if (!message.body) return { bytes: new Uint8Array(), truncated: false }
+  const reader = message.body.getReader()
+  const chunks: Uint8Array[] = []
+  let total = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) return { bytes: joined(chunks, maxBytes), truncated: false }
+    chunks.push(value)
+    total += value.byteLength
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => {})
+      return { bytes: joined(chunks, maxBytes), truncated: true }
+    }
+  }
 }
 
 /** Buffer a body through `cappedStream`. Accepts a Request as well as a Response. */
@@ -293,8 +324,15 @@ export function createHttpClient(options: HttpClientOptions): HttpClient {
 
         const status = wholeRange(response) ? 200 : response.status
         let bytes: Uint8Array
+        let truncated = false
         try {
-          bytes = await readCapped(response, opts.maxBytes ?? maxBytes)
+          if (opts.truncate) {
+            const prefix = await readPrefix(response, opts.maxBytes ?? maxBytes)
+            bytes = prefix.bytes
+            truncated = prefix.truncated
+          } else {
+            bytes = await readCapped(response, opts.maxBytes ?? maxBytes)
+          }
         } catch (err) {
           if (!(err instanceof HttpError)) throw classify(err)
           err.status = status
@@ -312,6 +350,7 @@ export function createHttpClient(options: HttpClientOptions): HttpClient {
           finalUrl: current,
           permanentRedirectTo: hops > 0 && allPermanent && current !== url ? current : null,
           elapsedMs: now() - started,
+          ...(truncated ? { truncated } : {}),
         }
       }
     },

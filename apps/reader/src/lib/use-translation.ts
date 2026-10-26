@@ -10,6 +10,9 @@
  * - A finished object that cannot be had, asked for twice, leaves the blocks no chunk brought with
  *   nothing on the way to them: the translation is then failed for this reader (`readerState`),
  *   and Retry asks for the object again.
+ * - A request put off to the next UTC day (ADR 0057) waits: `requested` with a `dueAt` ahead.
+ *   Nothing polls it until then; opening it asks once more, so a member with room today can take
+ *   it over and have it now.
  */
 import type { ArticleRow, TranslationRow } from '@tela/sync'
 import { translationKey } from '@tela/sync'
@@ -21,7 +24,16 @@ import type { ContentObject, Objects, TranslationChunk, TranslationObject } from
 import { siteOfFeed } from '../store/selectors'
 import { blocksContaining, type ReaderBlock } from './block-pairs'
 
-export type TranslationNotice = 'rateLimited' | 'budgetExhausted' | 'unavailable'
+/**
+ * A refusal, said beside the bar. `budgetExhausted` is one with no reason, from a tela-api before
+ * ADR 0057; `budgetMember` and `budgetSite` say whose day had no room.
+ */
+export type TranslationNotice =
+  | 'rateLimited'
+  | 'budgetExhausted'
+  | 'budgetMember'
+  | 'budgetSite'
+  | 'unavailable'
 
 export type ArticleTranslation = {
   /** Null when the article is already in the reading language, or cannot be translated. */
@@ -30,12 +42,24 @@ export type ArticleTranslation = {
   blocks: (ReaderBlock | null)[] | null
   untranslated: string[]
   notice: TranslationNotice | null
+  /** The member's paid translations a day, for `budgetMember`'s words; null when not known. */
+  perDay: number | null
+  /** When a waiting translation is due (ADR 0057); null unless `view.state` is `waiting`. */
+  dueAt: number | null
   retry(): void
 }
 
-export type Live = Pick<TranslationRow, 'state' | 'chunkKeys' | 'objectKey' | 'failedLeaves'> & {
+export type Live = Pick<
+  TranslationRow,
+  'state' | 'chunkKeys' | 'objectKey' | 'failedLeaves' | 'dueAt'
+> & {
   /** Absent from a tela-api from before answers carried it. */
   seq?: number
+}
+
+/** Whether a translation waits for its day (ADR 0057): asked for, and not due yet. */
+export function isWaiting(live: Live | null | undefined, now: number): boolean {
+  return live?.state === 'requested' && typeof live.dueAt === 'number' && live.dueAt > now
 }
 
 const POLL_MS = 1500
@@ -84,10 +108,16 @@ export function moreAdvanced(row: Live | undefined, live: Live | null): Live | n
   return going && live.chunkKeys.length > row.chunkKeys.length ? live : row
 }
 
-const NOTICE: Record<string, TranslationNotice> = {
-  rate_limited: 'rateLimited',
-  budget_exhausted: 'budgetExhausted',
-  unavailable: 'unavailable',
+/** What a request's answer says beside the bar, if anything. */
+export function noticeOf(answer: { status: string; reason?: unknown }): TranslationNotice | null {
+  if (answer.status === 'rate_limited') return 'rateLimited'
+  if (answer.status === 'unavailable') return 'unavailable'
+  if (answer.status !== 'budget_exhausted') return null
+  return answer.reason === 'member'
+    ? 'budgetMember'
+    : answer.reason === 'site'
+      ? 'budgetSite'
+      : 'budgetExhausted'
 }
 
 /**
@@ -127,17 +157,23 @@ export async function finishedObject(
  * Where the translation stands for this reader. Until the member asks, nothing is under way for
  * them, whatever another reader started; skipped reads as failed. So does a finished translation
  * whose object could not be had while blocks still wait on it (`stalled`): no chunk is coming for
- * them, so they would wait under "Translating the rest…" for ever, with no Retry.
+ * them, so they would wait under "Translating the rest…" for ever, with no Retry. A request whose
+ * day has not come is `waiting` (ADR 0057).
  */
 export function readerState(
   current: Live | null,
   enabled: boolean,
   stalled: boolean,
+  now: number = Date.now(),
 ): ReaderTranslationState {
   if (!current || !enabled) return 'none'
   if (current.state === 'skipped' || stalled) return 'failed'
+  if (isWaiting(current, now)) return 'waiting'
   return current.state as ReaderTranslationState
 }
+
+/** The longest a waiting translation's timer is set for: a timer past 2³¹ ms fires at once. */
+const MAX_WAIT_MS = 2 ** 31 - 1
 
 export function useArticleTranslation(
   article: ArticleRow | null,
@@ -167,6 +203,9 @@ export function useArticleTranslation(
     : undefined
   const [live, setLive] = useState<Live | null>(null)
   const [notice, setNotice] = useState<TranslationNotice | null>(null)
+  const [perDay, setPerDay] = useState<number | null>(null)
+  // Read again when a waiting translation falls due, so the post starts polling while it is open.
+  const [clock, setClock] = useState(() => Date.now())
   const [chunks, setChunks] = useState<Map<number, string>>(() => new Map())
   const [final, setFinal] = useState<TranslationObject | null>(null)
   // The key of a finished object asked for twice in vain, and how many times Retry asked again.
@@ -179,6 +218,7 @@ export function useArticleTranslation(
   useEffect(() => {
     setLive(null)
     setNotice(null)
+    setPerDay(null)
     setChunks(new Map())
     setFinal(null)
     setLost(null)
@@ -193,26 +233,49 @@ export function useArticleTranslation(
       const res = await api('/api/v1/translations', {
         body: { articleId: article.id, lang: readingLang },
       })
-      const body = (await res.json()) as { status: string; translation: Live | null }
-      if (NOTICE[body.status]) setNotice(NOTICE[body.status] as TranslationNotice)
+      const body = (await res.json()) as {
+        status: string
+        translation: Live | null
+        reason?: unknown
+        allowance?: { perDay?: unknown }
+      }
+      const perDay = body.allowance?.perDay
+      setPerDay(typeof perDay === 'number' ? perDay : null)
+      const said = noticeOf(body)
+      if (said) setNotice(said)
       else if (body.translation) setLive(body.translation)
+      setClock(Date.now())
       if (pullsAfterRequest(body.status)) void engine.pull()
     } catch {
       setNotice('unavailable')
     }
   }, [article, readingLang, engine])
 
-  // Ask once per article and language, when there is nothing to show yet.
+  // Ask once per article and language, when there is nothing to show yet, or what there is waits
+  // for its day: a member with room today takes it over.
+  const rowWaits = isWaiting(row, clock)
   useEffect(() => {
-    if (!needed || !enabled || row || !contentKey) return
+    if (!needed || !enabled || (row && !rowWaits) || !contentKey) return
     const key = `${contentKey}:${readingLang}`
     if (asked.current === key) return
     asked.current = key
     void request()
-  }, [needed, enabled, row, contentKey, readingLang, request])
+  }, [needed, enabled, row, rowWaits, contentKey, readingLang, request])
+
+  // A waiting translation is not polled: it is looked at again when it falls due.
+  const waiting = isWaiting(current, clock)
+  const dueAt = waiting ? (current?.dueAt ?? null) : null
+  useEffect(() => {
+    if (dueAt === null) return
+    const timer = setTimeout(
+      () => setClock(Date.now()),
+      Math.min(MAX_WAIT_MS, Math.max(0, dueAt - Date.now()) + 1000),
+    )
+    return () => clearTimeout(timer)
+  }, [dueAt])
 
   // Poll while it runs, in a visible tab.
-  const running = current?.state === 'requested' || current?.state === 'running'
+  const running = (current?.state === 'requested' && !waiting) || current?.state === 'running'
   useEffect(() => {
     if (!running || !enabled || !contentKey) return
     let stopped = false
@@ -313,7 +376,7 @@ export function useArticleTranslation(
     lost === objectKey &&
     final === null &&
     (blocks === null || blocks.some((b) => b === null))
-  const state = readerState(current, enabled, stalled)
+  const state = readerState(current, enabled, stalled, clock)
   return {
     view: needed
       ? {
@@ -321,11 +384,14 @@ export function useArticleTranslation(
           state,
           failedBlocks: untranslated.length,
           available: blocks !== null,
+          dueAt: state === 'waiting' ? dueAt : null,
         }
       : null,
     blocks,
     untranslated,
     notice,
+    perDay,
+    dueAt: state === 'waiting' ? dueAt : null,
     // Stalled, the translation is there and only its object is missing: ask for that again, not
     // for a new translation. Until it lands the rest waits under its placeholder once more.
     retry: stalled

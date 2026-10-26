@@ -9,7 +9,15 @@
  * - **Conflicts across devices go to the later `at`**, clamped to the server's clock so a device
  *   with a clock in the future cannot win every argument.
  */
-import { bumpSeq, currentSeq, gravatarOn, recountReaders, type TelaDb } from '@tela/data'
+import {
+  bumpSeq,
+  currentSeq,
+  gravatarOn,
+  recountReaders,
+  standingOk,
+  subscriptionRoom,
+  type TelaDb,
+} from '@tela/data'
 import { hasControl, MAX_BLOGROLL_BLOGS, MAX_BLOGROLLS, MAX_FOLDERS } from '@tela/shared'
 import { type Mutation, mutationSchema, PREF_MAX_BYTES, type PushResponse } from '@tela/sync'
 import { sql } from 'drizzle-orm'
@@ -140,11 +148,15 @@ function statementsFor(
       ]
     }
     case 'subscribe':
+      // Past the member's subscription cap (ADR 0063) a new one writes nothing, as a folder past
+      // MAX_FOLDERS does; one already followed was a no-op anyway. The device refuses first,
+      // with words, from the cap its usage answer gave it.
       return [
         db.run(sql`
           insert into subscriptions (user_id, feed_id, watermark_id, created_at, updated_at, seq)
           select ${userId}, ${feedOf(m)}, 0, ${now}, ${now}, ${currentSeq}
           from feeds where id = ${m.feedId} ${unmerged(m)} and ${fresh}
+            and ${subscriptionRoom(userId)} > 0
           on conflict (user_id, feed_id) do update set
             deleted_at = null, updated_at = excluded.updated_at, seq = excluded.seq
           where subscriptions.deleted_at is not null
@@ -333,12 +345,15 @@ function statementsFor(
     case 'follow':
       // Through the followee's profile, so nobody to follow writes nothing; and never yourself,
       // excluded here because the table's check would sink the whole push (ADR 0031). A follow
-      // after an unfollow is a new follow, from now.
+      // after an unfollow is a new follow, from now. Nor a closed or suspended account (ADRs
+      // 0058, 0059): acknowledged, and nothing written, so the device's follow goes once it pulls,
+      // and a follow queued on a device offline as the account closed never brings the row back.
       return [
         db.run(sql`
           insert into follows (follower_id, followee_id, created_at, updated_at, seq)
           select ${userId}, p.user_id, ${at}, ${at}, ${currentSeq} from profiles p
-          where p.user_id = ${m.userId} and p.user_id <> ${userId} and ${fresh}
+          where p.user_id = ${m.userId} and p.user_id <> ${userId} and ${standingOk('p')}
+            and ${fresh}
           on conflict (follower_id, followee_id) do update set
             created_at = case when follows.deleted_at is null then follows.created_at
               else excluded.created_at end,

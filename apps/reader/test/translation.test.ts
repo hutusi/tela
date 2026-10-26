@@ -1,10 +1,13 @@
 import { describe, expect, test } from 'bun:test'
+import { waitingLine } from '../src/components/translation-bar'
 import { type BlockPair, translatedPrefix } from '../src/lib/block-pairs'
 import {
   FINISHED_RETRY_MS,
   finishedObject,
+  isWaiting,
   type Live,
   moreAdvanced,
+  noticeOf,
   pollDelay,
   pullsAfterRequest,
   readerState,
@@ -204,6 +207,57 @@ describe('what a translation request pulls', () => {
   test('a refusal writes nothing', () => {
     for (const status of ['invalid', 'unavailable', 'rate_limited', 'budget_exhausted']) {
       expect(pullsAfterRequest(status)).toBe(false)
+    }
+  })
+})
+
+describe('a translation that waits for its day (ADR 0057)', () => {
+  const NOW = Date.UTC(2026, 9, 25, 14)
+  const MIDNIGHT = Date.UTC(2026, 9, 26)
+  const waits: Live = {
+    state: 'requested',
+    chunkKeys: [],
+    objectKey: null,
+    failedLeaves: [],
+    dueAt: MIDNIGHT,
+    seq: 5,
+  }
+
+  test('is waiting until its day, and an ordinary request once it falls due', () => {
+    expect(isWaiting(waits, NOW)).toBe(true)
+    expect(readerState(waits, true, false, NOW)).toBe('waiting')
+    expect(readerState(waits, true, false, MIDNIGHT)).toBe('requested')
+    // A row from before ADR 0057 has no `dueAt`, and one that started has none.
+    const { dueAt: _, ...old } = waits
+    expect(isWaiting(old, NOW)).toBe(false)
+    expect(isWaiting({ ...waits, dueAt: null }, NOW)).toBe(false)
+    expect(isWaiting({ ...waits, state: 'running' }, NOW)).toBe(false)
+    // Not asked for by this member: nothing is under way for them.
+    expect(readerState(waits, false, false, NOW)).toBe('none')
+  })
+
+  test('a refusal says whose day had no room, and one from an older tela-api says neither', () => {
+    expect(noticeOf({ status: 'budget_exhausted', reason: 'member' })).toBe('budgetMember')
+    expect(noticeOf({ status: 'budget_exhausted', reason: 'site' })).toBe('budgetSite')
+    expect(noticeOf({ status: 'budget_exhausted' })).toBe('budgetExhausted')
+    expect(noticeOf({ status: 'rate_limited' })).toBe('rateLimited')
+    // Put off is not refused: the bar says when, and no notice is shown.
+    expect(noticeOf({ status: 'scheduled' })).toBeNull()
+    expect(pullsAfterRequest('scheduled')).toBe(false)
+  })
+
+  test('the bar says when, in the member’s own time, and "tomorrow" when that is not today', () => {
+    const t = (key: string, values: { time: string }) => `${key} ${values.time}`
+    const zone = process.env.TZ
+    try {
+      // Beijing: the next UTC midnight is 08:00, tomorrow morning from 22:00 the evening before.
+      process.env.TZ = 'Asia/Shanghai'
+      expect(waitingLine(t, MIDNIGHT, 'en-GB', NOW)).toBe('waitingTomorrow 08:00')
+      // From 05:00 that morning, it is today.
+      expect(waitingLine(t, MIDNIGHT, 'en-GB', MIDNIGHT - 3 * 3600_000)).toBe('waitingToday 08:00')
+    } finally {
+      if (zone === undefined) delete process.env.TZ
+      else process.env.TZ = zone
     }
   })
 })

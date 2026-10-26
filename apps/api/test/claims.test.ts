@@ -148,4 +148,25 @@ describe('claiming a blog', () => {
     const res = await api.request('/api/v1/claims', { body: { url: server.url('/') }, as: reader })
     expect(res.status).toBe(422)
   })
+
+  test('a claim that brings a feed new to Tela counts against the day; one Tela has does not (ADR 0063)', async () => {
+    await api.db.run(sql`insert into settings (key, value, updated_at)
+      values ('member.feedsPerDay', '0', 0)`)
+    const res = await api.request('/api/v1/claims', { body: { url: server.url('/') }, as: reader })
+    expect(res.status).toBe(429)
+    expect(await res.json()).toEqual({
+      error: 'feed_limit',
+      limit: 0,
+      resetsAt: Date.UTC(2026, 8, 29),
+    })
+    expect(await first(api.db, sql`select 1 as x from feeds`)).toBeUndefined()
+    expect(await first(api.db, sql`select 1 as x from sites`)).toBeUndefined()
+    // Once someone else's subscription brought the feed, claiming the blog adds nothing new.
+    const other = await signedIn(api, 'other@x.test')
+    await api.db.run(sql`update profiles set is_admin = 1 where user_id = ${other.userId}`)
+    await api.request('/api/v1/feeds', { body: { feedUrl: server.url('/feed.xml') }, as: other })
+    expect((await start()).status).toBe('unverified')
+    const added = await first<{ added_by: string }>(api.db, sql`select added_by from feeds`)
+    expect(added?.added_by).toBe(other.userId)
+  })
 })

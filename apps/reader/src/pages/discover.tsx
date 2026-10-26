@@ -30,7 +30,7 @@ import { suggestReaders } from '../lib/suggest-readers'
 import { useTitle } from '../lib/title'
 import { useFollowed, useHidden, useMine, useReading, useTopOnArrival } from '../lib/use-discover'
 import { retryOf, usePublic } from '../lib/use-public'
-import { useNow, useStore } from '../store/hooks'
+import { useNow, useReadingLang, useStore } from '../store/hooks'
 import { useUi } from '../ui'
 import { DiscoverView } from '../views/discover'
 import { articlesList, DiscoverArticlesView } from '../views/discover-articles'
@@ -183,6 +183,7 @@ export function BlogsPage() {
   const loaded = usePublic<DiscoverData>(blogsApiPath(params))
   const member = useMemberControls()
   const { locale } = useUi()
+  const hl = useReadingLang(locale)
   useTabTitle('blogs')
   // A page the pager opened starts at its top: one already held renders at once, deep in the
   // grid the browser kept the scroll of.
@@ -199,6 +200,7 @@ export function BlogsPage() {
       params={params}
       member={member}
       locale={locale}
+      hl={hl}
       onRetry={retryOf(loaded)}
     />
   )

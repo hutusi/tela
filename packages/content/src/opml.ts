@@ -1,10 +1,12 @@
 /**
  * OPML in and out: the one exchange format feed readers share, so a member can arrive with their
  * subscriptions and leave with them (the owner's third requirement, applied to members), and
- * with the folders they kept them in (ADR 0048).
+ * with the folders they kept them in (ADR 0048). Tela's own pages are offered as OPML too: a
+ * blogroll and Discover's blogs (ADR 0062).
  */
 import { folderName } from '@tela/shared'
 import { parseOpml } from 'feedsmith'
+import { xmlEscape as xml } from './xml'
 
 /** An OPML export is a few KB per hundred feeds; anything near this is not a subscription list. */
 export const MAX_OPML_BYTES = 1024 * 1024
@@ -56,19 +58,27 @@ export function feedUrlsFromOpml(text: string): string[] {
   return feedsFromOpml(text).map((f) => f.url)
 }
 
-const xml = (s: string) =>
-  s.replace(
-    /[&<>"']/g,
-    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[c] as string,
-  )
-
 export type OpmlFeed = { feedUrl: string; title: string; homeUrl: string; folder?: string | null }
+
+/**
+ * What an OPML document says about itself (OPML 2.0's `head`): its title and, each only when
+ * given, when it was made and last changed, and who keeps it, by name and by the address of a page
+ * about them (`ownerId`). A member's export is "Tela subscriptions", made now; a blogroll's is its
+ * own name, changed when it last changed, kept by its owner (ADR 0062).
+ */
+export type OpmlHead = {
+  title: string
+  dateCreated?: Date
+  dateModified?: Date
+  ownerName?: string
+  ownerId?: string
+}
 
 /**
  * An OPML 2.0 document of the given feeds: one outline per folder, where its first feed is, holding
  * its feeds in the order given; then the feeds in no folder, in the order given.
  */
-export function buildOpml(feeds: OpmlFeed[], createdAt: Date): string {
+export function buildOpml(feeds: OpmlFeed[], head: OpmlHead): string {
   const outline = (f: OpmlFeed, indent: string) => {
     const text = xml(f.title)
     return `${indent}<outline type="rss" text="${text}" title="${text}" xmlUrl="${xml(f.feedUrl)}" htmlUrl="${xml(f.homeUrl)}"/>`
@@ -95,12 +105,23 @@ export function buildOpml(feeds: OpmlFeed[], createdAt: Date): string {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <opml version="2.0">
   <head>
-    <title>Tela subscriptions</title>
-    <dateCreated>${createdAt.toUTCString()}</dateCreated>
+${headLines(head).join('\n')}
   </head>
   <body>
 ${lines.join('\n')}
   </body>
 </opml>
 `
+}
+
+function headLines(head: OpmlHead): string[] {
+  const line = (name: string, value: string | undefined) =>
+    value === undefined ? [] : [`    <${name}>${xml(value)}</${name}>`]
+  return [
+    ...line('title', head.title),
+    ...line('dateCreated', head.dateCreated?.toUTCString()),
+    ...line('dateModified', head.dateModified?.toUTCString()),
+    ...line('ownerName', head.ownerName),
+    ...line('ownerId', head.ownerId),
+  ]
 }

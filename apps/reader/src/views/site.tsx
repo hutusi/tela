@@ -3,17 +3,18 @@
  * readers said of them. Pure: the SPA and the edge both render it. The readers a member follows
  * come in by props, from a member call beside this cached page, never in it.
  */
-import { LANGUAGE_NAMES, type UiLocale } from '@tela/shared'
+import { LANGUAGE_NAMES, recommendationKey, type UiLocale } from '@tela/shared'
 import { Link } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { CHECK, Glyph } from '../components/glyph'
 import { GlyphCount } from '../components/glyph-count'
 import { PersonAvatar } from '../components/person-avatar'
+import { ReportLink } from '../components/report-link'
 import { SiteAvatar } from '../components/site-avatar'
 import { blogsHref } from '../lib/discover-href'
 import { cadenceKey, displayHost, shortDate } from '../lib/format'
 import { publicTitle } from '../lib/public-title'
-import { PostLink } from './post-link'
+import { outboundRel, PostLink } from './post-link'
 import type { MemberControls, Person, Reading, SiteData } from './types'
 
 const LABEL = 'm-0 text-[11px] font-semibold tracking-[0.08em] text-muted uppercase'
@@ -41,6 +42,8 @@ export function SiteView({
   const td = useTranslations('discover')
   const tc = useTranslations('common')
   const { site } = data
+  // An operator listed it, so its page is indexed and its links are followed (ADR 0060).
+  const vouched = site.indexable === true
   const title = site.title ?? displayHost(site.homeUrl)
   const primary = data.feeds[0]
   const subscribed = primary !== undefined && member?.isSubscribed(primary.id) === true
@@ -127,7 +130,7 @@ export function SiteView({
             <a
               href={site.homeUrl}
               target="_blank"
-              rel="noopener noreferrer"
+              rel={outboundRel(vouched)}
               className={`${pill} border-thumb text-ink hover:border-ink`}
               data-testid="site-visit"
             >
@@ -154,15 +157,24 @@ export function SiteView({
               )
             ) : null}
           </div>
-          {!claimant && member ? (
-            <Link
-              to={`/sites/${site.id}/claim`}
-              className="text-[13px] text-muted hover:text-ink"
-              data-testid="claim-link"
-            >
-              {t('claimLink')}
-            </Link>
-          ) : null}
+          <div className="flex flex-wrap items-baseline justify-end gap-x-3 gap-y-1 max-md:justify-start">
+            {!claimant && member ? (
+              <Link
+                to={`/sites/${site.id}/claim`}
+                className="text-[13px] text-muted hover:text-ink"
+                data-testid="claim-link"
+              >
+                {t('claimLink')}
+              </Link>
+            ) : null}
+            {member?.handle !== undefined && claimant?.handle === member.handle ? null : (
+              <ReportLink
+                subject={{ kind: 'site', key: String(site.id) }}
+                path={here}
+                member={member !== undefined}
+              />
+            )}
+          </div>
         </div>
       </header>
 
@@ -194,6 +206,7 @@ export function SiteView({
                           article={a}
                           source={title}
                           member={member}
+                          vouched={vouched}
                           className="text-ink after:absolute after:inset-0 hover:no-underline"
                         >
                           {shown.title}
@@ -286,6 +299,18 @@ export function SiteView({
                     {tc('quoted', { text: n.note })}
                   </p>
                   <div className="mt-2 text-[12.5px] leading-[1.4] text-muted">
+                    {n.person.id && n.person.id !== member?.userId ? (
+                      <span className="float-right ml-3">
+                        <ReportLink
+                          subject={{
+                            kind: 'recommendation',
+                            key: recommendationKey(n.person.id, n.article.id),
+                          }}
+                          path={here}
+                          member={member !== undefined}
+                        />
+                      </span>
+                    ) : null}
                     {t.rich('noteOn', {
                       person: () => (
                         <Link
@@ -300,6 +325,7 @@ export function SiteView({
                           article={n.article}
                           source={title}
                           member={member}
+                          vouched={vouched}
                           className="text-ink-2 hover:underline"
                         >
                           {publicTitle(n.article, reading).title}

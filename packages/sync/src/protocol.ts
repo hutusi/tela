@@ -36,8 +36,11 @@ export const TITLE_IDS_MAX = 1000
  * - 2: every member call names the member (`MEMBER_HEADER`).
  * - 3: a claim's standing may carry a reason a protocol-2 shell cannot word (an operator's no, a
  *   home page that turns Tela away, ADR 0045), which it showed as "Not verified yet" and nothing.
+ * - 4: a body translation may wait for the next UTC day (`dueAt`, ADR 0057), and a refusal says
+ *   whose limit it met (`reason`). A protocol-3 shell would poll a waiting row every 1.5 s until
+ *   midnight, and word the site's budget as the member's own allowance.
  */
-export const MIN_CLIENT = 3
+export const MIN_CLIENT = 4
 /**
  * The first protocol whose clients name the member (`MEMBER_HEADER`). Signing out checks that name
  * from here on, whatever `MIN_CLIENT` has become: a tab told to reload may still sign out, and a

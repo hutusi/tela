@@ -93,7 +93,9 @@
     "usePassword": "用密碼登入",
     "useCode": "改用電子郵件驗證碼",
     "invite": "邀請碼",
+    "inviteOptional": "邀請碼（選填）",
     "noCode": "沒有邀請碼？Tela 目前僅限受邀加入：請向已加入的成員要一個。",
+    "paused": "今天的新成員名額已滿，{at, time, short} 後可以再來加入。有邀請碼的話，今天也能加入。",
     "agree": "加入即表示你同意<terms>使用條款</terms>；另見<privacy>隱私政策</privacy>。",
     "newHere": "第一次來 Tela？",
     "toJoin": "加入",
@@ -131,7 +133,12 @@
       "invite_used": "這個邀請的名額已經用完，或已被撤回。請再要一個。",
       "missing_code": "請輸入邀請碼。",
       "invalid_code": "沒有這個邀請碼，或它已被撤回。",
+      "invalid_code_optional": "沒有這個邀請碼，或它已被撤回。請檢查一下，或清空這一欄，不用邀請碼直接加入。",
       "code_used": "這個邀請碼的名額已經用完。",
+      "invite_only": "Tela 目前僅限受邀加入。請輸入你的邀請碼。",
+      "signups_paused": "今天的新成員名額已滿。請在 {at, time, short} 後再試，或用邀請碼加入。",
+      "account_suspended": "這個帳號已被暫停使用。如果你覺得這是誤會，請寫信到 me@hutu.si。",
+      "account_closed": "這個帳號已被刪除。",
       "provider_unlinked": "請先在服務商那裡驗證這個電子郵件，或用電子郵件登入後在 設定 → 帳戶 裡連結。",
       "provider_no_email": "服務商沒有提供電子郵件地址。請改用電子郵件登入。",
       "provider_cancelled": "登入已取消。",
@@ -234,8 +241,13 @@
       "opml_invalid": "該檔案不是 OPML 文件。",
       "rate_limited": "操作太頻繁，請稍後再試。",
       "opml_too_large": "OPML 檔案超過 1 MB。",
-      "feed_too_large": "這個部落格的訂閱源超過了 Tela 能讀取的大小（10 MB）。"
-    }
+      "feed_too_large": "這個部落格的訂閱源超過了 Tela 能讀取的大小（10 MB）。",
+      "feed_limit": "{limit, plural, =0 {Tela 暫時不接收新的部落格。已在 Tela 上的部落格仍可隨時新增。} other {你今天已新增 # 個 Tela 上原本沒有的部落格，達到了每天的上限。{time} 之後可以繼續新增；已在 Tela 上的部落格隨時都能新增。}}",
+      "subscription_limit": "你已訂閱 {limit} 個部落格，這是一個帳號的上限。取消訂閱一個，才能再新增。"
+    },
+    "importWaiting": "Tela 每天為你新增 {perDay} 個新部落格，其餘 {n} 個{days, plural, =1 {明天加入} other {將在接下來 # 天內陸續加入}}。",
+    "importPaused": "另有 {n} 個在等待，Tela 重新接收新部落格後會加入。",
+    "importOver": "有 {n} 個沒有匯入：一個帳號最多訂閱 {max} 個部落格。"
   },
   "translation": {
     "writtenIn": "原文為<b>{source}</b>。",
@@ -257,6 +269,10 @@
     "notTranslated": "未翻譯 · {language}",
     "rateLimited": "翻譯請求過於頻繁，請稍後再試。",
     "budgetExhausted": "今日的翻譯額度已用完，明天會重設。",
+    "budgetMember": "今天已經為你翻譯了 {n} 篇新文章，明天再開啟這篇吧。",
+    "budgetSite": "今天的翻譯先歇一歇，明天再開啟這篇文章吧。",
+    "waitingToday": "Tela 會在 {time} 之後翻譯這篇文章。",
+    "waitingTomorrow": "Tela 會在明天 {time} 之後翻譯這篇文章。",
     "unavailable": "暫時無法開始翻譯，請重試。",
     "retry": "重新翻譯"
   },
@@ -544,12 +560,14 @@
       "fetch_failed": "無法連上這個網址。",
       "no_feed": "這個網址下沒有找到訂閱源。Tela 只收錄發布訂閱源的部落格。",
       "feed_too_large": "這個部落格的訂閱源超過了 Tela 能讀取的大小（10 MB）。",
-      "rate_limited": "認領嘗試太頻繁，請稍後再試。"
+      "rate_limited": "認領嘗試太頻繁，請稍後再試。",
+      "feed_limit": "這個部落格還不在 Tela 上，而你今天新增的新部落格已達上限。{time} 之後就可以認領。"
     },
     "taken": "你選的使用者名稱已經屬於別人，所以目前用的還是臨時使用者名稱。可以在<link>設定</link>裡另選一個。"
   },
   "writers": {
     "title": "寫作者",
+    "description": "獨立寫作者在 Tela 上的名片，以及 Tela 如何讀取你的部落格、如何認領，和如何不讓 Tela 抓取。",
     "kicker": "寫作者",
     "hero": {
       "title": "獨立寫作者的<em>名片</em>。",
@@ -656,6 +674,88 @@
         "body": "讀者可以讀到你文章的譯文。如果你不希望這樣，可以在儀表板裡為你的部落格關閉翻譯。"
       }
     },
+    "reading": {
+      "title": "Tela 如何讀取你的部落格",
+      "intro": "Tela 是訂閱源閱讀器。它讀取你的部落格已經在發布的 RSS、Atom 或 JSON 訂閱源，和任何閱讀器一樣，並儘量少打擾你的伺服器。",
+      "agent": {
+        "title": "表明身份",
+        "body": "每個請求都帶著 Tela 的使用者代理 <code>Tela/0.1 (+https://telaread.com; feed reader)</code>，取圖片時是 <code>Tela/0.1 (+https://telaread.com; image proxy)</code>。"
+      },
+      "often": {
+        "title": "隨你的更新頻率",
+        "body": "Tela 檢查訂閱源的頻率，大約是你過去一週發文頻率的兩倍：最多每 30 分鐘一次，最少每天一次。每次沒有新內容，下一次就再多等一會兒。訂閱源的 <code>ttl</code> 和 <code>Cache-Control: max-age</code> 可以讓它等得更久，最長一天。"
+      },
+      "changed": {
+        "title": "只取有變化的",
+        "body": "每次檢查都會帶上你的伺服器給出的 <code>ETag</code> 和 <code>Last-Modified</code>，訂閱源沒變時，只需一個 304 回應。"
+      },
+      "errors": {
+        "title": "出錯就放慢",
+        "body": "伺服器出錯或沒有響應時，Tela 每失敗一次就把等待時間加倍，最長一週；伺服器給出 <code>Retry-After</code> 時，就照它說的等。遇到 <code>410 Gone</code> 或連續失敗 30 次後，改為每週只試一次。"
+      },
+      "images": {
+        "title": "有人讀時才取圖片",
+        "body": "文章裡的圖片只在有人閱讀時才透過 Tela 的圖片代理抓取，之後保留一週。"
+      },
+      "pages": {
+        "title": "訂閱源只有摘要時，才抓頁面",
+        "body": "如果你的訂閱源只提供摘要，Tela 會在訂閱源列出新文章後不久，抓取這篇文章的公開頁面一次，好讓訂閱者在閱讀器裡讀到全文；只有摘要變了才會再抓。部落格剛加入時，Tela 會讀一次你的首頁，找網站圖示。兩者都會先看你的 robots.txt。"
+      }
+    },
+    "shows": {
+      "title": "Tela 展示什麼",
+      "public": {
+        "title": "公開頁面：標題和摘要",
+        "body": "Tela 的公開頁面，也就是任何人和任何搜尋引擎都能開啟的頁面，只展示文章的標題和簡短摘要，每篇都連結回你部落格上的原文，從不展示全文。"
+      },
+      "members": {
+        "title": "訂閱者：你的文章",
+        "body": "訂閱了你部落格的會員在 Tela 的閱讀器裡讀你的文章，內容來自你的訂閱源或文章頁面，和任何閱讀器一樣。這份副本只給登入的會員看，不會成為任何人都能開啟的頁面。"
+      },
+      "translation": {
+        "title": "譯文都有標註",
+        "body": "標題和摘要會提前譯成 Tela 的幾種閱讀語言，方便讀者找到你的文章；正文只為提出要求的讀者翻譯。所有譯文都由機器產生，標明是譯文，並在原文旁邊顯示。你也可以為自己的部落格關閉翻譯。"
+      }
+    },
+    "claiming": {
+      "title": "認領你的部落格",
+      "intro": "認領就是告訴 Tela 這個部落格是你的。你需要一個 Tela 帳號，再加上以下任意一種方式：",
+      "link": {
+        "title": "指向你 Tela 主頁的連結",
+        "body": "在首頁放一個標了 <code>rel=\"me\"</code> 的連結，指向 <code>telaread.com/@你的使用者名稱</code>；不標的話，連結要放在 404 頁面也會顯示的頁首或頁尾裡，這樣它才是部落格自己的連結，而不是某篇文章裡的提及。"
+      },
+      "meta": {
+        "title": "一個 meta 標籤",
+        "body": "把 Tela 給你的 <code>tela-site-verification</code> 標籤放進首頁的 <code>head</code>。認領透過後可以刪掉。"
+      },
+      "github": {
+        "title": "你的 GitHub",
+        "body": "如果你用 GitHub 登入，GitHub 個人資料裡的網站就是你的部落格，而你的部落格也用上面任意一種方式連結到這個 GitHub 主頁，那就什麼都不用加。"
+      },
+      "check": "核驗時，Tela 會讀取你的首頁；對於沒有標 <code>rel=\"me\"</code> 的連結，還會訪問一個你部落格上不存在的地址，看看它的 404 頁面。",
+      "gives": "認領後的部落格會以你的名義列入「發現」。你的儀表板會顯示有多少人在 Tela 上讀它、讀者喜歡和推薦了哪些文章、留下了什麼話；你也可以在那裡選擇它的話題、是否翻譯，以及是否只用訂閱源。"
+    },
+    "optOut": {
+      "title": "如果你不希望 Tela 這樣做",
+      "intro": "以下每一項設好即生效。後兩項不需要認領部落格。",
+      "translation": {
+        "title": "關閉翻譯",
+        "body": "認領部落格後，在儀表板裡關閉。讀者就只能讀到你寫下的原文。"
+      },
+      "feedOnly": {
+        "title": "只用我的訂閱源提供的內容",
+        "body": "同樣在儀表板裡。Tela 不再抓取你部落格的頁面，無論是為了全文還是網站圖示，只讀取訂閱源。如果訂閱源裡有全文，訂閱者照樣能讀全文，和任何閱讀器一樣；如果只有摘要，他們讀到的就是摘要，再點連結去你的部落格。"
+      },
+      "robots": {
+        "title": "robots.txt",
+        "body": "不認領也能讓 Tela 不抓取你的頁面：把下面兩行加進 robots.txt。Tela 一天之內就會重新讀取。",
+        "after": "和對待任何爬蟲一樣，寫明 Tela 的規則組會取代寫給所有爬蟲的那一組（<code>User-agent: *</code>）。你的訂閱源仍會被讀取，和每個閱讀器一樣：那是訂閱者要的。"
+      },
+      "email": {
+        "title": "離開 Tela",
+        "body": "寫信到 <mail>me@hutu.si</mail>，Tela 會把你的部落格移出「發現」、刪除它在 Tela 上的頁面，並停止抓取。如果你無法認領部落格，上面的開關也可以寫信請 Tela 代為設定。"
+      }
+    },
     "cta": {
       "count": "已有 {n} 個部落格在 Tela 上。<em>你的呢？</em>",
       "title": "<em>你的部落格在哪裡？</em>",
@@ -736,6 +836,10 @@
     "translateHint": "Tela 會為使用其他語言的讀者翻譯你的文章，並始終在譯文旁邊顯示原文。關掉後，讀者只能讀到你寫下的原文。",
     "translationOn": "已為「{blog}」開啟翻譯。",
     "translationOff": "已為「{blog}」關閉翻譯。",
+    "feedOnly": "只用我的訂閱源提供的內容",
+    "feedOnlyHint": "Tela 不再抓取你部落格的頁面，無論是為了全文還是網站圖示，只讀取訂閱源。訂閱源裡有全文的話，訂閱者照樣能讀到全文。<link>Tela 如何讀取你的部落格</link>",
+    "feedOnlyOn": "Tela 現在只用「{blog}」的訂閱源提供的內容。",
+    "feedOnlyOff": "Tela 可以再次抓取「{blog}」的頁面。",
     "listing": {
       "private": "未公開",
       "listed": "已在「發現」列出",
@@ -752,6 +856,16 @@
       "likes": "<b>{n}</b> 人喜歡",
       "recommendations": "<b>{n}</b> 條推薦",
       "notes": "{n} 條推薦語"
+    },
+    "release": {
+      "label": "解除認領",
+      "hint": "你將不再是這個部落格在 Tela 上的所有者。翻譯設定保持不變，之後你也可以重新認領。",
+      "open": "解除認領",
+      "confirm": "要解除對「{blog}」的認領嗎？在有人重新認領之前，它在 Tela 上沒有所有者。",
+      "yes": "解除",
+      "keep": "保留",
+      "done": "已解除對「{blog}」的認領。",
+      "failed": "操作沒有成功，請重試。"
     }
   },
   "settings": {
@@ -905,10 +1019,20 @@
     "privacyDelay": "公開個人頁可能要幾分鐘才會跟上改動。",
     "yourData": "你的資料",
     "yourDataHint": "你的資料、訂閱、喜歡、推薦、劃線和追蹤的人，打包成一個檔案。",
-    "download": "下載"
+    "download": "下載",
+    "translationsToday": "新的翻譯",
+    "translationsTodayValue": "今天 {used} / {perDay}",
+    "translationsHint": "Tela 已經翻譯過的文章，以及簡繁之間的轉換，都不計入。{time} 起重新計數。",
+    "translationsFree": "你的帳號沒有每日上限。",
+    "translationsUnlimited": "不限",
+    "translationsWaiting": "有 {n} 篇翻譯將在 {time} 之後開始。",
+    "subscriptionsPending": "有 {n} 個匯入的部落格等待新增。Tela 每天為你新增 {perDay} 個新部落格，{days, plural, =1 {明天就會全部加入} other {它們將在接下來 # 天內陸續加入}}。",
+    "subscriptionsPendingPaused": "有 {n} 個匯入的部落格等待新增，Tela 重新接收新部落格後會加入。",
+    "subscriptionsCap": "你已訂閱 {count} 個部落格，一個帳號最多可訂閱 {max} 個。"
   },
   "invites": {
     "intro": "Tela 目前僅限邀請加入。你可以邀請五個人：一個邀請碼只能讓一個人加入，用過後永久計入名額。撤銷一個還沒人用過的邀請碼，可以收回它的名額。",
+    "open": "現在任何人都能加入 Tela，不需要邀請碼。你的邀請碼會保留下來，如果 Tela 恢復邀請制，它們照樣能用。",
     "left": "{n, plural, =0 {你的邀請名額已經用完。} other {你還可以邀請 # 個人。}}",
     "create": "產生邀請碼",
     "none": "還沒有邀請碼。產生一個，再把連結發給朋友。",
@@ -962,6 +1086,24 @@
       "failed": "操作沒有成功，請重試。",
       "link_failed": "沒能連結這個帳號，請重試。",
       "load": "無法載入你的登入方式，請稍後再試。"
+    },
+    "delete": {
+      "label": "刪除帳號",
+      "hint": "永久刪除你的帳號和你在 Tela 上儲存的內容。",
+      "open": "刪除帳號",
+      "title": "要刪除你的帳號嗎？",
+      "goes": "你的名字、簡介、頭像、推薦語和部落格鏈會立即消失，你追蹤的人和追蹤你的人也一樣，所有裝置都會登出。只屬於你自己的內容（訂閱、資料夾、劃線、喜歡和閱讀記錄）會在幾分鐘內刪除。你認領的部落格會解除認領，你為它們做的設定保持不變。",
+      "stays": "你的使用者名稱 {handle} 會被停用，任何人都無法再拿它冒充你。Tela 的備份會保留副本 30 天，之後徹底刪除。",
+      "export": "如果想留一份，請先<link>下載你的資料</link>。",
+      "send": "給我發驗證碼",
+      "sent": "驗證碼已傳送到 {email}，輸入後即可刪除帳號。",
+      "confirm": "刪除我的帳號",
+      "errors": {
+        "admin": "這個帳號正在負責 Tela 的管理後臺。請先把管理後臺交給別人，再刪除帳號。",
+        "bad_code": "驗證碼不對或已過期，請重新取得。",
+        "rate_limited": "嘗試次數太多，請稍後再試。",
+        "failed": "操作沒有成功，請重試。"
+      }
     }
   },
   "search": {
@@ -1036,7 +1178,9 @@
     "updated": "最後更新：{date}"
   },
   "toast": {
-    "undo": "撤銷"
+    "undo": "撤銷",
+    "subscriptionLimit": "你已訂閱 {max} 個部落格，這是一個帳號的上限。取消訂閱一個，才能再新增。",
+    "subscriptionLimitMany": "這會再新增 {n} 個部落格，而一個帳號最多訂閱 {max} 個。你還能再訂閱 {room} 個。"
   },
   "firstRun": {
     "title": "從幾個部落格開始",
@@ -1046,5 +1190,57 @@
     "more": "在「發現」中檢視更多部落格 →",
     "import": "從別的閱讀器過來？<opml>匯入 OPML 檔案</opml>，或<add>貼上部落格網址</add>。",
     "footer": "在「<discover>發現</discover>」中檢視更多部落格。從別的閱讀器過來？<opml>匯入 OPML 檔案</opml>，或<add>貼上部落格網址</add>。"
+  },
+  "feeds": {
+    "label": "訂閱源",
+    "rss": "用 RSS 在閱讀器裡訂閱新文章",
+    "opml": "這些部落格的 OPML 檔案，可匯入閱讀器",
+    "blogroll": "{owner} 在 Tela 上的部落格鏈「{name}」裡各個部落格的最新文章。",
+    "discover": "Tela 收錄部落格的最新文章。"
+  },
+  "report": {
+    "link": "檢舉",
+    "title": {
+      "profile": "檢舉這個個人頁",
+      "blogroll": "檢舉這個部落格鏈",
+      "site": "檢舉這個部落格",
+      "recommendation": "檢舉這條推薦語"
+    },
+    "byMail": {
+      "profile": "發郵件檢舉這個個人頁",
+      "blogroll": "發郵件檢舉這個部落格鏈",
+      "site": "發郵件檢舉這個部落格",
+      "recommendation": "發郵件檢舉這條推薦語"
+    },
+    "mailSubject": {
+      "profile": "檢舉：Tela 上的一個個人頁",
+      "blogroll": "檢舉：Tela 上的一個部落格鏈",
+      "site": "檢舉：Tela 上的一個部落格",
+      "recommendation": "檢舉：Tela 上的一條推薦語"
+    },
+    "intro": "檢舉只會交給運營 Tela 的人，不會告訴任何人是誰檢舉的。",
+    "why": "它有什麼問題？",
+    "reasons": {
+      "spam": "垃圾訊息或廣告",
+      "abuse": "辱罵或騷擾",
+      "impersonation": "冒充他人",
+      "copyright": "抄襲別人的作品",
+      "illegal": "違法內容",
+      "other": "其他問題"
+    },
+    "details": "還想補充什麼",
+    "optional": "（選填）",
+    "count": "{n}/{max}",
+    "send": "提交檢舉",
+    "sending": "正在提交…",
+    "cancel": "取消",
+    "thanks": "謝謝你",
+    "thanksBody": "檢舉已經收到，會有人認真看，需要處理的會處理。",
+    "close": "關閉",
+    "errors": {
+      "rate_limited": "你今天已經檢舉了很多次，請明天再試。",
+      "not_found": "這項內容已經不再顯示，無需再檢舉。",
+      "failed": "檢舉沒能提交，請再試一次。"
+    }
   }
 }

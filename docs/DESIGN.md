@@ -416,8 +416,13 @@ a time, and only the control that decides it: while there is an upload, a muted 
 pills says what removing it goes back to (their Gravatar, or their initial), and the Gravatar switch
 is not shown, since it decides nothing then. Without one, a `SettingRow` *Use my Gravatar* follows:
 the switch, on by default, and while it is on a quiet *Refresh*, with a hint saying whether
-Gravatar has a picture for their email, is still being asked, or is off (ADR 0033). The design's Notifications section,
-"Who can follow you" and "Delete account" are not built (ADR 0031), so they are not shown.
+Gravatar has a picture for their email, is still being asked, or is off (ADR 0033). The design's Notifications section
+and "Who can follow you" are not built (ADR 0031), so they are not shown. "Delete account" is the last row
+of Settings › Account (ADR 0058): a pill in the danger colour that opens a ResponsiveDialog saying
+what goes and what stays, with a link to the export, *Email me a code*, then a code field and a
+danger-filled *Delete my account*. Settings › Language shows how many of the day's new
+translations are used; Settings › Subscriptions shows imports that wait and the cap (ADR 0063).
+Settings › Invites is hidden while sign-up is open (ADR 0056).
 
 Settings › Subscriptions (Tela Lists, ADRs 0048 and 0049) is two layouts, switched at `lg`. Both
 have a line saying "8 blogs in 3 folders.", or the plain count while there are no folders, beside
@@ -961,6 +966,22 @@ then an "On this page" list that sticks beside the text from `lg`, "The short ve
 - "Older articles" under a list longer than 200.
 - A not-found page (`notFound.*`).
 - A sign-in message for too many tries (`door.errors.rate_limited`), which is not a wrong code.
+- A translation that waits for its day (ADR 0057) is a status in the translation bar, never an
+  error: "Tela will translate this [tomorrow,] after HH:MM", in local time. A refusal is a muted
+  line under the bar, worded by its reason: the member's day, or the site's.
+- A cap reached (subscriptions, ADR 0063) is a toast before anything changes, never a
+  subscription that appears and goes again; an import says how many were added, subscribed and
+  wait, and when the rest arrive.
+- The join sheet while sign-up is open (ADR 0056): the invite field shows only for a code a link
+  brought or while the day's accounts are paused, as *Invite code (optional)*; the paused notice
+  names the next UTC midnight in local time.
+- *Report* (ADR 0059): a muted 12.5px link on others' profiles, notes, blogs and blogrolls. A
+  member gets a ResponsiveDialog (six reasons as radios, optional details with a count, Cancel and
+  Send), whose thank-you replaces the form; a visitor gets a `mailto:` with the same label.
+- *RSS · OPML* (ADR 0062) sits at the foot of a blogroll page and every Discover tab, 12.5px muted.
+- Dashboard › This blog on Tela: two switches, translation and *Only use what my feed provides*
+  (ADR 0061), each with a hint line, then *Release this blog* with an inline *Release it* / *Keep
+  it* confirm (ADR 0058).
 
 ## New tokens, and the dark ground (ADR 0026)
 

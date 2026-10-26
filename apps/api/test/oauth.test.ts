@@ -21,6 +21,7 @@ import {
   cookiesOf,
   createTestApi,
   ORIGIN,
+  operatorSets,
   type SignedIn,
   signedIn,
   type TestApi,
@@ -188,14 +189,30 @@ describe('Google and GitHub', () => {
     const none = await createTestApi()
     const offered = await none.request('/api/v1/public/auth')
     expect(offered.status).toBe(200)
-    expect(offered.headers.get('cache-control')).toBe('public, max-age=300')
-    expect(await offered.json()).toEqual({ google: false, github: false })
+    // A minute, so a sign-up switch the operator flips shows in the sheet within one (ADR 0056).
+    expect(offered.headers.get('cache-control')).toBe('public, max-age=60')
+    expect(await offered.json()).toEqual({
+      google: false,
+      github: false,
+      signup: 'invite',
+      paused: false,
+    })
     expect((await quietly(() => visitor(none).start('github'))).status).toBe(404)
 
     const github = await createTestApi({ oauth: { github: OAUTH.github } })
-    expect(await (await github.request('/api/v1/public/auth')).json()).toEqual({
+    expect(await (await github.request('/api/v1/public/auth')).json()).toMatchObject({
       google: false,
       github: true,
+    })
+    await operatorSets(github, 'signup.mode', 'open')
+    expect(await (await github.request('/api/v1/public/auth')).json()).toMatchObject({
+      signup: 'open',
+      paused: false,
+    })
+    await operatorSets(github, 'signup.maxPerDay', 0)
+    expect(await (await github.request('/api/v1/public/auth')).json()).toMatchObject({
+      signup: 'open',
+      paused: true,
     })
     expect((await quietly(() => visitor(github).start('google'))).status).toBe(404)
     expect((await visitor(github).start('github')).status).toBe(200)
@@ -399,6 +416,38 @@ describe('Google and GitHub', () => {
     ])
   })
 
+  test.each([
+    ['suspended_at', 'account_suspended'],
+    ['deleted_at', 'account_closed'],
+  ] as const)(
+    'send an account whose %s is set back with an error of its own, and no session',
+    async (column, error) => {
+      const api = await createTestApi({ oauth: OAUTH })
+      await createOperatorCode(api.db, { code: 'WELCOME', maxUses: 2, now: api.clock.now() })
+      expect((await roundTrip(api, 'github', 'WELCOME')).headers.get('location')).toBe('/discover')
+      const made = await first<{ id: string }>(
+        api.db,
+        sql`select id from user where email = 'new@x.test'`,
+      )
+      // Set by hand, so the session the account was made with stays: only a new one is refused.
+      await api.db.run(sql`update profiles set ${sql.raw(column)} = ${api.clock.now()}
+        where user_id = ${made?.id}`)
+      const back = await quietly(() => roundTrip(api, 'github'))
+      expect(back.status).toBe(302)
+      // Lowercase and without a description, as every refusal of a return is: the sheet words it.
+      expect(back.headers.get('location')).toBe(`/join?error=${error}`)
+      expect(back.headers.getSetCookie().some((c) => c.startsWith('tela.session_token='))).toBe(
+        false,
+      )
+      expect(
+        await first<{ n: number }>(
+          api.db,
+          sql`select count(*) as n from session where user_id = ${made?.id}`,
+        ),
+      ).toEqual({ n: 1 })
+    },
+  )
+
   test('refuse a return without its state cookie, and the same return twice', async () => {
     const api = await createTestApi({ oauth: OAUTH })
     await createOperatorCode(api.db, { code: 'WELCOME', maxUses: 5, now: api.clock.now() })
@@ -523,5 +572,106 @@ describe('Google and GitHub', () => {
       body: { code: 'account_not_linked' },
     })
     expect(await redemptions(api)).toEqual([])
+  })
+})
+
+describe('Google and GitHub while sign-up is open (ADR 0056)', () => {
+  const open = async (api: TestApi, maxPerDay?: number | null) => {
+    await operatorSets(api, 'signup.mode', 'open')
+    if (maxPerDay !== undefined) await operatorSets(api, 'signup.maxPerDay', maxPerDay)
+  }
+
+  test.each(['google', 'github'] as const)(
+    '%s makes an account with no invite code, still told to the address',
+    async (provider) => {
+      const api = await createTestApi({ oauth: OAUTH })
+      await open(api)
+      const back = await roundTrip(api, provider)
+      expect(back.status).toBe(302)
+      expect(back.headers.get('location')).toBe('/discover')
+      const me = await api.request('/api/v1/me', { cookie: cookiesOf(back) })
+      expect(await me.json()).toMatchObject({ email: 'new@x.test' })
+      expect(
+        await first<object>(api.db, sql`select name, image, email_verified from user`),
+      ).toEqual({
+        name: '',
+        image: null,
+        email_verified: 1,
+      })
+      expect(await redemptions(api)).toEqual([])
+      const name = provider === 'github' ? 'GitHub' : 'Google'
+      expect(api.mail.outbox.map((m) => [m.to, m.subject])).toEqual([
+        [
+          'new@x.test',
+          `Your Tela account was made with ${name} · 你的 Tela 账号已通过 ${name} 创建`,
+        ],
+      ])
+    },
+  )
+
+  test('claim the code a sign-in carried; one full at the start is left behind, not refused', async () => {
+    const api = await createTestApi({ oauth: OAUTH })
+    const now = api.clock.now()
+    await createOperatorCode(api.db, { code: 'WELCOME', maxUses: 5, now })
+    await createOperatorCode(api.db, { code: 'ONCE', maxUses: 1, now })
+    await open(api)
+    expect((await roundTrip(api, 'github', 'welcome')).headers.get('location')).toBe('/discover')
+    expect(await redemptions(api)).toEqual([
+      { code: 'WELCOME', email: 'new@x.test', redeemed: 1, settled: 1 },
+    ])
+    // ONCE is taken by someone else; a sign-in carrying it still comes in, on nobody's code.
+    expect(await holdJoin(api.db, { code: 'ONCE', email: 'first@x.test', now })).toBe('held')
+    await api.request('/api/auth/email-otp/send-verification-otp', {
+      body: { email: 'first@x.test', type: 'sign-in' },
+      headers: { 'cf-connecting-ip': '203.0.113.1' },
+    })
+    await api.request('/api/auth/sign-in/email-otp', {
+      body: { email: 'first@x.test', otp: codeFor(api, 'first@x.test') },
+      headers: { 'cf-connecting-ip': '203.0.113.2' },
+    })
+    person = { id: '4343', email: 'late@x.test', verified: true }
+    const started = await visitor(api).start('google', { invite: 'ONCE' })
+    expect(started.status).toBe(200)
+    expect((await visitor(api).back(started)).headers.get('location')).toBe('/discover')
+    expect(
+      await first<object>(api.db, sql`select 1 as x from user where email = 'late@x.test'`),
+    ).toEqual({
+      x: 1,
+    })
+    expect((await redemptions(api)).map((r) => [r.code, r.email])).toEqual([
+      ['WELCOME', 'new@x.test'],
+      ['ONCE', 'first@x.test'],
+    ])
+    // An unknown code is still told before the visitor leaves.
+    const unknown = await visitor(api).start('github', { invite: 'NOSUCH' })
+    expect(unknown.status).toBe(400)
+    expect(await unknown.json()).toMatchObject({ code: 'INVALID_CODE' })
+  })
+
+  test('back to invitations refuses a return at once; a full day refuses it as paused', async () => {
+    const api = await createTestApi({ oauth: OAUTH })
+    await open(api)
+    const v = visitor(api)
+    const started = await v.start('github')
+    await operatorSets(api, 'signup.mode', 'invite')
+    expect((await v.back(started)).headers.get('location')).toBe('/join?error=invite_required')
+    await open(api, 0)
+    const paused = await roundTrip(api, 'google')
+    expect(paused.headers.get('location')).toBe('/join?error=signups_paused')
+    expect(paused.headers.getSetCookie().some((c) => c.startsWith('tela.session_token='))).toBe(
+      false,
+    )
+    expect(await count(api, 'user')).toBe(0)
+    expect(api.mail.outbox).toEqual([])
+  })
+
+  test("never link a provider to a member's account by its address", async () => {
+    const api = await createTestApi({ oauth: OAUTH })
+    await signedIn(api, 'member@x.test')
+    await open(api)
+    person = { id: '1001', email: 'member@x.test', verified: true }
+    const back = await quietly(() => roundTrip(api, 'github'))
+    expect(back.headers.get('location')).toBe('/join?error=account_not_linked')
+    expect(await count(api, 'account')).toBe(0)
   })
 })

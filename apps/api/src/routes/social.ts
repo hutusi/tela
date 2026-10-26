@@ -10,7 +10,7 @@
  * other, and activity of any age is on the first page when it is the newest there is. The offset
  * is the one the walk began under, so all its pages agree on where a day starts.
  */
-import { ARTICLE_COLUMNS, avatarOf } from '@tela/data'
+import { ARTICLE_COLUMNS, avatarOf, standingOk } from '@tela/data'
 import { isReadingLanguage } from '@tela/shared'
 import { type SQL, sql } from 'drizzle-orm'
 import { Hono } from 'hono'
@@ -121,14 +121,16 @@ export function socialRoutes(deps: ApiDeps) {
 
     // Each source as the viewer may see it, from the people they follow only.
     const recsFrom = sql`recommendations r join profiles p on p.user_id = r.user_id`
-    const recsWhere = sql`r.user_id in (${followees}) and r.deleted_at is null`
+    // Never a suspended or closed account's (ADR 0059), whoever follows it.
+    const recsWhere = sql`r.user_id in (${followees}) and r.deleted_at is null
+      and ${standingOk('p')}`
     const likesFrom = sql`user_article_states st join profiles p on p.user_id = st.user_id`
     const likesWhere = sql`st.user_id in (${followees}) and p.public_likes = 1
-      and st.liked_at is not null`
+      and st.liked_at is not null and ${standingOk('p')}`
     const subsFrom = sql`subscriptions sub join profiles p on p.user_id = sub.user_id
       join feeds f on f.id = sub.feed_id join sites s on s.id = f.site_id`
     const subsWhere = sql`sub.user_id in (${followees}) and p.public_subscriptions = 1
-      and sub.deleted_at is null and s.listing in ${PUBLIC_LISTING}`
+      and sub.deleted_at is null and s.listing in ${PUBLIC_LISTING} and ${standingOk('p')}`
 
     /**
      * One person's day of `rows` as groups: each placed at its newest event over the whole day
@@ -320,7 +322,7 @@ export function socialRoutes(deps: ApiDeps) {
       join subscriptions sub on sub.user_id = fo.followee_id and sub.deleted_at is null
       join feeds f on f.id = sub.feed_id
       where fo.follower_id = ${me} and fo.deleted_at is null and p.public_subscriptions = 1
-        and f.site_id = ${siteId}
+        and f.site_id = ${siteId} and ${standingOk('p')}
       order by p.handle limit 12
     `)
     return c.json({ readers }, 200, { 'cache-control': 'no-store' })

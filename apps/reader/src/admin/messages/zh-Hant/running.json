@@ -1,8 +1,20 @@
 {
   "utc": "UTC {time}",
   "filters": {
-    "translation": { "blogs": "按部落格", "jobs": "按任務", "models": "按模型" },
-    "system": { "dead": "死信", "retrying": "重試中", "resolved": "已處理" }
+    "translation": {
+      "blogs": "按部落格",
+      "jobs": "按任務",
+      "models": "按模型"
+    },
+    "system": {
+      "dead": "死信",
+      "retrying": "重試中",
+      "resolved": "已處理"
+    },
+    "settings": {
+      "all": "全部",
+      "changed": "已修改"
+    }
   },
   "translation": {
     "search": "搜尋部落格、任務或模型",
@@ -18,9 +30,14 @@
     "backgroundValue": "{used} / {budget}",
     "unlimited": "不設每日上限",
     "unknownBudget": "下一次定時任務上報後顯示預算",
+    "paused": "已暫停：預算為 0",
+    "site": "今日全站預算",
+    "memberUnlimited": "不設上限",
+    "waiting": "等待明天",
+    "waitingSub": "超出成員當天上限或全站預算、推遲到下一個 UTC 日的全文翻譯。",
     "memberCap": "成員上限",
-    "memberCapValue": "每天 {cap}",
-    "nearCap": "{n, plural, =0 {按成員計。本週無人接近上限（差一篇文章以內）。} other {按成員計。本週有 # 人接近上限（差一篇文章以內）。}}",
+    "memberCapValue": "每天 {cap} 篇",
+    "nearCap": "{n, plural, =0 {每位成員每天可新譯的全文篇數。本週無人達到上限。} other {每位成員每天可新譯的全文篇數。本週有 # 人達到上限。}}",
     "perDay": "每日 Token",
     "peak": "峰值 {n}",
     "today": "今天（截至目前）",
@@ -97,5 +114,102 @@
     "pingedFail": "{time} 已向失聯報警服務報告問題。",
     "kindsLabel": "按型別的後臺任務",
     "load": "進行中 {held} · 重試中 {retrying}"
+  },
+  "settings": {
+    "name": "設定",
+    "search": "搜尋設定",
+    "separator": "、",
+    "columns": {
+      "now": "當前",
+      "default": "預設",
+      "changed": "修改於"
+    },
+    "status": {
+      "default": "預設",
+      "changed": "已修改"
+    },
+    "kv": {
+      "now": "當前",
+      "default": "預設",
+      "changed": "修改於"
+    },
+    "never": "從未修改，沿用預設",
+    "change": "修改",
+    "number": "數量",
+    "percents": "百分比，用逗號隔開",
+    "save": "儲存",
+    "useDefault": "恢復預設",
+    "unchanged": "和現在的一樣。",
+    "errors": {
+      "number": "請填寫 0 到 {max} 之間的整數。",
+      "percents": "請填寫 1 到 100 之間的整數百分比，最多十個，用逗號隔開。",
+      "choice": "請從選項中選一個。"
+    },
+    "note": "改動即刻生效，不用重新部署。管理員不受成員限額約束，但全站預算同樣算他們。",
+    "keys": {
+      "signup": {
+        "mode": {
+          "name": "誰可以加入",
+          "about": "僅限邀請：每個新帳號都需要邀請。開放：用驗證碼驗證過的電子郵件就能加入。",
+          "choices": {
+            "open": "開放",
+            "invite": "僅限邀請"
+          }
+        },
+        "maxPerDay": {
+          "name": "每天新帳號上限",
+          "about": "超過之後，無論哪種方式，加入都要等到下一個 UTC 日。",
+          "value": "{n, plural, =0 {為零：暫停加入} other {每天 # 個}}",
+          "none": "不限"
+        }
+      },
+      "member": {
+        "translationsPerDay": {
+          "name": "每位成員的新翻譯",
+          "about": "一個 UTC 日內，成員的請求能付費翻譯的文章數。已經替別人翻譯過的不計；超出的等到第二天。",
+          "value": "{n, plural, =0 {為零} other {每天 # 篇}}",
+          "none": "不限"
+        },
+        "feedsPerDay": {
+          "name": "每位成員的新訂閱源",
+          "about": "一個 UTC 日內，成員能新增的 Tela 尚未收錄的訂閱源，認領部落格帶來的也算。訂閱 Tela 已有的不計；匯入時多出來的，在之後幾天陸續加入。",
+          "value": "{n, plural, =0 {為零} other {每天 # 個}}",
+          "none": "不限"
+        },
+        "maxSubscriptions": {
+          "name": "每個帳號的訂閱上限",
+          "about": "一個帳號最多能訂閱多少個部落格。",
+          "value": "{n, plural, =0 {為零} other {# 個部落格}}",
+          "none": "不限"
+        }
+      },
+      "translation": {
+        "siteDailyTokens": {
+          "name": "全站翻譯預算",
+          "about": "一個 UTC 日內，所有人的標題和正文翻譯合起來能用的模型 token。用完之後，進行中的翻譯照常完成，新的等到第二天。",
+          "value": "{n, plural, =0 {為零：翻譯暫停} other {每天 {tokens} token}}",
+          "none": "不限"
+        },
+        "backgroundDailyTokens": {
+          "name": "標題翻譯預算",
+          "about": "一個 UTC 日內標題翻譯能用的模型 token，算在全站預算之內。不設定時，由 tela-jobs 的 LLM_DAILY_BUDGET_TOKENS 決定，其中 0 表示不限。",
+          "value": "{n, plural, =0 {為零：標題暫停} other {每天 {tokens} token}}",
+          "none": "按 tela-jobs 的 LLM_DAILY_BUDGET_TOKENS"
+        }
+      },
+      "alerts": {
+        "signupsPerDay": {
+          "name": "註冊提醒",
+          "about": "一個 UTC 日內加入的人超過這個數時，給你發一封郵件。",
+          "value": "{n, plural, =0 {有人註冊就提醒} other {一天超過 # 個}}",
+          "none": "不提醒"
+        },
+        "budgetPercents": {
+          "name": "預算提醒",
+          "about": "全站預算每用到一個比例，當天給你發一封郵件。",
+          "none": "不提醒"
+        }
+      }
+    }
   }
 }

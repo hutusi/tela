@@ -40,7 +40,10 @@ import { convertTagged, planFor } from './scripts'
 export type TranslationContext = IngestContext & {
   /** Absent when no provider is configured; the translation kinds are disabled then. */
   translator?: Translator
-  /** Daily token budget for background work (titles); 0 = unlimited. */
+  /**
+   * `LLM_DAILY_BUDGET_TOKENS`: the background (title) budget while the
+   * `translation.backgroundDailyTokens` setting is null; 0 = unlimited (ADR 0057).
+   */
   backgroundBudget?: number
   /** Ceiling on source tokens translated per article body. */
   maxArticleTokens?: number

@@ -16,12 +16,15 @@ export function DiscoverView({
   params,
   member,
   locale,
+  hl = locale,
   onRetry,
 }: {
   data: DiscoverData | null
   params: BlogsParams
   member?: MemberControls | undefined
   locale: string
+  /** The language the page's feeds are titled in: the reading language, else the page's. */
+  hl?: string | undefined
   /** Set once the page failed to come: Try again, in the skeleton's place. */
   onRetry?: (() => void) | undefined
 }) {
@@ -31,7 +34,7 @@ export function DiscoverView({
     data?.total !== undefined && data.pageSize ? Math.ceil(data.total / data.pageSize) : 1
 
   return (
-    <DiscoverFrame tab="blogs">
+    <DiscoverFrame tab="blogs" topic={params.topic} hl={hl}>
       <div className="mb-7 flex flex-wrap items-center gap-3">
         <TopicChips
           topic={params.topic}
