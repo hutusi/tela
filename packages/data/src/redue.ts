@@ -160,7 +160,8 @@ export const REDUE: Record<LeaseKind, Redue> = {
       return [
         db.run(sql`
           update body_translations set state = 'requested', request_id = ${requestId},
-            requested_by = null, reserved_tokens = ${reserve}, reserved_day = ${day},
+            requested_by = null, reserved_tokens = ${reserve}, reserved_spend = 1,
+            reserved_day = ${day},
             due_at = null, used_tokens = 0, chunk_keys = '[]', object_key = null,
             failed_leaves = '[]',
             updated_at = ${now}, seq = ${currentSeq}

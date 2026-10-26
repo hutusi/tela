@@ -243,8 +243,8 @@ export const KINDS: Partial<Record<LeaseKind, KindSpec>> = {
       return [
         settleBodyUsage(db, contentKey, lang, now),
         db.run(sql`
-          update body_translations set state = 'failed', reserved_tokens = 0, due_at = null,
-            updated_at = ${now}, seq = ${currentSeq}
+          update body_translations set state = 'failed', reserved_tokens = 0,
+            reserved_spend = 0, due_at = null, updated_at = ${now}, seq = ${currentSeq}
           where content_key = ${contentKey} and lang = ${lang} and state in ('requested', 'running')
         `),
       ]

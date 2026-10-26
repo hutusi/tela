@@ -84,6 +84,16 @@ reservation was made for (`sourceTokensFor`, its inverse), never the reservation
 tokens, and never past the operator's ceiling; leaves past it render as source (`partial`). A body
 retried from the console reserves the whole spend of a post at the ceiling the same way.
 
+A reservation says which kind it is (`reserved_spend`). Before this round tela-api reserved the
+source tokens alone, and those requests are still about when tela-jobs is deployed: in flight,
+backing off, or made by the older tela-api in the minutes before it is replaced. Read as a whole
+spend, such a reservation pays for half of its post or less, and the rest would be cached as
+`partial`, which every later reader is answered as ready. So the flag is set by every statement
+of this round that reserves (admission, take-over, the console's retry), cleared by every one that
+ends a request, and a request without it is translated up to its reservation as source tokens, as
+it was. Clearing it at the end keeps a rolled-back tela-api's request, made over an ended row,
+read as that tela-api meant it.
+
 **Bodies are held at the door only.** A body admitted runs to its end, and continues across
 executions as before (ADR 0023). `dueBodies` reads no budget. Stopping a body mid-post would leave
 the reader half a translation. The overshoot is what was admitted spending more than it was

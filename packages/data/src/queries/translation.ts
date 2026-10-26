@@ -283,6 +283,8 @@ export type BodyTranslationRow = {
   requestId: string | null
   requestedBy: string | null
   reservedTokens: number
+  /** Whether `reservedTokens` is the whole spend or, from before ADR 0057's, source tokens. */
+  reservedSpend: boolean
   reservedDay: string | null
   /** A request that waits is not due before this instant (ADR 0057); null once due or started. */
   dueAt: number | null
@@ -307,6 +309,7 @@ export async function loadBodyTranslation(
     request_id: string | null
     requested_by: string | null
     reserved_tokens: number
+    reserved_spend: number
     reserved_day: string | null
     due_at: number | null
     used_tokens: number
@@ -324,6 +327,7 @@ export async function loadBodyTranslation(
     requestId: r.request_id,
     requestedBy: r.requested_by,
     reservedTokens: r.reserved_tokens,
+    reservedSpend: Boolean(r.reserved_spend),
     reservedDay: r.reserved_day,
     dueAt: r.due_at === null ? null : Number(r.due_at),
     usedTokens: r.used_tokens,
@@ -417,14 +421,14 @@ export function admitBodyTranslation(db: TelaDb, ask: BodyAsk) {
         from a, k
       )
       insert into body_translations (content_key, lang, state, request_id, requested_by,
-        reserved_tokens, reserved_day, due_at, updated_at, seq)
-      select a.ck, a.lg, 'requested', a.r, a.me, a.n, p.day,
+        reserved_tokens, reserved_spend, reserved_day, due_at, updated_at, seq)
+      select a.ck, a.lg, 'requested', a.r, a.me, a.n, 1, p.day,
         case when p.day = a.d0 then null else a.t1 end, a.s, ${currentSeq}
       from a, p where p.day is not null
       on conflict (content_key, lang) do update set
         state = 'requested', request_id = excluded.request_id, requested_by = excluded.requested_by,
-        reserved_tokens = excluded.reserved_tokens, reserved_day = excluded.reserved_day,
-        due_at = excluded.due_at, used_tokens = 0, chunk_keys = '[]', object_key = null,
+        reserved_tokens = excluded.reserved_tokens, reserved_spend = 1,
+        reserved_day = excluded.reserved_day, due_at = excluded.due_at, used_tokens = 0, chunk_keys = '[]', object_key = null,
         failed_leaves = '[]', updated_at = excluded.updated_at, seq = excluded.seq
       where body_translations.state in ('failed', 'skipped')
     `),
@@ -455,7 +459,7 @@ export function takeOverBodyTranslation(db: TelaDb, ask: BodyAsk, old: WaitingRe
     db.run(sql`
       ${askHeader(ask)}
       update body_translations set request_id = a.r, requested_by = a.me, reserved_tokens = a.n,
-        reserved_day = a.d0, due_at = null, updated_at = a.s, seq = ${currentSeq}
+        reserved_spend = 1, reserved_day = a.d0, due_at = null, updated_at = a.s, seq = ${currentSeq}
       from a, k
       where body_translations.content_key = a.ck and body_translations.lang = a.lg
         and body_translations.request_id = ${old.requestId}
@@ -608,8 +612,8 @@ export function withdrawBodyRequests(
         and key in (select content_key || ':' || lang from body_translations where ${open})
     `),
     db.run(sql`
-      update body_translations set state = 'failed', reserved_tokens = 0, due_at = null,
-        updated_at = ${now}, seq = ${currentSeq}
+      update body_translations set state = 'failed', reserved_tokens = 0, reserved_spend = 0,
+        due_at = null, updated_at = ${now}, seq = ${currentSeq}
       where ${open}
     `),
   ]

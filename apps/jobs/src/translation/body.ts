@@ -199,8 +199,9 @@ export async function translateBodyJob(ctx: TranslationContext, lease: Lease): P
 
   // Cap the source tokens one article may send: the operator's ceiling, and what the reservation
   // was made for when there is one. A reservation reckons the whole spend, prompts and output too
-  // (`bodySpendFor`), so the source it pays for is its inverse, never the reservation itself.
-  // Leaves past the cap render as source (`partial`). A reader's request that reserved nothing
+  // (`bodySpendFor`), so the source it pays for is its inverse, never the reservation itself; a
+  // request reserved before that (`reservedSpend` unset) reserved source tokens, and is capped at
+  // them as it was. Leaves past the cap render as source (`partial`). A reader's request that reserved nothing
   // was judged a conversion between the Chinese scripts by the article's language; if the shared
   // object says otherwise, it is never paid for.
   const unreserved = row.requestedBy !== null && row.reservedTokens === 0
@@ -208,7 +209,11 @@ export async function translateBodyJob(ctx: TranslationContext, lease: Lease): P
     ? 0
     : Math.min(
         ctx.maxArticleTokens ?? MAX_ARTICLE_TRANSLATION_TOKENS,
-        row.reservedTokens > 0 ? sourceTokensFor(row.reservedTokens) : Number.POSITIVE_INFINITY,
+        row.reservedTokens === 0
+          ? Number.POSITIVE_INFINITY
+          : row.reservedSpend
+            ? sourceTokensFor(row.reservedTokens)
+            : row.reservedTokens,
       )
   let budgeted = 0
   for (const [id, text] of misses) {
@@ -375,7 +380,8 @@ export async function translateBodyJob(ctx: TranslationContext, lease: Lease): P
     db.run(sql`
       update body_translations set state = ${status}, object_key = ${finalKey},
         failed_leaves = ${JSON.stringify([...failed])}, model = ${model}, due_at = null,
-        used_tokens = ${usedTokens}, reserved_tokens = 0, updated_at = ${now}, seq = ${currentSeq}
+        used_tokens = ${usedTokens}, reserved_tokens = 0, reserved_spend = 0, updated_at = ${now},
+        seq = ${currentSeq}
       where content_key = ${contentKey} and lang = ${lang} and state in ('requested', 'running')
     `),
   ])
@@ -396,7 +402,8 @@ async function settleFailed(
     settleBodyUsage(ctx.db, contentKey, lang, now),
     ctx.db.run(sql`
       update body_translations set state = 'failed', failed_leaves = ${JSON.stringify([reason])},
-        reserved_tokens = 0, due_at = null, updated_at = ${now}, seq = ${currentSeq}
+        reserved_tokens = 0, reserved_spend = 0, due_at = null, updated_at = ${now},
+        seq = ${currentSeq}
       where content_key = ${contentKey} and lang = ${lang} and state in ('requested', 'running')
     `),
   ])

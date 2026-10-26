@@ -97,6 +97,15 @@ describe('asking for a translation', () => {
       translation: { state: 'requested' },
     })
     expect(await usage()).toEqual({ reserved: reservationFor(2000, 'ja'), used: 0 })
+    // Marked as a reservation of the whole spend, which tela-jobs reads as such (ADR 0057).
+    const row = await first<{ reserved_tokens: number; reserved_spend: number }>(
+      db,
+      sql`select reserved_tokens, reserved_spend from body_translations where content_key = 'ckey1'`,
+    )
+    expect({ ...row, reserved_spend: Number(row?.reserved_spend) }).toEqual({
+      reserved_tokens: reservationFor(2000, 'ja'),
+      reserved_spend: 1,
+    })
     expect(api.jobs.sent).toMatchObject([
       { queue: 'translate', body: { kind: 'translate.body', key: 'ckey1:zh-Hans' } },
     ])

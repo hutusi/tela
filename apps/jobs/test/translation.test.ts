@@ -103,9 +103,16 @@ async function addReader(id = 'reader') {
 
 /**
  * What the API will do when a reader asks: a requested row and a reservation. Asking again after
- * a failure resets the row, as the API's upsert does.
+ * a failure resets the row, as the API's upsert does. `spend` is false for a reservation an older
+ * tela-api made, of source tokens alone.
  */
-async function request(articleId: number, lang: string, reserved = 20_000, userId = 'reader') {
+async function request(
+  articleId: number,
+  lang: string,
+  reserved = 20_000,
+  userId = 'reader',
+  spend = true,
+) {
   const article = await first<{ content_key: string }>(
     db,
     sql`select content_key from articles where id = ${articleId}`,
@@ -113,11 +120,12 @@ async function request(articleId: number, lang: string, reserved = 20_000, userI
   const day = utcDay(clock.now())
   await db.batch([
     db.run(sql`
-      insert into body_translations (content_key, lang, state, request_id, requested_by, reserved_tokens, reserved_day, updated_at)
-      values (${article?.content_key}, ${lang}, 'requested', 'r1', ${userId}, ${reserved}, ${day}, ${clock.now()})
+      insert into body_translations (content_key, lang, state, request_id, requested_by, reserved_tokens, reserved_spend, reserved_day, updated_at)
+      values (${article?.content_key}, ${lang}, 'requested', 'r1', ${userId}, ${reserved}, ${spend}, ${day}, ${clock.now()})
       on conflict (content_key, lang) do update set
         state = 'requested', request_id = 'r2', requested_by = excluded.requested_by,
-        reserved_tokens = excluded.reserved_tokens, reserved_day = excluded.reserved_day,
+        reserved_tokens = excluded.reserved_tokens, reserved_spend = excluded.reserved_spend,
+        reserved_day = excluded.reserved_day,
         used_tokens = 0, chunk_keys = '[]', object_key = null, failed_leaves = '[]',
         updated_at = excluded.updated_at
       where body_translations.state in ('failed', 'skipped')
@@ -577,6 +585,30 @@ describe('bodies', () => {
     expect(tokens + estimateTokens(sent[0]!.text) > 400).toBe(true)
     // What it spent, input and output, is about what was reserved for it.
     expect(row!.used_tokens <= bodySpendFor(400)).toBe(true)
+  })
+
+  test('a reservation made before ADR 0057 is of source tokens, and pays for that much source', async () => {
+    const ctx = context()
+    await addReader()
+    await ingest(ctx, feed(['A long post'], 20))
+    // What tela-api reserved before this round for the whole post: its source, with room over.
+    const key = await request(1, 'zh-Hans', bodySpendFor(400), 'reader', false)
+    await db.run(sql`delete from leases`)
+    calls.length = 0
+    await cycle(ctx)
+    const row = await bodyRow(key)
+    // Read as a whole spend, the same number would have stopped at 400 source tokens.
+    expect(row?.state).toBe('done')
+    expect(row?.failed_leaves).toBe('[]')
+    const sent = calls.flatMap((c) => c.blocks).filter((b) => !/^[te]\d+$/.test(b.id))
+    expect(sent.reduce((n, b) => n + estimateTokens(b.text), 0) > 400).toBe(true)
+    // Ended, it reads as no reservation of either kind, so an older tela-api asking again over it
+    // is read as that one's.
+    const flag = await first<{ reserved_spend: number }>(
+      db,
+      sql`select reserved_spend from body_translations where content_key = ${key}`,
+    )
+    expect(Number(flag?.reserved_spend)).toBe(0)
   })
 
   test('reuse the shared cache: a second article with the same paragraphs costs no call', async () => {

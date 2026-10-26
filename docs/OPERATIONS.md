@@ -318,7 +318,9 @@ The account is on Workers Paid. Run wrangler from a real terminal (`wrangler log
      as the member's own allowance. Migration 0014 only adds tables, columns and indexes (no table
      is rebuilt). Apply it, then deploy tela-jobs, then tela-web, then tela-api, within minutes:
      - tela-jobs first, because an older one claims a waiting body at once and reports no
-       `siteBudget`, and it is the new one that knows `member.pendingFeeds` and `member.erase`;
+       `siteBudget`, and it is the new one that knows `member.pendingFeeds` and `member.erase`. It
+       reads a body the older tela-api reserved meanwhile as that one meant it, source tokens
+       (`reserved_spend` unset, ADR 0057);
      - tela-web before tela-api, as every `MIN_CLIENT` bump. tela-web may not go back while the
        new tela-api is live; tela-api may go back alone.
      - Deploy with `signup.mode` at its default, `invite`, and `TELA_NOINDEX` still set: nothing a

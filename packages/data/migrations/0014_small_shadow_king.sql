@@ -55,6 +55,7 @@ CREATE TABLE `robots_rules` (
 );
 --> statement-breakpoint
 ALTER TABLE `articles` ADD `extract_refused` integer DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE `body_translations` ADD `reserved_spend` integer DEFAULT false NOT NULL;--> statement-breakpoint
 ALTER TABLE `body_translations` ADD `due_at` integer;--> statement-breakpoint
 ALTER TABLE `profiles` ADD `suspended_at` integer;--> statement-breakpoint
 ALTER TABLE `profiles` ADD `deleted_at` integer;--> statement-breakpoint

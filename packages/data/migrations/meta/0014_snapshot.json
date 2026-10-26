@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "86e44082-1de4-4451-b6cd-5926c49a0640",
+  "id": "ed93d3eb-3565-4f0b-8e6f-2b0156637030",
   "prevId": "ed3f885d-8c04-4e95-b488-63363d9d2bfc",
   "tables": {
     "admin_actions": {
@@ -745,6 +745,14 @@
           "notNull": true,
           "autoincrement": false,
           "default": 0
+        },
+        "reserved_spend": {
+          "name": "reserved_spend",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
         },
         "used_tokens": {
           "name": "used_tokens",
