@@ -304,10 +304,11 @@ describe('suspending a member', () => {
   test('ends the translations they asked for that have not started, and gives them back', async () => {
     const today = utcDay(api.clock.now())
     const tomorrow = utcDay(nextUtcMidnight(api.clock.now()))
+    // As this round's tela-api reserves them: counted, and marked so (ADR 0057).
     const ask = (ck: string, state: string, by: string, reserved: number, day: string) =>
       db.run(sql`insert into body_translations (content_key, lang, state, request_id, requested_by,
-          reserved_tokens, reserved_day, due_at, updated_at, seq)
-        values (${ck}, 'fr', ${state}, ${`r-${ck}`}, ${by}, ${reserved}, ${day},
+          reserved_tokens, reserved_spend, reserved_day, due_at, updated_at, seq)
+        values (${ck}, 'fr', ${state}, ${`r-${ck}`}, ${by}, ${reserved}, 1, ${day},
           ${day === tomorrow ? nextUtcMidnight(api.clock.now()) : null}, 0, ${currentSeq})`)
     await write(
       // One waits for tomorrow, one is due and not begun, one runs; and the operator's own.

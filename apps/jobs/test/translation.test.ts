@@ -10,6 +10,7 @@ import {
   type TelaDb,
   TITLES_PER_JOB,
   utcDay,
+  withdrawBodyRequests,
 } from '@tela/data'
 import { addTestUser, createTestDb } from '@tela/data/testing'
 import { createHttpClient } from '@tela/ingest/http'
@@ -609,6 +610,45 @@ describe('bodies', () => {
       sql`select reserved_spend from body_translations where content_key = ${key}`,
     )
     expect(Number(flag?.reserved_spend)).toBe(0)
+  })
+
+  describe('a request reserved before ADR 0057 was never counted, so it gives no count back', () => {
+    const requests = async () =>
+      Number(
+        (
+          await first<{ requests: number }>(
+            db,
+            sql`select requests from usage_daily where subject = 'reader'`,
+          )
+        )?.requests,
+      )
+
+    test('ending unpaid', async () => {
+      const ctx = context()
+      await addReader()
+      await ingest(ctx, feed(['A post'], 6))
+      await cycle(ctx)
+      const key = await request(1, 'zh-Hans', 2_000, 'reader', false)
+      // The day's one count is another request's, made by this round's tela-api.
+      await db.run(sql`update usage_daily set requests = 1 where subject = 'reader'`)
+      await db.run(sql`update articles set content_key = 'edited' where id = 1`)
+      await db.run(sql`delete from leases`)
+      await cycle(ctx)
+      expect(await bodyRow(key)).toMatchObject({ state: 'failed', failed_leaves: '["superseded"]' })
+      expect(await requests()).toBe(1)
+    })
+
+    test('withdrawn as the member leaves standing', async () => {
+      const ctx = context()
+      await addReader()
+      await ingest(ctx, feed(['A post'], 6))
+      await cycle(ctx)
+      await request(1, 'zh-Hans', 2_000, 'reader', false)
+      await db.run(sql`update usage_daily set requests = 1 where subject = 'reader'`)
+      await db.batch([bumpSeq(db), ...withdrawBodyRequests(db, 'reader', clock.now())] as never)
+      expect(await requests()).toBe(1)
+      expect(await ledger()).toEqual({ reserved: 0, used: 0 })
+    })
   })
 
   test('reuse the shared cache: a second article with the same paragraphs costs no call', async () => {

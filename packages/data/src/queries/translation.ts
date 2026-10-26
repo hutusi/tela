@@ -545,7 +545,9 @@ export function bodyAllowance(rows: unknown, now: number): BodyAllowance {
  * reader asked and charge what the translation actually spent, to the member (or `'*'` when no
  * one asked) on the day of the reservation. A member's request that spent nothing at all (every
  * block already cached, or it ended before a call) gives its count back too, never below 0:
- * `member.translationsPerDay` counts what was paid for (ADR 0057). Every ending uses it, success
+ * `member.translationsPerDay` counts what was paid for (ADR 0057). Only a request that was counted
+ * gives one back (`reserved_spend`): one an older tela-api reserved never was, and giving one back
+ * for it would hand another of the member's requests that day a free place. Every ending uses it, success
  * or failure, reported or by exhaustion, placed before the statement that moves the row out of
  * `requested`/`running` in the same batch. The state filter makes it settle a request once: after
  * the flip it matches nothing. The reservation comes off through a subquery rather than a negative
@@ -563,7 +565,8 @@ export function settleBodyUsage(db: TelaDb, contentKey: string, lang: string, no
       reserved = max(0, usage_daily.reserved - (select reserved_tokens ${row})),
       used = usage_daily.used + excluded.used,
       requests = max(0, usage_daily.requests - (
-        select requested_by is not null and reserved_tokens > 0 and used_tokens = 0 ${row}
+        select requested_by is not null and reserved_tokens > 0 and reserved_spend = 1
+          and used_tokens = 0 ${row}
       ))
   `)
 }
@@ -572,7 +575,8 @@ export function settleBodyUsage(db: TelaDb, contentKey: string, lang: string, no
  * End a member's body requests that have not started (`requested`: waiting for their day, or due
  * and not yet begun), unpaid, as the member leaves standing: their account closes (ADR 0058) or is
  * suspended (ADR 0059). Each is given back as `settleBodyUsage` gives back one, a day at a time:
- * the reservation off the day it was charged to, and its count when nothing was spent. A lease on
+ * the reservation off the day it was charged to, and its count when it was counted and nothing
+ * was spent. A lease on
  * one goes, so a run that claimed it writes nothing. One already running finishes and is settled
  * as ever, to the member it names. `requested_by` stays, as it must while a request is open.
  *
@@ -604,7 +608,7 @@ export function withdrawBodyRequests(
         requests = max(0, usage_daily.requests - (
           select count(*) from body_translations
           where ${open} and coalesce(reserved_day, ${today}) = excluded.day
-            and reserved_tokens > 0 and used_tokens = 0
+            and reserved_tokens > 0 and reserved_spend = 1 and used_tokens = 0
         ))
     `),
     db.run(sql`

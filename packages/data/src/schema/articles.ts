@@ -177,10 +177,12 @@ export const bodyTranslations = sqliteTable(
     requestedBy: text().references(() => user.id, { onDelete: 'set null' }),
     reservedTokens: integer().notNull().default(0),
     /**
-     * `reservedTokens` reckons the request's whole spend, input and output (ADR 0057), and the job
-     * translates as much source as that pays for. A request tela-api reserved before then reserved
-     * source tokens alone, and is translated up to them, as it was; every end of a request clears
-     * both, so a request an older tela-api makes again over it is read as that one's.
+     * Reserved as ADR 0057 reserves: `reservedTokens` reckons the request's whole spend, input and
+     * output, and the job translates as much source as that pays for, and a member's request was
+     * counted in `usage_daily.requests`. A request tela-api reserved before then reserved source
+     * tokens alone and was never counted: it is translated up to them, as it was, and gives no
+     * count back. Every end of a request clears both, so a request an older tela-api makes again
+     * over it is read as that one's.
      */
     reservedSpend: flag(),
     /**

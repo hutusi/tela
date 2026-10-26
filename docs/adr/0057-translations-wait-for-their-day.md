@@ -91,7 +91,8 @@ spend, such a reservation pays for half of its post or less, and the rest would 
 `partial`, which every later reader is answered as ready. So the flag is set by every statement
 of this round that reserves (admission, take-over, the console's retry), cleared by every one that
 ends a request, and a request without it is translated up to its reservation as source tokens, as
-it was. Clearing it at the end keeps a rolled-back tela-api's request, made over an ended row,
+it was. Nor was such a request counted in `usage_daily.requests`, so ending unpaid it gives no count
+back: giving one would hand another of the member's requests that day a free place. Clearing it at the end keeps a rolled-back tela-api's request, made over an ended row,
 read as that tela-api meant it.
 
 **Bodies are held at the door only.** A body admitted runs to its end, and continues across
