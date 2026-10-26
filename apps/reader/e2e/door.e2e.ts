@@ -498,6 +498,8 @@ test.describe('Join, with an invite code', () => {
     await page.getByTestId('nav-join').click()
     const sheet = page.getByTestId('front-door')
     await expect(sheet.getByTestId('join-code')).toBeFocused()
+    // A visitor with no member to ask is told where to write for a code.
+    await expect(sheet.getByTestId('door-contact')).toHaveAttribute('href', 'mailto:me@hutu.si')
     // Terms and Privacy open beside the sheet, which keeps the code typed into it.
     for (const id of ['door-terms', 'door-privacy']) {
       await expect(sheet.getByTestId(id)).toHaveAttribute('target', '_blank')
@@ -877,6 +879,7 @@ test.describe('Join, while sign-up is open', () => {
       const sheet = page.getByTestId('front-door')
       await expect(sheet.getByTestId('join-code')).toHaveCount(0)
       await expect(sheet).not.toContainText('invite-only')
+      await expect(sheet.getByTestId('door-contact')).toHaveCount(0)
       await expect(sheet.getByTestId('login-email')).toBeFocused()
       await sheet.getByTestId('login-email').fill(email)
       await sheet.getByTestId('login-submit').click()

@@ -94,7 +94,7 @@
     "useCode": "Email me a code instead",
     "invite": "Invite code",
     "inviteOptional": "Invite code (optional)",
-    "noCode": "No code? Tela is invite-only for now: ask a member for one.",
+    "noCode": "No code? Tela is invite-only for now: write to <mail>me@hutu.si</mail> for one, or ask a member.",
     "paused": "Tela has welcomed all the new members it can for today. Joining opens again at {at, time, short}. An invite code still lets you in today.",
     "agree": "By joining you agree to the <terms>Terms</terms>; see <privacy>Privacy</privacy>.",
     "newHere": "New to Tela?",

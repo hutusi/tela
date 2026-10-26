@@ -94,7 +94,7 @@
     "useCode": "改用邮箱验证码",
     "invite": "邀请码",
     "inviteOptional": "邀请码（选填）",
-    "noCode": "没有邀请码？Tela 目前仅限受邀加入：请向已加入的成员要一个。",
+    "noCode": "没有邀请码？Tela 目前仅限受邀加入：请写信到 <mail>me@hutu.si</mail> 索取，或向已加入的成员要一个。",
     "paused": "今天的新成员名额已满，{at, time, short} 后可以再来加入。有邀请码的话，今天也能加入。",
     "agree": "加入即表示你同意<terms>使用条款</terms>；另见<privacy>隐私政策</privacy>。",
     "newHere": "第一次来 Tela？",

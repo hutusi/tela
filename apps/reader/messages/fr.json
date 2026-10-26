@@ -94,7 +94,7 @@
     "useCode": "Recevoir plutôt un code par e-mail",
     "invite": "Code d’invitation",
     "inviteOptional": "Code d’invitation (facultatif)",
-    "noCode": "Pas de code ? Tela fonctionne sur invitation pour l’instant : demandez-en un à un membre.",
+    "noCode": "Pas de code ? Tela fonctionne sur invitation pour l’instant : écrivez à <mail>me@hutu.si</mail> pour en obtenir un, ou demandez-en un à un membre.",
     "paused": "Tela a accueilli aujourd’hui tous les nouveaux membres possibles. Les inscriptions rouvrent à {at, time, short}. Un code d’invitation permet quand même de s’inscrire aujourd’hui.",
     "agree": "En vous inscrivant, vous acceptez les <terms>Conditions</terms> ; voir aussi la page <privacy>Confidentialité</privacy>.",
     "newHere": "Première visite sur Tela ?",

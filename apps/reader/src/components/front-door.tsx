@@ -116,6 +116,8 @@ const QUIET =
 const TEXT_BUTTON =
   'self-center p-1 text-[13px] text-ink-2 underline underline-offset-2 hover:text-ink disabled:opacity-60'
 const SWITCH = 'font-medium text-ink underline underline-offset-2 hover:text-ink'
+/** Where a visitor with no member to ask writes for an invite code. */
+const CONTACT = 'me@hutu.si'
 
 export type DoorFormProps = {
   mode: DoorMode
@@ -510,7 +512,17 @@ export function DoorForm(props: DoorFormProps) {
         <div className="flex flex-col gap-1.5 text-[13px] leading-relaxed text-muted">
           {/* Only once this device has heard that joining needs a code: while sign-up is open
               nothing says Tela is invite-only, not even for the moment before the answer. */}
-          {signup?.mode === 'invite' ? <p>{t('noCode')}</p> : null}
+          {signup?.mode === 'invite' ? (
+            <p>
+              {t.rich('noCode', {
+                mail: (chunks) => (
+                  <a href={`mailto:${CONTACT}`} data-testid="door-contact">
+                    {chunks}
+                  </a>
+                ),
+              })}
+            </p>
+          ) : null}
           <p>
             {/* In a tab of their own: the sheet, and the invite code in it, stay where they are. */}
             {t.rich('agree', {
