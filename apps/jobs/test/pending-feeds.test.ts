@@ -114,6 +114,30 @@ describe('member.pendingFeeds', () => {
     expect((await sweep()).claimed).toBe(0)
   })
 
+  test('a feed Tela has now is reached past more waiting rows than one run reads', async () => {
+    // A raised cap lets a wait grow past what a run reads; the oldest 500 all need a day's room.
+    await db.batch([
+      db.run(sql`insert into settings (key, value, updated_at)
+        values ('member.maxSubscriptions', 'null', 0)`),
+      db.run(sql`insert into pending_feeds (user_id, feed_url, queued_at)
+        select 'u1', 'https://bulk' || value || '.example/feed', ${NOW - 2 * DAY} + value
+        from generate_series(1, 500)`),
+      db.run(sql`insert into sites (id, home_url, created_at, updated_at)
+        values (2, 'https://known.example', 0, 0)`),
+      db.run(sql`insert into feeds (site_id, feed_url, host, next_fetch_at, added_by, created_at,
+          updated_at)
+        values (2, ${url('known')}, 'known.example', ${NOW}, 'u2', ${NOW}, ${NOW})`),
+    ] as never)
+    expect(await waiting()).toHaveLength(505)
+    const run = await sweep()
+    expect(run.outcomes).toMatchObject([
+      { status: 'done', result: { status: 'done', added: 0, subscribed: 1, waiting: 504 } },
+    ])
+    expect(await following()).toEqual([url('known')])
+    // With the day spent and nothing else Tela has, nothing more is due.
+    expect(await sweep()).toEqual({ claimed: 0, outcomes: [] })
+  })
+
   test('the next day adds the day’s worth, oldest first, and the rest wait for the day after', async () => {
     clock.set(NOW + DAY)
     const run = await sweep()

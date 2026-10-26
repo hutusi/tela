@@ -222,13 +222,18 @@ export async function importFeeds(
 }
 
 /**
- * The member's waiting feeds, as `member.pendingFeeds` takes them: the oldest first, a day's worth
- * at most of an import's size.
+ * The member's waiting feeds, as `member.pendingFeeds` takes them, `limit` at a time: the ones Tela
+ * has now first, which subscribe free whatever the day (`duePendingFeeds` makes the run due for
+ * them), then the oldest. Read oldest first, a wait longer than the read (a cap raised past it)
+ * hid a feed someone else had added behind ones the day had no room for: the run was due every
+ * sweep and moved nothing (Codex's review).
  */
 export function pendingFeedsOf(db: TelaDb, userId: string, limit = 500) {
   return db.all<{ feed_url: string; title: string | null }>(sql`
-    select feed_url, title from pending_feeds where user_id = ${userId}
-    order by queued_at, feed_url limit ${limit}
+    select p.feed_url, p.title from pending_feeds p where p.user_id = ${userId}
+    order by exists (select 1 from feeds f where f.feed_url = p.feed_url) desc, p.queued_at,
+      p.feed_url
+    limit ${limit}
   `)
 }
 

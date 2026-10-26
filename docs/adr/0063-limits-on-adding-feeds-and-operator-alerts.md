@@ -68,8 +68,9 @@ nothing is fetched. Its due query finds a member with waiting feeds while a run 
 something: the day and the cap both have room, or a waiting feed is one Tela has now (someone else
 added it meanwhile: a free subscription, at once). A member at the cap keeps their wait and is not
 swept until they have room, and so does a suspended member (0059) until the suspension is lifted.
-The run reads the member's waiting rows and writes them in one fenced batch by the import's own
-statements, so a holder that lost its lease adds nothing and a run again adds nothing twice. The
+The run reads the member's waiting rows, 500 at most, the ones Tela has now first and then the
+oldest, since a feed that subscribes free must not wait behind more rows than a run reads (a cap
+raised past 500 allows that), and writes them in one fenced batch by the import's own statements, so a holder that lost its lease adds nothing and a run again adds nothing twice. The
 batch also refuses itself, as the fence does, for a member out of standing: suspended or closed
 (0058) after the run was claimed, they have nothing added. Exhaustion pushes the member's wait a day out (`queued_at`, which the due query
 reads); a retry from the console brings it back. The feeds it adds are due at once, and the feed
