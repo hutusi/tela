@@ -273,6 +273,78 @@ describe('a writer’s “no translation”', () => {
     const site = await json(await call(world, '/v1/sites/2?lang=zh-Hans'))
     expect((site.posts as Json[])[0]?.translatedTitle).toBeNull()
   })
+
+  test('turned back on by its claimant, sends what it kept out in the next delta', async () => {
+    await subscribeAll()
+    await world.api.db.run(sql`update sites set claimed_by = ${world.bo.userId} where id = 2`)
+    const before = await blog2()
+    const res = await world.api.request('/api/v1/sites/2/translation', {
+      method: 'PUT',
+      as: world.bo,
+      body: { optOut: false },
+    })
+    expect(res.status).toBe(200)
+    expect(await blog2(before.cursor)).toMatchObject({
+      title: true,
+      translation: true,
+      allowed: true,
+    })
+  })
+
+  test('turned back on in the console, or by undoing Translation off, the same', async () => {
+    await subscribeAll()
+    await world.api.db.run(sql`update profiles set is_admin = 1 where user_id = ${world.bo.userId}`)
+    const act = async (action: string) =>
+      json(
+        await world.api.request('/api/v1/admin/act', {
+          as: world.bo,
+          body: { action, ids: ['2'] },
+        }),
+      )
+    let before = await blog2()
+    await act('site.translationOn')
+    expect(await blog2(before.cursor)).toMatchObject({ title: true, translation: true })
+
+    const off = (await act('site.translationOff')) as { undo?: { group: string } }
+    before = await blog2()
+    expect(before).toMatchObject({ allowed: false })
+    const undone = await world.api.request('/api/v1/admin/undo', {
+      as: world.bo,
+      body: { group: off.undo?.group },
+    })
+    expect(undone.status).toBe(200)
+    expect(await blog2(before.cursor)).toMatchObject({
+      title: true,
+      translation: true,
+      allowed: true,
+    })
+  })
+
+  test('taken back with a claim the operator removes, the same', async () => {
+    await subscribeAll()
+    const { db } = world.api
+    await db.batch([
+      bumpSeq(db),
+      db.run(sql`update sites set claimed_by = ${world.bo.userId}, seq = ${currentSeq}
+        where id = 2`),
+      db.run(sql`insert into site_claims (id, site_id, user_id, method, token, status,
+          verified_at, created_at, seq)
+        values (77, 2, ${world.bo.userId}, 'meta', 'abcdef0123456789', 'verified', 0, 0,
+          ${currentSeq})`),
+    ] as never)
+    await db.run(sql`update profiles set is_admin = 1 where user_id = ${world.ann.userId}`)
+    const before = await blog2()
+    const removed = await world.api.request('/api/v1/admin/act', {
+      as: world.ann,
+      body: { action: 'claim.remove', ids: ['77'] },
+    })
+    expect((await json(removed)).done).toHaveLength(1)
+    expect(await blog2(before.cursor)).toMatchObject({
+      title: true,
+      translation: true,
+      allowed: true,
+    })
+  })
 })
 
 describe('mutations', () => {

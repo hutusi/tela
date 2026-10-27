@@ -11,6 +11,7 @@ import {
   currentSeq,
   first,
   gravatarOn,
+  restampTranslations,
   standingOk,
 } from '@tela/data'
 import { isTopic, isValidHandle } from '@tela/shared'
@@ -112,6 +113,13 @@ export function memberRoutes(deps: ApiDeps) {
     const optOut = body.optOut === true
     await db.batch([
       bumpSeq(db),
+      // Turned back on: apps were sent none of its translations while it said no (ADR 0065).
+      ...(optOut
+        ? []
+        : restampTranslations(
+            db,
+            sql`select id from sites where id = ${siteId} and translation_opt_out = 1`,
+          )),
       db.run(sql`
         update sites set translation_opt_out = ${optOut ? 1 : 0}, updated_at = ${deps.clock.now()},
           seq = ${currentSeq}

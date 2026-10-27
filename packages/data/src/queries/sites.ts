@@ -130,6 +130,30 @@ export function recountReaders(db: TelaDb, siteIds: SQL, now: number) {
 }
 
 /**
+ * A writer turned translation back on for `siteIds` (ADR 0065): stamp the blog's title and body
+ * translation rows with the batch's seq, so an app's sync, which left them out while the blog
+ * said no, sends them now. The web's devices held them all along and take them again unchanged.
+ *
+ * Statements for a batch that starts with `bumpSeq`, placed where `siteIds` names exactly the blogs
+ * turned back on: before the switch's update, as the blogs still opted out that it will turn on;
+ * after it, as the blogs it stamped that now allow translation. Body translations follow each
+ * post's current content, as the pull's do.
+ */
+export function restampTranslations(db: TelaDb, siteIds: SQL) {
+  const feedsOf = sql`select id from feeds where site_id in (${siteIds})`
+  return [
+    db.run(sql`
+      update article_titles set seq = ${currentSeq} where feed_id in (${feedsOf})
+    `),
+    db.run(sql`
+      update body_translations set seq = ${currentSeq}
+      where content_key in (select content_key from articles
+        where feed_id in (${feedsOf}) and content_key is not null)
+    `),
+  ] as const
+}
+
+/**
  * Re-point a feed to the site for `origin` (creating it), drop the site it left if that was an
  * empty unclaimed placeholder, and recount both. Statements for a batch that has already bumped
  * the sync sequence.
