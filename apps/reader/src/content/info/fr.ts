@@ -135,6 +135,7 @@ export const fr = {
               'Vos blogrolls, avec leur nom et leur description, les blogs qu’elles contiennent, vos notes sur ces blogs, et si elles sont publiques ou non.',
               'Vos paramètres : langues, thème, taille du texte, etc.',
               'Les traductions que vous demandez et ce que chacune a coûté, et le nombre de blogs nouveaux pour Tela que vous ajoutez chaque jour, pour que chacun reste dans les [limites quotidiennes](/terms#limits).',
+              'Les articles que vous ouvrez en entier depuis des blogs auxquels vous n’êtes pas abonné, comptés pour la [limite quotidienne](/terms#limits) et gardés deux jours.',
             ],
           },
           { h: 'Les blogs que vous revendiquez' },
@@ -147,6 +148,12 @@ export const fr = {
           {
             list: [
               'Ce que vous avez signalé, pourquoi, ce que vous avez écrit avec, et l’adresse de la page d’où vous l’avez signalé.',
+            ],
+          },
+          { h: 'Les applications que vous connectez' },
+          {
+            list: [
+              'Chaque application que vous connectez : ce que vous lui avez permis, quand vous l’avez connectée, et quand elle a agi pour vous pour la dernière fois ([voir plus bas](#apps)).',
             ],
           },
           { h: 'Données techniques' },
@@ -276,6 +283,32 @@ export const fr = {
           },
         ],
       },
+      apps: {
+        heading: 'Les applications que vous connectez',
+        blocks: [
+          {
+            p: 'Des applications faites par d’autres développeurs peuvent se connecter à votre compte Tela si vous le leur permettez. Tela approuve chaque application avant que quiconque puisse la connecter. Vous la connectez sur une page de Tela, qui montre ce que l’application demande, et l’application n’obtient jamais votre mot de passe.',
+          },
+          { h: 'Ce qu’une application voit' },
+          {
+            list: [
+              'Lecture seule : vos abonnements et leurs articles, vos surlignages, votre historique de lecture, et les pages publiques de Tela. Elle ne peut rien modifier.',
+              'Lecture et écriture : tout cela, et elle peut faire des changements pour vous : marquer des articles comme lus, s’abonner, ajouter des flux, surligner, et demander des traductions, qui comptent dans vos traductions du jour ([Conditions](/terms#limits)).',
+              'Votre adresse e-mail, seulement si l’application la demande, que Tela le lui permet et que vous l’acceptez en la connectant.',
+              'Aucune application ne peut supprimer votre compte, changer votre façon de vous connecter, télécharger vos données, ni faire ce que seule la personne qui gère Tela peut faire.',
+            ],
+          },
+          { h: 'Ce que Tela garde, et ce que l’application garde' },
+          {
+            list: [
+              'Tela garde une trace de chaque connexion : l’application, ce que vous lui avez permis, quand vous l’avez connectée, et quand elle a servi pour la dernière fois, à l’heure près. Cette trace est gardée jusqu’à ce que vous déconnectiez l’application, et vous la retrouvez dans Paramètres → Apps connectées.',
+              'Ce qu’une application conserve relève de sa propre responsabilité, selon sa politique de confidentialité, que la page où vous la connectez indique.',
+              'Déconnecter une application l’arrête aussitôt, sur tous vos appareils. Ce qu’elle a déjà conservé n’est pas supprimé pour autant : demandez-le à l’application.',
+              'Toutes les connexions prennent fin quand vous définissez, changez ou réinitialisez votre mot de passe, associez Google ou GitHub, vous déconnectez partout, ou supprimez votre compte. La personne qui gère Tela peut aussi mettre fin aux connexions d’une application, ou l’arrêter pour tout le monde.',
+            ],
+          },
+        ],
+      },
       cookies: {
         heading: 'Cookies et votre appareil',
         blocks: [
@@ -307,7 +340,9 @@ export const fr = {
               'Les compteurs qui empêchent les abus, qui contiennent une adresse IP, une adresse e-mail ou un numéro de compte, sont supprimés au bout d’un jour.',
               'Cloudflare garde ses journaux de requêtes 7 jours.',
               'Une recommandation, un surlignage ou une blogroll que vous retirez, ou un blog que vous enlevez d’une blogroll, reste dans la base de données, marqué comme retiré et avec son texte, pour que vos autres appareils se mettent à jour. La suppression de votre compte les efface ([voir plus bas](#delete)).',
-              'Cloudflare conserve un point de restauration de toute la base de données sur 30 jours, et Tela copie la base chaque nuit en gardant chaque copie 30 jours. Ce que vous modifiez ou retirez peut subsister aussi longtemps dans l’un ou l’autre. La copie nocturne exclut les sessions, les codes de connexion et les compteurs d’abus.',
+              'La trace des articles que vous avez ouverts depuis des blogs auxquels vous n’êtes pas abonné est supprimée au bout de deux jours.',
+              'La trace d’une application que vous avez connectée est gardée jusqu’à ce que vous la déconnectiez. Ses jetons ne sont gardés que sous forme d’empreintes.',
+              'Cloudflare conserve un point de restauration de toute la base de données sur 30 jours, et Tela copie la base chaque nuit en gardant chaque copie 30 jours. Ce que vous modifiez ou retirez peut subsister aussi longtemps dans l’un ou l’autre. La copie nocturne exclut les sessions, les codes de connexion, les compteurs d’abus, les jetons des applications et les articles que vous avez ouverts.',
             ],
           },
         ],
@@ -340,6 +375,7 @@ export const fr = {
               'Téléchargez vos données en un seul fichier dans Paramètres → Confidentialité → Vos données : votre profil, vos paramètres, abonnements, historique de lecture, coups de cœur, recommandations, surlignages, blogrolls, les personnes que vous suivez, les blogs que vous avez revendiqués et vos codes d’invitation.',
               'Choisissez ce que les autres voient dans Paramètres → Confidentialité. Votre photo et votre Gravatar sont dans Paramètres → Profil ; une photo envoyée que vous retirez est supprimée.',
               'Définissez ou changez un mot de passe, associez ou dissociez Google et GitHub, et déconnectez-vous partout dans Paramètres → Compte.',
+              'Retrouvez les applications que vous avez connectées, et déconnectez celle que vous voulez, dans Paramètres → Apps connectées.',
               'Tant que l’inscription à Tela demande une invitation, retrouvez les codes d’invitation que vous avez créés et les personnes qui s’en sont servies dans Paramètres → Invitations, et révoquez-en un que personne n’a utilisé.',
               'Changez votre identifiant, votre nom et votre bio quand vous voulez.',
               'Retirez une recommandation, un surlignage, un coup de cœur, un suivi ou une blogroll à tout moment. Chacun disparaît aussitôt de Tela, et des pages publiques en quelques minutes. Rendre une blogroll privée la retire des pages publiques de la même façon.',
@@ -470,6 +506,7 @@ export const fr = {
               'Un nombre quotidien de nouvelles traductions. Un article déjà traduit pour quelqu’un d’autre, ou le chinois traditionnel tiré du simplifié, ne compte pas. Paramètres → Langue indique combien vous en avez utilisé aujourd’hui.',
               'Un nombre quotidien de blogs nouveaux pour Tela. S’abonner à un blog que Tela connaît déjà ne compte pas, et une importation ajoute ses autres nouveaux blogs les jours suivants.',
               'Un plafond d’abonnements par compte.',
+              'Un nombre quotidien d’articles que vous pouvez ouvrir en entier depuis des blogs auxquels vous n’êtes pas abonné, sur le Web et dans les applications ensemble. Les blogs auxquels vous êtes abonné ne comptent jamais.',
               'Au-delà de votre limite de traductions, une traduction attend au lieu d’échouer : Tela la fait après minuit UTC (8 h à Pékin), et l’article l’indique.',
               'Tela a aussi un budget quotidien de traduction pour tout le site. Une fois qu’il est épuisé, les traductions attendent le lendemain de la même façon, et les nouveaux titres peuvent rester dans leur langue d’origine jusque-là.',
             ],
@@ -518,6 +555,9 @@ export const fr = {
         blocks: [
           {
             p: 'Les blogs sont responsables de ce qu’ils publient, pas Tela. Tela est fourni sans garantie d’aucune sorte et, dans les limites permises par la loi, nous ne sommes pas responsables des pertes liées à son utilisation.',
+          },
+          {
+            p: 'Les applications faites par d’autres que vous connectez à Tela n’appartiennent pas à Tela : leurs auteurs en sont responsables, comme de ce qu’elles conservent.',
           },
         ],
       },

@@ -134,6 +134,7 @@ export const en = {
               'Your blogrolls: their names and descriptions, the blogs in them, your notes on those blogs, and whether each is public.',
               'Your settings: languages, theme, text size and the like.',
               'The translations you ask for and what each cost, and how many blogs new to Tela you add each day, to keep everyone within the [daily limits](/terms#limits).',
+              "Which posts you open in full from blogs you don't subscribe to, counted for the [daily limit](/terms#limits) and kept for two days.",
             ],
           },
           { h: 'Blogs you claim' },
@@ -142,6 +143,12 @@ export const en = {
           {
             list: [
               'What you reported, why, anything you wrote with it, and the address of the page you reported it from.',
+            ],
+          },
+          { h: 'Apps you connect' },
+          {
+            list: [
+              'Each app you connect: what you allowed it, when you connected it, and when it last acted for you ([below](#apps)).',
             ],
           },
           { h: 'Technical records' },
@@ -271,6 +278,32 @@ export const en = {
           },
         ],
       },
+      apps: {
+        heading: 'Apps you connect',
+        blocks: [
+          {
+            p: "Apps made by other developers can connect to your Tela account if you let them. Tela approves each app before anyone can connect it. You connect one on a page of Tela's own, which shows what the app asks for, and the app never gets your password.",
+          },
+          { h: 'What an app sees' },
+          {
+            list: [
+              "Read only: your subscriptions and the posts in them, your highlights, your reading history, and Tela's public pages. It can't change anything.",
+              'Read and write: all of that, and it can make changes for you: mark posts read, subscribe, add feeds, highlight, and ask for translations, which count toward your daily translations ([Terms](/terms#limits)).',
+              'Your email address, only when the app asks for it, Tela allows it, and you agree when you connect it.',
+              'No app can delete your account, change how you sign in, download your data, or do anything only the person who runs Tela can.',
+            ],
+          },
+          { h: 'What Tela keeps, and what the app keeps' },
+          {
+            list: [
+              'Tela keeps a record of each connection: the app, what you allowed it, when you connected it, and when it was last used, to the hour. The record is kept until you disconnect the app, and you can see it in Settings → Connected apps.',
+              "What an app stores is that app's responsibility, under its own privacy policy, which the page you connect it on links to.",
+              "Disconnecting an app stops it at once, on all your devices. It doesn't delete what the app has already stored: ask the app to delete it.",
+              "Every connection ends when you set, change or reset your password, link Google or GitHub, sign out everywhere, or delete your account. The person who runs Tela can also end an app's connections, or stop an app for everyone.",
+            ],
+          },
+        ],
+      },
       cookies: {
         heading: 'Cookies and your device',
         blocks: [
@@ -302,7 +335,9 @@ export const en = {
               'The counters that stop abuse, which hold an IP address, an email address or an account number, are deleted after a day.',
               'Cloudflare keeps its request logs for 7 days.',
               'A recommendation, highlight or blogroll you remove, or a blog you take out of a blogroll, stays in the database marked as removed, with its text, so your other devices catch up. Deleting your account removes them ([below](#delete)).',
-              'Cloudflare keeps a 30-day restore point of the whole database, and Tela copies the database every night, keeping each copy 30 days. Something you change or remove can stay in either that long. The nightly copy leaves out sessions, sign-in codes and abuse counters.',
+              "The record of which posts you opened from blogs you don't subscribe to is deleted after two days.",
+              'The record of an app you connected is kept until you disconnect it. Its tokens are kept only as hashes.',
+              'Cloudflare keeps a 30-day restore point of the whole database, and Tela copies the database every night, keeping each copy 30 days. Something you change or remove can stay in either that long. The nightly copy leaves out sessions, sign-in codes, abuse counters, app tokens and the posts you opened.',
             ],
           },
         ],
@@ -335,6 +370,7 @@ export const en = {
               'Download your data as one file in Settings → Privacy → Your data: your profile, settings, subscriptions, reading history, likes, recommendations, highlights, blogrolls, the people you follow, the blogs you claimed and your invite codes.',
               'Choose what others see in Settings → Privacy. Your picture and Gravatar are in Settings → Profile; an uploaded picture you remove is deleted.',
               'Set or change a password, link or unlink Google and GitHub, and sign out everywhere in Settings → Account.',
+              'See the apps you have connected, and disconnect any of them, in Settings → Connected apps.',
               'While joining Tela needs an invitation, see the invite codes you made and who joined with them in Settings → Invites, and revoke one nobody has used.',
               'Change your handle, name and bio whenever you like.',
               'Remove a recommendation, highlight, like, follow or blogroll at any time. It disappears from Tela at once, and from public pages within a few minutes. Making a blogroll private takes it off public pages the same way.',
@@ -465,6 +501,7 @@ export const en = {
               "A daily number of new translations. A post already translated for someone else, or Traditional Chinese made from Simplified, doesn't count. Settings → Language shows how many you've used today.",
               "A daily number of blogs new to Tela. Subscribing to a blog Tela already has doesn't count, and an import adds the rest of its new blogs on the days after.",
               'A cap on how many blogs one account subscribes to.',
+              "A daily number of posts you can open in full from blogs you don't subscribe to, on the web and in apps together. Blogs you subscribe to are never counted.",
               'Past your translation limit, a translation waits instead of failing: Tela makes it after midnight UTC (08:00 in Beijing), and the post says so.',
               'Tela also has a daily translation budget for the whole site. When it is spent, translations wait for the next day in the same way, and new titles may show untranslated until then.',
             ],
@@ -513,6 +550,9 @@ export const en = {
         blocks: [
           {
             p: "Blogs are responsible for what they publish, not Tela. Tela comes without warranties of any kind, and as far as the law allows, we aren't liable for losses from using it.",
+          },
+          {
+            p: "Apps made by others that you connect to Tela aren't Tela's: their makers are responsible for them, and for what they keep.",
           },
         ],
       },

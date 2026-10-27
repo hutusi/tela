@@ -720,8 +720,8 @@
         "body": "Les pages publiques de Tela, celles que n’importe qui et n’importe quel moteur de recherche peut ouvrir, montrent les titres de vos articles et de courts extraits, chacun renvoyant à l’article sur votre blog. Elles ne montrent jamais un article en entier."
       },
       "members": {
-        "title": "Aux abonnés, vos articles",
-        "body": "Les membres abonnés à votre blog lisent vos articles dans le lecteur de Tela, tirés de votre flux ou de la page de l’article, comme dans n’importe quel lecteur de flux. Tela garde cette copie pour les membres connectés, jamais comme une page que tout le monde peut ouvrir."
+        "title": "Aux abonnés, vos articles en entier",
+        "body": "Les membres abonnés à votre blog lisent vos articles en entier, dans le lecteur de Tela et dans les applications que Tela approuve, tirés de votre flux ou de la page de l’article, comme dans n’importe quel lecteur de flux. Les autres membres peuvent ouvrir chaque jour un nombre limité d’articles des blogs qu’ils ne suivent pas, et les visiteurs ne voient que des extraits. Si vous désactivez la traduction, ce choix vaut partout, applications comprises."
       },
       "translation": {
         "title": "Des traductions signalées",

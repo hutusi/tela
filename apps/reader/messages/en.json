@@ -720,8 +720,8 @@
         "body": "Tela’s public pages, the ones anyone and any search engine can open, show your posts’ titles and short excerpts, each linking to the post on your blog. They never show a post in full."
       },
       "members": {
-        "title": "To subscribers, your posts",
-        "body": "Members who subscribe to your blog read your posts in Tela’s reader, from your feed or the post’s page, as in any feed reader. Tela keeps that copy for signed-in members, never as a page anyone can open."
+        "title": "To subscribers, your posts in full",
+        "body": "Members who subscribe to your blog read your posts in full, in Tela’s reader and in the apps Tela approves, from your feed or the post’s page, as in any feed reader. Other members can open a limited number of posts a day from blogs they don’t follow, and visitors see only excerpts. If you turn translation off, that holds everywhere, apps included."
       },
       "translation": {
         "title": "Translations, labelled",
