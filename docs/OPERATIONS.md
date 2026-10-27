@@ -11,7 +11,7 @@ approved apps at https://api.telaread.com (*tela-gateway*, *Approved apps*, ADRs
 |---|---|---|
 | tela-web | Worker at the reader's edge, unpinned (`apps/reader`) | The only public Worker: static SPA, public pages, `/o/*`, `/img/*`, the `/api/*` forward. Custom domain `telaread.com` only; `workers.dev` stays off (blocked in mainland China) |
 | tela-api | Worker pinned to `aws:ap-southeast-1` (`apps/api`) | Sign-in, sync, mutations, every reader RPC, the OAuth server and the API for apps (`/gateway/*`). No public route: tela-web and tela-gateway reach it over service bindings |
-| tela-gateway | Worker at the app's edge, unpinned (`apps/gateway`) | The API for approved apps (ADR 0065): bearer tokens only, `/o/*`, `/img/*` and `/v1/bodies` from R2, everything else to tela-api's `/gateway/*`. Custom domain `api.telaread.com` only; `workers.dev` off. No D1, no vars, no secrets |
+| tela-gateway | Worker at the app's edge, unpinned (`apps/gateway`) | The API for approved apps (ADR 0065): bearer tokens only, `/o/*`, `/img/*` and `/v1/bodies` from R2, `/v1/*`, `/meta` and OAuth's endpoints to tela-api's `/gateway/*`, anything else 404. Custom domain `api.telaread.com` only; `workers.dev` off. No D1, no vars, no secrets |
 | tela-jobs | Worker pinned to `aws:ap-southeast-1` (`apps/jobs`) | Crons, queue consumers, the `Ingest` RPC. No public route |
 | tela-redirect | Worker, no bindings (`apps/reader/redirect`) | `tela.ainaive.com` and `www.telaread.com`: a redirect to the same path on telaread.com, and the shell's kill switch at `/sw.js` (*The address*) |
 | D1 `tela` | Primary in Singapore (`--location apac`) | 6–10 ms from the pinned Workers; Time Travel keeps 30 days |
@@ -977,7 +977,9 @@ D1, no assets, no vars and no secrets, so nothing in it needs rotating.
 - **What it does:** drops every cookie, refuses any `Authorization` that is not an access token
   (`Bearer tela_at_…`) except on `/meta`, `/robots.txt` and OAuth's own endpoints, serves `/o/*`,
   `/img/*` and `/v1/bodies` from R2 through the colo cache (asking tela-api's `/gateway/opens`
-  first), and forwards everything else to tela-api as `/gateway/<path>`. Every answer says
+  first), forwards the rest of `/v1/*`, `/meta`, `/oauth/*` and
+  `/.well-known/oauth-authorization-server` to tela-api as `/gateway/<path>`, and answers any
+  other path 404 `not_found` itself (`/gateway/opens` is its own question). Every answer says
   `noindex`, HSTS and `tela-api-version`. `robots.txt` disallows everything.
 - **Caches** (the colo's, purged by nothing): an allowed post per token for 60 s, so an app cut
   off loses its images within a minute; a public answer that names `?lang=` for five minutes, by

@@ -20,7 +20,7 @@ Browser ──▶ tela-web (edge, unpinned): static SPA, public pages, /o/* obje
    apps/relay (Node, HK box, not provisioned until a feed needs it) ◀── signed POST /fetch
 
 Apps ──▶ tela-gateway (edge, unpinned, api.telaread.com): bearer only; /o/*, /img/*, /v1/bodies from R2
-           │ service binding: everything else, as /gateway/*
+           │ service binding: /v1/*, /meta, /oauth/*, OAuth metadata, as /gateway/*; anything else 404
            ▼
          tela-api
 
@@ -438,9 +438,11 @@ never as an admin. What a developer reads is `docs/api/`.
     sorted query and never by token, and served only to a token tela-api accepted in the last
     minute. Only answers that name `?lang=` are kept (without it, tela-api answers in the member's
     own reading language), and nothing tela-api marks `private`, `no-store` or `no-cache`.
-  - Everything else goes to tela-api as `/gateway<path>`: outside `/api/`, so tela-web's forward
-    never reaches it, and tela-api keeps no public route (ADR 0024). tela-api not answering is a
-    503 `unavailable` with `Retry-After`.
+  - The rest of `/v1/*`, `/meta`, `/oauth/*` and `/.well-known/oauth-authorization-server` go
+    to tela-api as `/gateway<path>`: outside `/api/`, so tela-web's forward never reaches it, and
+    tela-api keeps no public route (ADR 0024). tela-api not answering is a 503 `unavailable` with
+    `Retry-After`. Any other path is a 404 `not_found` here (`forwarded`): `/gateway/opens` is
+    this edge's own question, which an app asking directly would spend its member's day with.
 - **tela-api's mount** (`src/gateway/`, at `/gateway`): nothing under it reads a cookie or a
   session, and nothing under `/api/` reads its tokens. Every answer says `tela-api-version` and is
   `no-store` unless its route says otherwise.
