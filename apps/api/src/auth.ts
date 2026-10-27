@@ -336,6 +336,32 @@ export async function endOtherSessions(
 }
 
 /**
+ * End every app connected to the account after a password reset (ADR 0064), whose sessions
+ * better-auth ends in a batch of its own before Tela's hook runs, so this cannot join it. A
+ * second try follows a failed first, and a second failure is logged as an error naming the
+ * member: the reset has set the password by then and is not undone, but apps still acting for a
+ * member who reset theirs, perhaps because someone else held it, is what the operator must hear
+ * of. Whether the connections ended.
+ */
+export async function endConnectionsAfterReset(
+  db: TelaDb,
+  userId: string,
+  now: number,
+): Promise<boolean> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await db.batch([...endConnections(db, userId, 'password', now)])
+      return true
+    } catch (err) {
+      if (attempt >= 2) {
+        console.error(`apps still connected after a password reset: user ${userId}`, err)
+        return false
+      }
+    }
+  }
+}
+
+/**
  * Whether `token` is one of the member's sessions and has not ended, read from D1 rather than any
  * signed copy. better-auth stamps a session's expiry with the wall clock, not tela-api's.
  */
@@ -445,14 +471,12 @@ export function createAuth(deps: Pick<ApiDeps, 'db' | 'mail' | 'clock' | 'config
       minPasswordLength: PASSWORD_LENGTH.min,
       maxPasswordLength: PASSWORD_LENGTH.max,
       revokeSessionsOnPasswordReset: true,
-      // better-auth has ended the sessions by now; the apps connected to the account end here
-      // (ADR 0064), as wherever Tela ends a member's other sessions. Then the member is told, as at
-      // every change to their ways in. Neither failure fails the reset, which has set the password
-      // by then: each is logged.
+      // better-auth has ended the sessions by now, in its own batch; the apps connected to the
+      // account end here (ADR 0064), as wherever Tela ends a member's other sessions, tried twice
+      // (`endConnectionsAfterReset`). Then the member is told, as at every change to their ways
+      // in. Neither failure fails the reset, which has set the password by then: each is logged.
       onPasswordReset: async ({ user }) => {
-        await db
-          .batch([...endConnections(db, user.id, 'password', clock.now())])
-          .catch((err) => console.error('connections not ended', user.id, err))
+        await endConnectionsAfterReset(db, user.id, clock.now())
         await notifyMember(deps, user, { kind: 'password-reset' })
       },
     },

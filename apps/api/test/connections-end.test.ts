@@ -8,6 +8,7 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test'
 import type { AdminActResponse } from '@tela/shared/admin'
 import { sql } from 'drizzle-orm'
+import { endConnectionsAfterReset } from '../src/auth'
 import {
   connect,
   meStatus,
@@ -203,5 +204,42 @@ describe('a connection ends', () => {
     const answer = await console_('member.delete', bo, ann)
     expect(answer.done).toEqual([ann.userId])
     await endedFor('closed')
+  })
+})
+
+describe('after a password reset, which ends sessions in a batch of better-auth’s own', () => {
+  /** Tela's database, whose next `failures` batches fail as an overloaded D1's do. */
+  function flaky(failures: number) {
+    let left = failures
+    return new Proxy(api.db, {
+      get(target, prop) {
+        if (prop === 'batch') {
+          return (...args: Parameters<typeof target.batch>) => {
+            if (left-- > 0) return Promise.reject(new Error('D1_ERROR: overloaded'))
+            return target.batch(...args)
+          }
+        }
+        const value = Reflect.get(target, prop)
+        return typeof value === 'function' ? value.bind(target) : value
+      },
+    })
+  }
+
+  test('the apps end even when the first try fails', async () => {
+    const errors = spyOn(console, 'error').mockImplementation(() => {})
+    expect(await endConnectionsAfterReset(flaky(1), ann.userId, api.clock.now())).toBe(true)
+    await endedFor('password')
+    expect(errors).not.toHaveBeenCalled()
+    errors.mockRestore()
+  })
+
+  test('a second failure is logged as an error naming the member, not swallowed', async () => {
+    const errors = spyOn(console, 'error').mockImplementation(() => {})
+    expect(await endConnectionsAfterReset(flaky(2), ann.userId, api.clock.now())).toBe(false)
+    expect(errors).toHaveBeenCalledTimes(1)
+    expect(errors.mock.calls[0]?.join(' ')).toContain(ann.userId)
+    // Still connected: what the log is for.
+    expect(await meStatus(api, annTokens.access_token)).toBe(200)
+    errors.mockRestore()
   })
 })

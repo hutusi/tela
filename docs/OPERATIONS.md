@@ -826,7 +826,10 @@ D1 database and `tela-content` with tela-jobs, and only produces to the jobs que
     one away: the member signs in again, by code or password, and tries from that session.
     Setting or changing a password, or linking a provider, ends every other session the member
     has; each change, and a reset by code, mails the member a notice (`account notice not sent` or
-    `sessions not ended` in the logs when either fails; neither undoes the change). A link that
+    `sessions not ended` in the logs when either fails; neither undoes the change). A reset ends
+    the member's apps after better-auth has ended the sessions, tried twice: `apps still connected
+    after a password reset: user <id>` means both tries failed, and the member's apps still act for
+    them; end them with the console's sign-out for that member. A link that
     fails comes back to `/settings?error=<code>`, better-auth's: `account_already_linked_to_different_user`
     for a provider identity another member has linked, `unable_to_link_account` for an address the
     provider has not verified, or for a browser that no longer holds a live session of the
