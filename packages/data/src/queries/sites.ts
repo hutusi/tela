@@ -186,8 +186,9 @@ export async function restampTranslations(db: TelaDb, siteIds: readonly number[]
 
 /**
  * Re-point a feed to the site for `origin` (creating it), drop the site it left if that was an
- * empty unclaimed placeholder, and recount both. Statements for a batch that has already bumped
- * the sync sequence.
+ * empty unclaimed placeholder, and recount both; moved off a blog that said no to translation onto
+ * one that allows it, stamp its translations again. Statements for a batch that has already
+ * bumped the sync sequence.
  */
 export function moveFeedToOrigin(
   db: TelaDb,
@@ -195,8 +196,26 @@ export function moveFeedToOrigin(
   origin: string,
   now: number,
 ) {
+  // Moved from a blog that said no to translation onto one that allows it, the feed's titles and
+  // body translations are shown to apps from now on, and stamped again so a delta carries them
+  // (ADR 0065): their seq is from when they were left out. Asked before the feed moves, of the
+  // blog it is on as this batch runs. One feed's rows, in this batch, unlike a blog's switch
+  // (`restampTranslations`): a move is atomic with them, and a feed's rows in one language are
+  // what its own fetches have written, at most its archive.
+  const backOn = sql`exists (select 1 from feeds f join sites s on s.id = f.site_id
+      where f.id = ${feed.id} and s.translation_opt_out = 1)
+    and exists (select 1 from sites where id = ${siteIdOf(origin)} and translation_opt_out = 0)`
   return [
     ensureOriginSite(db, origin, now),
+    db.run(
+      sql`update article_titles set seq = ${currentSeq} where feed_id = ${feed.id} and ${backOn}`,
+    ),
+    db.run(sql`
+      update body_translations set seq = ${currentSeq}
+      where content_key in (select content_key from articles
+        where feed_id = ${feed.id} and content_key is not null)
+        and ${backOn}
+    `),
     db.run(
       sql`update feeds set site_id = ${siteIdOf(origin)}, updated_at = ${now}, seq = ${currentSeq} where id = ${feed.id}`,
     ),
