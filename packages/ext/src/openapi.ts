@@ -5,7 +5,7 @@
  * method, scope, inputs, answer and refusals are written down; a route tela-api serves and this
  * table does not name is not part of v1.
  */
-import { API_CURRENT_VERSION, API_VERSIONS } from '@tela/shared'
+import { API_VERSIONS } from '@tela/shared'
 import { z } from 'zod'
 import {
   addFeedRequestSchema,
@@ -42,6 +42,12 @@ import {
   translationStatusSchema,
   usageSchema,
 } from './schema'
+
+/**
+ * The version this document describes: v1, whichever version is current. A v2 gets a document of
+ * its own, and this one keeps saying 1, with v1's status.
+ */
+const DOCUMENTED_VERSION = 1
 
 /** Production's addresses: the document describes the API as apps reach it. */
 const API_ORIGIN = 'https://api.telaread.com'
@@ -488,15 +494,15 @@ export function openapiDocument(): Record<string, unknown> {
     path[route.method] = operation(route, schemas)
     paths[route.path] = path
   }
-  const current = API_VERSIONS.find((v) => v.version === API_CURRENT_VERSION)
+  const documented = API_VERSIONS.find((v) => v.version === DOCUMENTED_VERSION)
   return {
     openapi: '3.1.0',
     info: {
       title: 'Tela API',
-      version: String(API_CURRENT_VERSION),
+      version: String(DOCUMENTED_VERSION),
       description:
         'Tela’s API for approved apps (ADR 0065). Camel-case keys, epoch milliseconds, integer server ids; an app ignores fields it does not know. Errors are `{ "error": code, … }`. Within v1, changes are additive only.',
-      'x-status': current?.status ?? 'preview',
+      'x-status': documented?.status ?? 'preview',
     },
     servers: [{ url: API_ORIGIN }],
     security: [{ tela: ['read'] }],

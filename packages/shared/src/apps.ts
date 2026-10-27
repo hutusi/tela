@@ -89,8 +89,22 @@ export const API_VERSIONS: readonly ApiVersion[] = [
   { version: 1, status: 'preview', sunsetAt: null },
 ]
 export const API_CURRENT_VERSION = 1
-/** The response header every API answer carries. */
+/** The response header every API answer carries: `apiVersionOf` its path. */
 export const API_VERSION_HEADER = 'tela-api-version'
+
+/**
+ * The version an answer on the API host belongs to, from its path: `/v<n>/…` is version n when
+ * Tela has one, so a v1 answer still says 1 once a v2 is current; anything outside a version
+ * (`/meta`, OAuth's endpoints, a 404) says the current one.
+ */
+export function apiVersionOf(
+  path: string,
+  versions: readonly ApiVersion[] = API_VERSIONS,
+  current: number = API_CURRENT_VERSION,
+): number {
+  const n = Number(/^\/v(\d+)(?:\/|$)/.exec(path)?.[1])
+  return versions.some((v) => v.version === n) ? n : current
+}
 
 /**
  * The consent page's questions to tela-api (`/connect`, ADR 0064). Both are internal member routes

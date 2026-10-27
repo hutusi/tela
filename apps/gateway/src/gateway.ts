@@ -33,12 +33,7 @@ import {
   type Waiter,
 } from '@tela/edge'
 import type { Blobs } from '@tela/platform'
-import {
-  ACCESS_TOKEN_PREFIX,
-  API_CURRENT_VERSION,
-  API_VERSION_HEADER,
-  OPENS_KEYS_MAX,
-} from '@tela/shared'
+import { ACCESS_TOKEN_PREFIX, API_VERSION_HEADER, apiVersionOf, OPENS_KEYS_MAX } from '@tela/shared'
 
 export type GatewayDeps = {
   blobs: Blobs
@@ -344,12 +339,13 @@ export function createGateway(deps: GatewayDeps) {
   return {
     async fetch(request: Request, waiter?: Waiter): Promise<Response> {
       const answer = await route(request, waiter)
-      // Every answer, from here or tela-api: never indexed, never a cookie, and which API it is.
+      // Every answer, from here or tela-api: never indexed, never a cookie, and which version of
+      // the API it is, by its path: a v1 answer says 1 whatever version is current.
       const response = new Response(answer.body, answer)
       response.headers.delete('set-cookie')
       response.headers.set('x-robots-tag', 'noindex')
       response.headers.set('strict-transport-security', HSTS)
-      response.headers.set(API_VERSION_HEADER, String(API_CURRENT_VERSION))
+      response.headers.set(API_VERSION_HEADER, String(apiVersionOf(new URL(request.url).pathname)))
       return response
     },
   }
