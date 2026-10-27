@@ -199,6 +199,29 @@ describe('every request and answer', () => {
     expect(calls.at(-1)?.authorization).toBe(null)
   })
 
+  test('forwards only the API, its metadata and OAuth: anything else is a 404 here', async () => {
+    // `/opens` is this edge's own question to tela-api, with the app's token: an app asking it
+    // directly would count posts against the member's day without fetching them.
+    for (const [method, path] of [
+      ['POST', '/opens'],
+      ['POST', '/gateway/opens'],
+      ['GET', '/'],
+      ['GET', '/nothing'],
+      ['GET', '/v1'],
+      ['GET', '/api/v1/me'],
+      ['GET', '/.well-known/openid-configuration'],
+    ] as const) {
+      const res = await ask(path, {
+        method,
+        ...(method === 'POST' ? { body: '{"keys":[]}' } : {}),
+      })
+      expect([method, path, res.status]).toEqual([method, path, 404])
+      expect(await res.json()).toEqual({ error: 'not_found' })
+      expect(res.headers.get('tela-api-version')).toBe('1')
+    }
+    expect(calls).toEqual([])
+  })
+
   test('a tela-api that cannot be reached is a 503 to retry', async () => {
     answer = () => {
       throw new Error('binding down')

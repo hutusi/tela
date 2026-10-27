@@ -13,8 +13,9 @@
  * - The public side (`/v1/discover/*`, `/v1/sites/*`, `/v1/profiles/*`, `/v1/blogrolls/*`) is the
  *   same for every viewer: tela-api's answer is kept five minutes per colo, keyed by path and
  *   query and never by token, and served only to a token tela-api accepted in the last minute.
- * - Everything else goes to tela-api under `/gateway` (`/v1/sync` → `/gateway/v1/sync`): outside
- *   `/api/`, so nothing tela-web forwards ever reaches it.
+ * - The rest of the API, `/meta` and OAuth's endpoints go to tela-api under `/gateway`
+ *   (`/v1/sync` → `/gateway/v1/sync`): outside `/api/`, so nothing tela-web forwards ever reaches
+ *   it. Any other path is a 404 here (`forwarded`): `/gateway/opens` is this edge's own question.
  *
  * Portable: built from interfaces, so the bun suite runs it with memory blobs, a map for a cache
  * and a fake tela-api.
@@ -84,6 +85,20 @@ export function takesNoToken(path: string): boolean {
 /** What this edge serves itself, from R2. */
 const servedHere = (path: string) =>
   path.startsWith('/o/') || path.startsWith('/img/') || path === '/v1/bodies'
+
+/**
+ * What tela-api answers on this host: the API, its metadata, and OAuth's endpoints. Nothing else
+ * under `/gateway` is an app's to ask: `/opens` is this edge's own question before it serves
+ * content, and an app asking it would count posts against its member's day without fetching them.
+ */
+export function forwarded(path: string): boolean {
+  return (
+    path.startsWith('/v1/') ||
+    path === '/meta' ||
+    path.startsWith('/oauth/') ||
+    path === '/.well-known/oauth-authorization-server'
+  )
+}
 
 const json = (body: unknown, status: number, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), {
@@ -299,6 +314,7 @@ export function createGateway(deps: GatewayDeps) {
         },
       })
     }
+    if (!servedHere(path) && !forwarded(path)) return json({ error: 'not_found' }, 404)
     // Cookies never cross: host-only cookies should never come here, and none is ever read.
     const headers = new Headers(request.headers)
     headers.delete('cookie')
