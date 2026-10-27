@@ -1,0 +1,19 @@
+{
+  // tela-gateway (ADR 0065): api.telaread.com, Tela's API for approved apps. Unpinned, at the
+  // app's edge: it serves content objects and images from R2 itself, and forwards the rest to
+  // tela-api's `/gateway/*` over the service binding. No assets, no D1, no secrets. Deploy after
+  // tela-web: `cd apps/gateway && wrangler deploy`. The custom domain's DNS record is made on the
+  // first deploy (OPERATIONS.md).
+  "name": "tela-gateway",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-06-01",
+  // The image proxy fetches what posts name: never a private address (invariant 12).
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  // A telaread.com subdomain is reachable from the mainland, unlike workers.dev (ADR 0042).
+  "workers_dev": false,
+  "routes": [{ "pattern": "api.telaread.com", "custom_domain": true }],
+  // Paths are logged, query strings never: they name content keys and a member's searches.
+  "observability": { "enabled": true, "redact_query_string": true },
+  "r2_buckets": [{ "binding": "BLOBS", "bucket_name": "tela-content" }],
+  "services": [{ "binding": "API", "service": "tela-api" }]
+}

@@ -5,8 +5,8 @@
   "type": "module",
   "description": "The tela-gateway Worker at api.telaread.com: Tela's API for approved apps, bearer-only, serving content at the edge and the rest from tela-api (ADR 0065)",
   "scripts": {
-    "typecheck": "tsc -p tsconfig.json",
-    "dev": "wrangler dev"
+    "typecheck": "tsc -p tsconfig.json && tsc -p test/tsconfig.json",
+    "dev": "wrangler dev --port 8788 --persist-to ../reader/.wrangler/state"
   },
   "dependencies": {
     "@tela/edge": "workspace:*",
