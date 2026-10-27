@@ -471,6 +471,62 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
       expect(second.head).toBe(afterArticles + 3)
     })
 
+    it('leaves out the titles and body translations of a blog whose writer said no, when asked (ADR 0065)', async () => {
+      const db = await makeDb()
+      n = 0
+      const start = await setup(db)
+      // Blog 2 said no, and its feed is followed too. Post 3 on it holds the same body as post 1
+      // on blog 1, which allows it: that body's translation is still shown, its title is not.
+      await db.batch([
+        bumpSeq(db),
+        db.run(sql`insert into sites (id, home_url, translation_opt_out, created_at, updated_at,
+            seq)
+          values (2, 'https://said-no.example', 1, 0, 0, ${currentSeq})`),
+        db.run(sql`insert into feeds (id, site_id, feed_url, host, next_fetch_at, created_at,
+            updated_at, seq)
+          values (2, 2, 'https://said-no.example/feed.xml', 'said-no.example', 0, 0, 0,
+            ${currentSeq})`),
+        db.run(sql`insert into subscriptions (user_id, feed_id, created_at, updated_at, seq)
+          values (${member}, 2, 0, 0, ${currentSeq})`),
+        db.run(sql`insert into articles (id, feed_id, dedup_key, content_key, fetched_at, sort_at,
+            seq)
+          values (1, 1, 'k1', 'body-a', ${T0}, ${T0}, ${currentSeq}),
+            (2, 2, 'k2', 'body-b', ${T0}, ${T0}, ${currentSeq}),
+            (3, 2, 'k3', 'body-a', ${T0}, ${T0}, ${currentSeq})`),
+        db.run(sql`insert into article_titles (article_id, lang, feed_id, title, status,
+            source_hash, updated_at, seq)
+          select a.id, 'en', a.feed_id, 'en ' || a.id, 'done', 'h', 0, ${currentSeq}
+          from articles a where true`),
+        db.run(sql`insert into body_translations (content_key, lang, state, updated_at, seq)
+          values ('body-a', 'en', 'done', 0, ${currentSeq}), ('body-b', 'en', 'done', 0,
+            ${currentSeq})`),
+      ] as never)
+      const read = async (cursor: number, shownOnly?: boolean) => {
+        const pulled = await readPull(db, {
+          userId: member,
+          cursor,
+          horizon: T0 - 1,
+          limit: 100,
+          titlesLang: 'en',
+          shownOnly,
+        })
+        return {
+          titles: pulled.rows.titles.map((t) => Number(t.articleId)).sort(),
+          translations: pulled.rows.translations.map((t) => t.contentKey).sort(),
+        }
+      }
+
+      // A snapshot, and a delta that brings the new feed's posts fresh and blog 1's by seq.
+      for (const cursor of [0, start]) {
+        expect(await read(cursor, true)).toEqual({ titles: [1], translations: ['body-a'] })
+        // The web's device hides them itself, and is sent them all.
+        expect(await read(cursor)).toEqual({
+          titles: [1, 2, 3],
+          translations: ['body-a', 'body-b'],
+        })
+      }
+    })
+
     it('reads the titles of named posts in one language, of those the member holds (ADR 0052)', async () => {
       const db = await makeDb()
       n = 0
