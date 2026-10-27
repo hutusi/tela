@@ -721,7 +721,7 @@
       },
       "members": {
         "title": "Aux abonnés, vos articles en entier",
-        "body": "Les membres abonnés à votre blog lisent vos articles en entier, dans le lecteur de Tela et dans les applications que Tela approuve, tirés de votre flux ou de la page de l’article, comme dans n’importe quel lecteur de flux. Les autres membres peuvent ouvrir chaque jour un nombre limité d’articles des blogs qu’ils ne suivent pas, et les visiteurs ne voient que des extraits. Si vous désactivez la traduction, ce choix vaut partout, applications comprises."
+        "body": "Les membres abonnés à votre blog lisent vos articles en entier, dans le lecteur de Tela et dans les applications que Tela approuve, tirés de votre flux ou de la page de l’article, comme dans n’importe quel lecteur de flux. Les autres membres peuvent ouvrir chaque jour un nombre limité d’articles des blogs qu’ils ne suivent pas, et les visiteurs ne voient que des extraits. Si vous désactivez la traduction, Tela cesse de traduire votre blog et n’envoie plus ses traductions aux lecteurs ni aux applications."
       },
       "translation": {
         "title": "Des traductions signalées",

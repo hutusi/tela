@@ -721,7 +721,7 @@
       },
       "members": {
         "title": "To subscribers, your posts in full",
-        "body": "Members who subscribe to your blog read your posts in full, in Tela’s reader and in the apps Tela approves, from your feed or the post’s page, as in any feed reader. Other members can open a limited number of posts a day from blogs they don’t follow, and visitors see only excerpts. If you turn translation off, that holds everywhere, apps included."
+        "body": "Members who subscribe to your blog read your posts in full, in Tela’s reader and in the apps Tela approves, from your feed or the post’s page, as in any feed reader. Other members can open a limited number of posts a day from blogs they don’t follow, and visitors see only excerpts. If you turn translation off, Tela stops translating your blog and stops sending its translations to readers and apps."
       },
       "translation": {
         "title": "Translations, labelled",
