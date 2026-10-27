@@ -595,6 +595,19 @@ describe('a bearer token', () => {
     expect(await meStatus(api, boTokens.access_token)).toBe(429)
   })
 
+  test("one member's flood, refused for their own limit, does not spend the app's share", async () => {
+    const shared = await registerApp(api, { perMemberPerMin: 2, perAppPerMin: 4 })
+    const bo = await signedIn(api, 'bo@x.test')
+    const flooder = await connect(api, ann, shared)
+    const other = await connect(api, bo, shared)
+    const statuses = []
+    for (let i = 0; i < 10; i++) statuses.push(await meStatus(api, flooder.access_token))
+    expect(statuses).toEqual([200, 200, 429, 429, 429, 429, 429, 429, 429, 429])
+    // Only ann's two allowed calls counted toward the app: bo still has the other two.
+    expect(await meStatus(api, other.access_token)).toBe(200)
+    expect(await meStatus(api, other.access_token)).toBe(200)
+  })
+
   test('a limit of 0 allows nothing', async () => {
     const stopped = await registerApp(api, { perMemberPerMin: 0 })
     const tokens = await connect(api, ann, stopped)

@@ -555,9 +555,15 @@ export async function resolveToken(
       on conflict (key, window_start) do update set count = count + 1
       returning count
     `),
+    // Only a call within the member's own limit counts toward the app's: otherwise one member,
+    // refused for their own flood, would still spend everyone's share and lock the app for all.
     db.all<{ count: number }>(sql`
       insert into action_limits (key, window_start, count)
       select 'appTotal:' || a.id, ${total.start}, 1 from ${held} where ${live}
+        and coalesce((select l.count from action_limits l
+            where l.key = 'appMember.' || a.id || ':' || g.user_id
+              and l.window_start = ${member.start}), 0)
+          <= coalesce(a.per_member_per_min, ${APP_DEFAULT_PER_MEMBER_PER_MIN})
       on conflict (key, window_start) do update set count = count + 1
       returning count
     `),
