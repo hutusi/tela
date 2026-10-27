@@ -79,8 +79,12 @@ build.
 - [CHANGELOG.md](CHANGELOG.md): what changed in the API, newest first.
 - [openapi.json](openapi.json): the OpenAPI document, generated from the same schemas the API
   checks its answers against.
-- [v1/examples/](v1/examples/): an example answer for every route. The test suite holds the API to
-  these, so they are what the API returns.
+- [v1/examples/](v1/examples/): example answers for `/meta` and every JSON route under `/v1/`
+  except `/v1/bodies`, with a few refusals. The test suite holds the API to these, so they are
+  what the API returns. There are none for the content: a body, a finished translation and a
+  chunk (`/v1/bodies`, `/o/…`) follow `contentObjectSchema`, `translationObjectSchema` and
+  `translationChunkSchema` in `packages/ext/src/schema.ts`, and `/img/…` answers the image itself.
+  The OAuth endpoints' answers are in [authorization.md](authorization.md).
 
 Tela's own code is open: the formats are `packages/ext/src/schema.ts` in the repository, and the
 decisions behind the API are ADRs 0064–0066 in `docs/adr/`.

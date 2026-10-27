@@ -18,8 +18,11 @@
   immutable, and each carries its own `format`. A new format is announced like a new version, and
   an object once made never changes.
 
-The examples in [v1/examples/](v1/examples/) are what the API answers: Tela's test suite fails when
-an answer moves away from them, so a change to the API is a decision, never an accident.
+The examples in [v1/examples/](v1/examples/) are what the API answers on the routes they cover
+(`/meta` and the JSON routes under `/v1/` but `/v1/bodies`): Tela's test suite fails when an answer
+moves away from them, so a change to the API is a decision, never an accident. Content objects
+have no examples: their schemas in `packages/ext/src/schema.ts` describe them, and their `format`
+says which version of those they follow.
 
 ## Preview
 
