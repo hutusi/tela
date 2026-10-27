@@ -80,6 +80,43 @@ export const V1_ROW_TYPES = [
 ] as const
 export type V1RowType = (typeof V1_ROW_TYPES)[number]
 
+/**
+ * The row types a pull that names none covers: the fourteen v1 began with, frozen. A type added
+ * to `V1_ROW_TYPES` later reaches only an app that asks for it by name, so a cursor made without
+ * `types` keeps covering what the default covers, and no app starts over because v1 grew.
+ */
+export const V1_DEFAULT_TYPES: readonly V1RowType[] = [
+  'profile',
+  'prefs',
+  'subscriptions',
+  'feeds',
+  'sites',
+  'articles',
+  'titles',
+  'states',
+  'recommendations',
+  'highlights',
+  'translations',
+  'folders',
+  'feedFolders',
+  'follows',
+]
+
+/**
+ * The row types a pull asked for (`types=`, comma-separated), in the order v1 lists them; the
+ * default ones when it names none; null for a name v1 does not know. `known` is v1's list, a
+ * parameter so a test can grow it.
+ */
+export function askedTypes(
+  text: string | undefined,
+  known: readonly V1RowType[] = V1_ROW_TYPES,
+): V1RowType[] | null {
+  if (text === undefined || text === '') return [...V1_DEFAULT_TYPES]
+  const names = text.split(',').map((t) => t.trim())
+  if (!names.every((n) => (known as readonly string[]).includes(n))) return null
+  return known.filter((t) => names.includes(t))
+}
+
 /** What a v1 cursor holds. Opaque to apps: they send back what they were given. */
 export type V1Cursor = {
   /** The sync sequence the app has every row up to. */

@@ -21,11 +21,11 @@ import {
   type V1Mutation,
 } from '@tela/ext/schema'
 import {
+  askedTypes,
   cursorNeedsReset,
   decodeCursor,
   encodeCursor,
   isV1PrefKey,
-  V1_ROW_TYPES,
   type V1RowType,
   v1Article,
   v1Feed,
@@ -54,14 +54,6 @@ import { PRIVATE, refuse, v1Context } from './answer'
 
 /** The app's prefix for a mutation id: `a<appId>:`, so the stored id stays within 64 characters. */
 export const midPrefix = (appId: number) => `a${appId}:`
-
-/** The row types an app asked for, in the order v1 lists them, or null for a name v1 does not know. */
-function askedTypes(text: string | undefined): V1RowType[] | null {
-  if (text === undefined || text === '') return [...V1_ROW_TYPES]
-  const names = text.split(',').map((t) => t.trim())
-  if (!names.every((n) => (V1_ROW_TYPES as readonly string[]).includes(n))) return null
-  return V1_ROW_TYPES.filter((t) => names.includes(t))
-}
 
 /** The web's mutation for a v1 one, its id prefixed with the app's. */
 function internal(m: V1Mutation, prefix: string): Mutation {

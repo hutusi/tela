@@ -303,7 +303,10 @@ export const syncQuerySchema = z.object({
   cursor: z.string().optional(),
   /** The reading language titles and translations come in. */
   lang: language,
-  /** Comma-separated row types; absent is every type this version knows. */
+  /**
+   * Comma-separated row types; absent is the fourteen v1 began with (`V1_DEFAULT_TYPES`). A type
+   * added within v1 comes only to an app that names it.
+   */
   types: z.string().optional(),
 })
 
