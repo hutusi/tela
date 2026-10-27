@@ -3136,6 +3136,7 @@
               "invalid_request",
               "invalid_token",
               "insufficient_scope",
+              "app_suspended",
               "not_found",
               "too_large",
               "invalid_url",

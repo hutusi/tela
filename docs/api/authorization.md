@@ -173,10 +173,10 @@ else:** the old one is spent.
 - **Refresh one at a time per device.** Two refreshes racing with the same token both get a pair,
   and the first pair stops working.
 - A refresh token unused for 90 days ends. Each use starts the 90 days again.
-- `invalid_grant` means the refresh token does not work now. Almost always the connection or the
-  device has ended (see below), and the member has to connect again. The one exception is an app
-  the operator has cut off: its refresh tokens are refused the same way until it is restored, and
-  then work again.
+- `invalid_grant` means the refresh token will not work again: the connection or the device has
+  ended (see below), and the member has to connect again.
+- `unauthorized_client` means the operator has cut your app off for now. Keep the tokens: they
+  work again once the app is restored.
 
 ### 7. Revoke when the member signs out of your app
 
@@ -222,6 +222,7 @@ refresh():                                  // one at a time
   answer = POST /oauth/token (refresh_token, old, client_id)
   if no answer (network): retry with the same old token, within two minutes
   if answer.error == "invalid_grant": ask the member to connect again
+  if answer.error == "unauthorized_client": keep the tokens; the app is cut off for now
   keychain.save(account, answer.refresh_token)
 ```
 
@@ -255,9 +256,9 @@ back, or after 90 days unused.
 
 Two things stop your app without ending connections:
 
-- **Your app is cut off** (suspended) by the operator: every access token is refused with 401
-  `invalid_token`, and every refresh token with `invalid_grant`, until the app is restored; then
-  they work again. Content a device was allowed in the last minute can still load for up to a
+- **Your app is cut off** (suspended) by the operator: every call is refused with 403
+  `app_suspended`, and every refresh with `unauthorized_client`, until the app is restored; then
+  the same tokens work again, so keep them. Content a device was allowed in the last minute can still load for up to a
   minute. The operator writes to your contact address before or as they do this.
 - **The operator stops every app** (`apps.enabled`): every call answers 503 `apps_paused` with
   `Retry-After`. Wait, and keep the tokens.
@@ -275,7 +276,8 @@ no-store`:
 |---|---|---|
 | 400 | `invalid_request` | A field is missing, given twice, or malformed (a verifier of the wrong shape), or the body is not form-encoded |
 | 400 | `unsupported_grant_type` | Only `authorization_code` and `refresh_token` exist |
-| 400 | `invalid_grant` | The code or refresh token is unknown, spent, expired, for another client or redirect, or its verifier is wrong; or the connection, the app or the member's account can no longer be used. One answer for all of them, on purpose |
+| 400 | `invalid_grant` | The code or refresh token is unknown, spent, expired, for another client or redirect, or its verifier is wrong; or the connection or the member's account can no longer be used. One answer for all of them, on purpose |
+| 400 | `unauthorized_client` | The operator has cut your app off for now. Keep the tokens: they work again once it is restored |
 | 401 | `invalid_client` | No app has this `client_id` |
 | 429 | `rate_limited` | More than 30 token or revocation requests a minute from one IP for your app. Wait `Retry-After` seconds |
 | 503 | `apps_paused` | The operator has stopped every app. Wait `Retry-After` seconds |

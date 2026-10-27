@@ -16,8 +16,10 @@ export const API_ERRORS = [
   'invalid_request',
   // 401: the token is missing, unknown, expired or ended (RFC 6750).
   'invalid_token',
-  // 403: the token's scope does not cover this (RFC 6750).
+  // 403: the token's scope does not cover this (RFC 6750); or the operator cut the app off for
+  // now. Keep the tokens: they work again once Tela restores it.
   'insufficient_scope',
+  'app_suspended',
   // 404, 413
   'not_found',
   'too_large',

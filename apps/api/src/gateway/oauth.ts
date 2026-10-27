@@ -94,13 +94,14 @@ export function oauthRoutes(deps: ApiDeps, auth: Auth) {
   const admit = async (
     c: Context,
     form: Map<string, string>,
-  ): Promise<{ clientId: string } | Response> => {
+  ): Promise<{ clientId: string; suspended: boolean } | Response> => {
     const clientId = form.get('client_id')
     if (!clientId) return refuse(c, 'invalid_request')
-    const found = await first<{ enabled: number; app_id: number | null }>(
+    const found = await first<{ enabled: number; app_id: number | null; status: string | null }>(
       db,
       sql`select (${settingSql('apps.enabled')} = 'on') as enabled,
-        (select id from apps where client_id = ${clientId}) as app_id`,
+        (select id from apps where client_id = ${clientId}) as app_id,
+        (select status from apps where client_id = ${clientId}) as status`,
     )
     if (found?.enabled !== 1) return appsPaused(c)
     if (found.app_id === null) return refuse(c, 'invalid_client', 401)
@@ -114,7 +115,7 @@ export function oauthRoutes(deps: ApiDeps, auth: Auth) {
       String(found.app_id),
     )
     if (!limited.allowed) return rateLimited(c, limited.retryAfterSec)
-    return { clientId }
+    return { clientId, suspended: found.status === 'suspended' }
   }
 
   /**
@@ -133,6 +134,18 @@ export function oauthRoutes(deps: ApiDeps, auth: Auth) {
     const admitted = await admit(c, form)
     if (admitted instanceof Response) return admitted
     const { clientId } = admitted
+    // A cut-off app (RFC 6749's `unauthorized_client`) keeps its tokens: they work again once the
+    // operator restores it, which `invalid_grant` would have told it to throw away.
+    if (admitted.suspended) {
+      return c.json(
+        {
+          error: 'unauthorized_client',
+          error_description: 'This app is cut off by Tela for now; keep its tokens.',
+        },
+        400,
+        NO_STORE,
+      )
+    }
     const now = clock.now()
 
     if (grantType === 'authorization_code') {

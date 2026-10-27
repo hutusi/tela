@@ -68,6 +68,7 @@ export function bearer(deps: Pick<ApiDeps, 'db' | 'clock'>): MiddlewareHandler<G
     const resolved = await resolveToken(deps.db, token, deps.clock.now())
     if (!resolved.ok) {
       if (resolved.error === 'apps_paused') return appsPaused(c)
+      if (resolved.error === 'app_suspended') return c.json({ error: 'app_suspended' }, 403)
       if (resolved.error === 'rate_limited') return rateLimited(c, resolved.retryAfterSec)
       return invalidToken(c, true)
     }

@@ -481,7 +481,7 @@ export type AppPrincipal = {
 
 export type ResolvedToken =
   | { ok: true; principal: AppPrincipal }
-  | { ok: false; error: 'invalid_token' | 'apps_paused' }
+  | { ok: false; error: 'invalid_token' | 'apps_paused' | 'app_suspended' }
   | { ok: false; error: 'rate_limited'; retryAfterSec: number }
 
 type Found = {
@@ -498,6 +498,7 @@ type Found = {
   allow_email: number
   per_member_per_min: number | null
   per_app_per_min: number | null
+  app_status: AppStatus
   usable: number
   enabled: number
 }
@@ -545,7 +546,7 @@ export async function resolveToken(
     db.all<Found>(sql`
       select t.id as token_id, t.scope as token_scope, t.email as token_email, g.id as grant_id,
         g.scope as grant_scope, g.email as grant_email, g.user_id, a.id as app_id, a.client_id, a.max_scope, a.allow_email, a.per_member_per_min,
-        a.per_app_per_min, ${usable} as usable, ${appsOn()} as enabled
+        a.per_app_per_min, a.status as app_status, ${usable} as usable, ${appsOn()} as enabled
       from ${held} where ${current}
     `),
     db.all<{ count: number }>(sql`
@@ -576,7 +577,11 @@ export async function resolveToken(
   const row = found[0]
   if (!row) return { ok: false, error: 'invalid_token' }
   if (row.enabled !== 1) return { ok: false, error: 'apps_paused' }
-  if (row.usable !== 1) return { ok: false, error: 'invalid_token' }
+  // A cut-off app is told so, apart from a token that ended: its tokens work again when the
+  // operator restores it, so it should keep them rather than ask the member to connect again.
+  if (row.usable !== 1) {
+    return { ok: false, error: row.app_status === 'suspended' ? 'app_suspended' : 'invalid_token' }
+  }
   const over = (count: number | undefined, limit: number) => count === undefined || count > limit
   if (over(memberCount[0]?.count, row.per_member_per_min ?? APP_DEFAULT_PER_MEMBER_PER_MIN)) {
     return { ok: false, error: 'rate_limited', retryAfterSec: secondsUntil(member.end, now) }

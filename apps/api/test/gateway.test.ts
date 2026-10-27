@@ -212,7 +212,9 @@ describe('the code exchange', () => {
   test('refuses a code once the app is cut off, or the member suspended', async () => {
     const grant = await approve(api, ann, app)
     await api.db.run(sql`update apps set status = 'suspended' where id = ${app.id}`)
-    expect(await body(await exchange(api, app, grant))).toEqual({ error: 'invalid_grant' })
+    expect(await body(await exchange(api, app, grant))).toMatchObject({
+      error: 'unauthorized_client',
+    })
     await api.db.run(sql`update apps set status = 'approved' where id = ${app.id}`)
     await api.db.run(sql`update profiles set suspended_at = 1 where user_id = ${ann.userId}`)
     expect(await body(await exchange(api, app, grant))).toEqual({ error: 'invalid_grant' })
@@ -518,13 +520,18 @@ describe('a bearer token', () => {
     expect(await body(await probe()('GET', tokens.access_token))).toMatchObject({ email: false })
   })
 
-  test('is refused while its app is cut off, and works again once restored', async () => {
+  test('is refused while its app is cut off, told to keep its tokens, and works again once restored', async () => {
     const tokens = await connect(api, ann, app)
     await api.db.run(sql`update apps set status = 'suspended' where id = ${app.id}`)
-    expect(await meStatus(api, tokens.access_token)).toBe(401)
-    expect((await refresh(api, app, tokens.refresh_token)).status).toBe(400)
+    const me = await gateway(api, '/v1/me', { token: tokens.access_token })
+    expect([me.status, await body(me)]).toEqual([403, { error: 'app_suspended' }])
+    const refused = await refresh(api, app, tokens.refresh_token)
+    expect(refused.status).toBe(400)
+    expect(await body(refused)).toMatchObject({ error: 'unauthorized_client' })
     await api.db.run(sql`update apps set status = 'approved' where id = ${app.id}`)
     expect(await meStatus(api, tokens.access_token)).toBe(200)
+    // The refresh token the cut-off answer told it to keep still swaps.
+    expect((await refresh(api, app, tokens.refresh_token)).status).toBe(200)
   })
 
   test("a draft app's token works for its owner only", async () => {
