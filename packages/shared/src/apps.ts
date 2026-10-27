@@ -91,3 +91,78 @@ export const API_VERSIONS: readonly ApiVersion[] = [
 export const API_CURRENT_VERSION = 1
 /** The response header every API answer carries. */
 export const API_VERSION_HEADER = 'tela-api-version'
+
+/**
+ * The consent page's questions to tela-api (`/connect`, ADR 0064). Both are internal member routes
+ * under `/api/v1`, with the web's checks; the page passes the authorization request's query
+ * through as it came (RFC 6749 §4.1.1 names).
+ */
+export type AuthorizationParams = {
+  client_id: string
+  redirect_uri: string
+  response_type: string
+  /** Space-separated: `read`, or `write`, and `email` if the app asks to see it. */
+  scope: string
+  state?: string
+  code_challenge: string
+  code_challenge_method: string
+}
+
+/** `GET /api/v1/connect/request?<AuthorizationParams>`: the app and what it asks, once checked. */
+export type ConnectRequest = {
+  app: {
+    clientId: string
+    name: string
+    developer: string
+    homepageUrl: string | null
+    privacyUrl: string | null
+    /** A draft is shown only to its owner, and says so. */
+    status: Extract<AppStatus, 'draft' | 'approved'>
+  }
+  /** What it asks for; the member may lower `write` to `read`. */
+  scope: AppScope
+  /** It asks to see the member's email, and the operator lets it. */
+  email: boolean
+  /** Where the answer goes: a port on this computer, or the app's own scheme. */
+  redirect: { kind: 'loopback' | 'scheme'; target: string }
+}
+
+/**
+ * Why a request cannot be shown. The page shows these itself and never redirects: a bad client or
+ * redirect could send the member anywhere.
+ */
+export const CONNECT_ERRORS = [
+  'invalid_client',
+  'invalid_redirect',
+  'invalid_request',
+  'unsupported_response_type',
+  'invalid_scope',
+  'app_unavailable',
+  'max_connections',
+] as const
+export type ConnectError = (typeof CONNECT_ERRORS)[number]
+
+/**
+ * `POST /api/v1/connect/decide`: the member's answer, with the request it answers (checked again).
+ * The reply is `{ redirect }`, the URI to send the browser to: with `code` and `state` on approval,
+ * `error=access_denied` on decline, and `iss` either way (RFC 9207).
+ */
+export type ConnectDecision = AuthorizationParams & {
+  decision: 'approve' | 'decline'
+  /** At most what was asked. */
+  scope_granted: AppScope
+  email_granted: boolean
+}
+
+/** `GET /api/v1/connections`: the member's live connections, for Settings → Connected apps. */
+export type Connection = {
+  id: number
+  app: { name: string; developer: string; homepageUrl: string | null }
+  scope: AppScope
+  email: boolean
+  createdAt: number
+  /** To the hour; Settings shows the day. Null until first used. */
+  lastUsedAt: number | null
+  /** Devices with live tokens under it. */
+  devices: number
+}
