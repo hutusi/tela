@@ -17,18 +17,21 @@ import {
   claimDue,
   consumeLimit,
   dueFeeds,
+  FEED_COLUMNS,
   FEED_FETCH_TTL_MS,
   fileImportedFeeds,
   first,
   type JobQueues,
   nextUtcDay,
   readSetting,
+  siteColumns,
   subscribe,
   subscriptionRoom,
   type TelaDb,
 } from '@tela/data'
 import type { DiscoverResult, IngestError } from '@tela/ingest/pipeline'
 import type { Jobs } from '@tela/platform'
+import type { FeedRow, SiteRow } from '@tela/sync'
 import { sql } from 'drizzle-orm'
 import type { ApiDeps } from '../deps'
 
@@ -44,7 +47,8 @@ export type SubscriptionLimit = { error: 'subscription_limit'; limit: number | n
 export type DiscoverAnswer = DiscoverResult | RateLimited
 
 export type AddFeedAnswer =
-  | { feedId: number; siteId: number }
+  /** `created`: the feed is new to Tela, and was counted in the actor's day. */
+  | { feedId: number; siteId: number; created: boolean }
   | { error: IngestError }
   | RateLimited
   | FeedLimit
@@ -175,7 +179,47 @@ export async function addFeedFor(
   if (feed && feed.last_fetched_at === null) {
     await fetchSoon(db, deps.jobs, added.feedId, deps.clock.now())
   }
-  return { feedId: added.feedId, siteId: added.siteId }
+  return { feedId: added.feedId, siteId: added.siteId, created: added.created }
+}
+
+/**
+ * Which of `urls` (as discovery names feeds) Tela has a feed for, by URL and through a merge, as
+ * `addFeed` would find them: subscribing to one adds nothing to the day's count. One statement,
+ * the URLs as one JSON parameter.
+ */
+export async function knownFeeds(db: TelaDb, urls: string[]): Promise<Map<string, number>> {
+  if (urls.length === 0) return new Map()
+  const rows = await db.all<{ url: string; id: number }>(sql`
+    select f.feed_url as url, coalesce(f.merged_into, f.id) as id from feeds f
+    where f.feed_url in (select value from json_each(${JSON.stringify(urls)}))
+  `)
+  return new Map(rows.map((r) => [r.url, Number(r.id)]))
+}
+
+/** A feed and its blog as the actor's device would hold them, in the sync's row shapes. */
+export async function readFeed(
+  deps: Pick<ApiDeps, 'db'>,
+  actor: Pick<Actor, 'userId'>,
+  feedId: number,
+): Promise<{ feed: FeedRow; site: SiteRow } | null> {
+  const { db } = deps
+  const [feeds, sites] = (await db.batch([
+    db.all(sql`select ${FEED_COLUMNS} from feeds f where f.id = ${feedId}`),
+    db.all(sql`select ${siteColumns(actor.userId)} from sites s
+      where s.id = (select site_id from feeds where id = ${feedId})`),
+  ] as never)) as unknown as [FeedRow[], Record<string, unknown>[]]
+  const feed = feeds[0]
+  const site = sites[0]
+  if (!feed || !site) return null
+  return {
+    feed,
+    site: {
+      ...(site as unknown as SiteRow),
+      owned: site.owned === 1,
+      claimed: site.claimed === 1,
+      translationOptOut: site.translationOptOut === 1,
+    },
+  }
 }
 
 /**

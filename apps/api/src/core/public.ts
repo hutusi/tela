@@ -1002,7 +1002,10 @@ export function likePattern(query: string): string | null {
 /** What a search found: blogs, and a page of posts from the member's own feeds. */
 export type SearchPage = {
   sites: Row[]
-  /** Each with the title the member reads it under, when it has one, as `translatedTitle`. */
+  /**
+   * Each with the title the member reads it under, when it has one, as `translatedTitle`, and its
+   * blog's id as `siteId`.
+   */
   articles: Row[]
   /** Whether a later page has more posts. */
   more: boolean
@@ -1040,7 +1043,7 @@ export async function search(
       limit 50
     `),
     db.all(sql`
-      select ${ARTICLE_COLUMNS},
+      select ${ARTICLE_COLUMNS}, (select site_id from feeds where id = a.feed_id) as "siteId",
         (select t.title from article_titles t join feeds tf on tf.id = a.feed_id
           join sites ts on ts.id = tf.site_id
           where t.article_id = a.id and t.lang = ${lang} and ts.translation_opt_out = 0)
@@ -1073,6 +1076,36 @@ export async function search(
     articles: articles.slice(0, SEARCH_POSTS_PAGE),
     more: articles.length > SEARCH_POSTS_PAGE,
   }
+}
+
+/**
+ * Blogs by id as a card shows one anywhere: name, address, description, favicon, language, reader
+ * count as anyone may see it, and topics. For answers that name blogs a page already chose
+ * (a profile's subscriptions, a search's blogs, a blogroll's), which carry less of each; what may
+ * be shown was decided there, so this decides nothing. One statement, the ids as one JSON
+ * parameter.
+ */
+export async function readBlogCards(
+  deps: Pick<ApiDeps, 'db'>,
+  siteIds: readonly number[],
+): Promise<Map<number, Row>> {
+  if (siteIds.length === 0) return new Map()
+  const rows = await deps.db.all<Row>(sql`
+    select s.id, s.title, s.home_url as "homeUrl", s.description, s.favicon_key as "faviconKey",
+      s.primary_lang as "primaryLang", ${READER_COUNT} as "readerCount",
+      (select json_group_array(x.topic) from (
+        select t.topic from site_topics t where t.site_id = s.id order by t.topic) x) as topics
+    from sites s where s.id in (select value from json_each(${JSON.stringify([...new Set(siteIds)])}))
+  `)
+  return new Map(
+    rows.map((r) => {
+      const topics = parseJson(r.topics)
+      return [
+        Number(r.id),
+        { ...r, topics: Array.isArray(topics) ? topics.filter((t) => typeof t === 'string') : [] },
+      ]
+    }),
+  )
 }
 
 /** A post as a member's device holds one, with its feed and blog, in the sync's row shapes. */

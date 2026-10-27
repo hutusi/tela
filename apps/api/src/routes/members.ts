@@ -462,7 +462,8 @@ export function memberRoutes(deps: ApiDeps) {
       { userId: c.get('member').id },
       { q: c.req.query('q') ?? '', lang: c.req.query('lang') },
     )
-    return c.json({ sites, articles })
+    // The web's answer as it was: the hit's blog is the device's to find by its feed.
+    return c.json({ sites, articles: articles.map(({ siteId: _, ...article }) => article) })
   })
 
   return routes

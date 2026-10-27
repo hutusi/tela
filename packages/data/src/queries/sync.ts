@@ -214,6 +214,12 @@ function scope(userId: string, horizon: number, cursor: number) {
  * `titlesLang` limits the title rows, fresh and changed, to that one language (ADR 0052); left
  * out, every language comes, as a shell from before it expects. The caller checks it is a reading
  * language. Each title query gains one bound parameter, nothing else.
+ *
+ * `shownOnly` leaves out the title and body translation rows of blogs whose writers turned
+ * translation off (ADR 0065): the web's device hides those itself, and an app is not trusted to.
+ * A body translation is shown while some post holding its content is on a blog that allows it, as
+ * `loadBodyTranslationShown` decides. Turning translation back on stamps the rows again
+ * (`restampTranslations`), so a delta brings what was left out. No bound parameter.
  */
 export async function readPull(
   db: TelaDb,
@@ -223,9 +229,10 @@ export async function readPull(
     horizon: number
     limit: number
     titlesLang?: string | undefined
+    shownOnly?: boolean | undefined
   },
 ): Promise<PullRead> {
-  const { userId, cursor, horizon, limit, titlesLang } = options
+  const { userId, cursor, horizon, limit, titlesLang, shownOnly } = options
   const { activeFeeds, newFeeds, kept, newlyKept, horizonOf, rolledFeeds, newlyRolled } = scope(
     userId,
     horizon,
@@ -250,6 +257,15 @@ export async function readPull(
     ? sql`select id from articles where id in (${horizonOf(activeFeeds)}) or id in (${kept})`
     : sql`select id from articles where id in (${horizonOf(newFeeds)}) or id in (${newlyKept})`
   const inTitlesLang = titlesLang === undefined ? sql`` : sql`and t.lang = ${titlesLang}`
+  const titleShown = shownOnly
+    ? sql`and exists (select 1 from feeds sf join sites ss on ss.id = sf.site_id
+        where sf.id = t.feed_id and ss.translation_opt_out = 0)`
+    : sql``
+  const translationShown = shownOnly
+    ? sql`and exists (select 1 from articles sa join feeds sf on sf.id = sa.feed_id
+        join sites ss on ss.id = sf.site_id
+        where sa.content_key = b.content_key and ss.translation_opt_out = 0)`
+    : sql``
 
   const queries = {
     head: sql`select coalesce((select v from counters where k = 'seq'), 0) as head`,
@@ -326,7 +342,7 @@ export async function readPull(
       ? sql`select 1 where false`
       : sql`select article_id as id from (${newlyKept})`,
     freshTitles: sql`select ${TITLE} from article_titles t where t.article_id in (${freshArticles})
-      ${inTitlesLang}`,
+      ${inTitlesLang} ${titleShown}`,
     // The member's own states for a fresh feed's articles, whatever their seq: a device drops a
     // feed's articles and their states when it unsubscribes, and a resubscription must bring
     // back what was read, not only what was written since.
@@ -339,13 +355,16 @@ export async function readPull(
     titles: snapshot
       ? sql`select 1 where false`
       : sql`select ${TITLE} from article_titles t where t.seq > ${cursor} ${inTitlesLang}
+          ${titleShown}
           and (t.feed_id in (${activeFeeds}) or t.article_id in (${kept}))
           order by t.seq limit ${over}`,
     freshTranslations: sql`select ${TRANSLATION} from body_translations b
-      where b.content_key in (select content_key from articles where id in (${freshArticles}))`,
+      where b.content_key in (select content_key from articles where id in (${freshArticles}))
+      ${translationShown}`,
     translations: snapshot
       ? sql`select 1 where false`
       : sql`select ${TRANSLATION} from body_translations b where b.seq > ${cursor}
+          ${translationShown}
           and b.content_key in (select content_key from articles
             where feed_id in (${activeFeeds}) or id in (${kept}))
           order by b.seq limit ${over}`,
