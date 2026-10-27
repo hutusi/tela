@@ -8,6 +8,8 @@ import { type APIRequestContext, expect, type Locator, type Page, request } from
 
 export const BASE = process.env.E2E_BASE_URL ?? 'http://127.0.0.1:8811'
 export const FIXTURES = process.env.E2E_FIXTURE_URL ?? 'http://127.0.0.1:4790'
+/** tela-gateway, api.telaread.com's stand-in (ADR 0065): the OAuth issuer and the v1 API. */
+export const GATEWAY = process.env.E2E_GATEWAY_URL ?? 'http://127.0.0.1:8812'
 export const ADMIN_TOKEN = 'e2e-admin'
 /** The member the global setup signs in, with two fixture feeds subscribed. */
 export const READER = 'reader@e2e.test'
