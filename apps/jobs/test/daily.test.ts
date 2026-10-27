@@ -54,6 +54,7 @@ describe('daily', () => {
       prunedAppCodes: 0,
       prunedAppTokens: 0,
       prunedSpentRefresh: 0,
+      prunedAppGrants: 0,
     })
     const feeds = await db.all<{
       feed_url: string
@@ -119,6 +120,38 @@ describe('daily', () => {
     expect(await ids(sql`select id as k from app_tokens order by id`)).toEqual([2, 3])
     expect(await ids(sql`select hash as k from app_refresh_spent order by hash`)).toEqual(['s3'])
     expect(await ids(sql`select hash as k from app_codes`)).toEqual(['c-new'])
+  })
+
+  test('clears tokens no one can use again, and a connection’s record a month after it ended', async () => {
+    const { db } = await createTestDb()
+    await addTestUser(db, 'u')
+    const past = (days: number) => NOW - days * DAY
+    await db.batch([
+      db.run(sql`insert into apps (id, client_id, name, developer, contact_email, created_at, updated_at)
+        values (1, 'tela_app_x', 'App', 'Dev', 'dev@example.com', 0, 0)`),
+      // Live; ended five weeks ago; ended a week ago.
+      db.run(sql`insert into app_grants (id, app_id, user_id, scope, created_at, updated_at, ended_at,
+          end_reason)
+        values (1, 1, 'u', 'read', 0, 0, null, null), (2, 1, 'u', 'read', 0, 0, ${past(35)}, 'revoked'),
+          (3, 1, 'u', 'read', 0, 0, ${past(7)}, 'revoked')`),
+      // Never ended, on the live connection: an access token and a refresh token both a month and
+      // more past use (1); one whose refresh token still swaps (2); one with no refresh token, its
+      // access token a month past (3); one whose refresh token lapsed only a week ago (4).
+      db.run(sql`insert into app_tokens (id, grant_id, scope, access_hash, access_expires_at,
+          refresh_hash, refresh_idle_expires_at, created_at)
+        values (1, 1, 'read', 'a1', ${past(120)}, 'r1', ${past(31)}, 0),
+          (2, 1, 'read', 'a2', ${past(120)}, 'r2', ${NOW + DAY}, 0),
+          (3, 1, 'read', 'a3', ${past(31)}, null, null, 0),
+          (4, 1, 'read', 'a4', ${past(120)}, 'r4', ${past(7)}, 0)`),
+      db.run(sql`insert into app_refresh_spent (hash, token_id, replaced_at)
+        values ('s1', 1, ${past(1)})`),
+    ] as never)
+    const report = await daily(db, NOW)
+    expect([report.prunedAppTokens, report.prunedAppGrants]).toEqual([2, 1])
+    const ids = async (q: SQL) => (await db.all<{ k: unknown }>(q)).map((r) => r.k)
+    expect(await ids(sql`select id as k from app_tokens order by id`)).toEqual([2, 4])
+    expect(await ids(sql`select hash as k from app_refresh_spent`)).toEqual([])
+    expect(await ids(sql`select id as k from app_grants order by id`)).toEqual([1, 3])
   })
 
   test('counts the rate counters it prunes, however many there are', async () => {

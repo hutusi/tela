@@ -202,7 +202,9 @@ ADR 0053).
   The pruning takes old limits and
   mutation ids, and personal data with no further use: invite holds a day past their expiry,
   ended sessions, better-auth's counters after a day, spent sign-in codes and OAuth states, and
-  the day before yesterday's `post_opens` (ADR 0066).
+  the day before yesterday's `post_opens` (ADR 0066); and apps' (ADR 0064): expired codes, a
+  device's tokens 30 days after they ended or after both its access and refresh tokens last could
+  be used, spent refresh hashes past the idle limit, and a connection 30 days after it ended.
 - Mondays (`0 8 * * 1`): the digest, which also counts Discover's review queue (`DISCOVER_REVIEW`
   in `@tela/data`, the console's predicate, ADR 0041). Every five minutes after the tick: the
   health check and the dead-man's ping (`src/ops.ts`). The health check itself is `health()` in
