@@ -28,6 +28,7 @@ import { bodyLimit } from 'hono/body-limit'
 import { HTTPException } from 'hono/http-exception'
 import { type Auth, createAuth } from './auth'
 import type { ApiDeps } from './deps'
+import { createGateway, gatewayHeaders } from './gateway'
 import { fromOperator } from './operator'
 import { accountRoutes } from './routes/account'
 import { adminRoutes } from './routes/admin'
@@ -37,6 +38,7 @@ import { avatarRoutes } from './routes/avatars'
 import { blogrollRoutes } from './routes/blogrolls'
 import { claimRoutes } from './routes/claims'
 import { clientErrorRoutes } from './routes/client-errors'
+import { connectRoutes } from './routes/connect'
 import { curate } from './routes/curate'
 import { discoverRoutes } from './routes/discover'
 import { feedRoutes } from './routes/feeds'
@@ -391,6 +393,12 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
   // What breaks in a browser, a visitor's too: no session, counted per IP, logged and kept nowhere.
   app.route('/api/client-errors', clientErrorRoutes(deps, auth))
 
+  // The app surface (ADRs 0064, 0065): bearer tokens only, outside `/api/` so tela-web never
+  // forwards here; tela-gateway does, from api.telaread.com. Nothing under it reads a cookie, and
+  // nothing under `/api/` reads its tokens.
+  app.use('/gateway/*', gatewayHeaders())
+  app.route('/gateway', createGateway(deps, auth))
+
   /**
    * Joining with an invite code is a visitor's: `/api/v1/join` needs no session (ADR 0034).
    *
@@ -496,6 +504,8 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
   app.route('/api/v1', socialRoutes(deps))
   app.route('/api/v1', inviteRoutes(deps, auth))
   app.route('/api/v1/account', accountRoutes(deps, auth))
+  // The consent page's questions, and Settings → Connected apps (ADR 0064).
+  app.route('/api/v1', connectRoutes(deps))
 
   return { app, auth }
 }
