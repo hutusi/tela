@@ -12,6 +12,7 @@ import {
 } from '@tela/data'
 import { RELAY_REPROBE_DAYS } from '@tela/ingest/region-policy'
 import { DEAD_AFTER_ERRORS } from '@tela/ingest/schedule'
+import { REFRESH_IDLE_MS } from '@tela/shared'
 import { sql } from 'drizzle-orm'
 
 const DAY = 24 * 3600 * 1000
@@ -29,6 +30,10 @@ export type DailyReport = {
   prunedAuthLimits: number
   prunedVerifications: number
   prunedOpens: number
+  /** Apps' expired codes, tokens a month after they ended, and spent refresh hashes past use. */
+  prunedAppCodes: number
+  prunedAppTokens: number
+  prunedSpentRefresh: number
 }
 
 export async function daily(db: TelaDb, now: number): Promise<DailyReport> {
@@ -71,6 +76,14 @@ export async function daily(db: TelaDb, now: number): Promise<DailyReport> {
     // anything, and the privacy page promises a two-day record, so the day before yesterday goes.
     db.all(sql`select count(*) as n from post_opens where day <= ${utcDay(now - 2 * DAY)}`),
     db.run(sql`delete from post_opens where day <= ${utcDay(now - 2 * DAY)}`),
+    // Apps' credentials past any use (ADR 0064): codes that expired, and a device's tokens a month
+    // after they ended (their spent refresh hashes go with them, by cascade). A spent hash older
+    // than the refresh idle limit can no longer be told from a token never issued, so it goes too.
+    db.all(sql`delete from app_codes where expires_at < ${now} returning hash`),
+    db.all(sql`delete from app_tokens where ended_at < ${now - 30 * DAY} returning id`),
+    db.all(sql`
+      delete from app_refresh_spent where replaced_at < ${now - REFRESH_IDLE_MS} returning hash
+    `),
   ])
   const [
     ,
@@ -85,6 +98,10 @@ export async function daily(db: TelaDb, now: number): Promise<DailyReport> {
     authLimits,
     codes,
     opens,
+    ,
+    appCodes,
+    appTokens,
+    spentRefresh,
   ] = results
   const n = (rows: unknown) => (rows as unknown[]).length
   const count = (rows: unknown) => Number((rows as { n?: unknown }[])[0]?.n ?? 0)
@@ -99,5 +116,8 @@ export async function daily(db: TelaDb, now: number): Promise<DailyReport> {
     prunedAuthLimits: n(authLimits),
     prunedVerifications: n(codes),
     prunedOpens: count(opens),
+    prunedAppCodes: n(appCodes),
+    prunedAppTokens: n(appTokens),
+    prunedSpentRefresh: n(spentRefresh),
   }
 }

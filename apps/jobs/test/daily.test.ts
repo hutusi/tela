@@ -51,6 +51,9 @@ describe('daily', () => {
       prunedAuthLimits: 0,
       prunedVerifications: 0,
       prunedOpens: 0,
+      prunedAppCodes: 0,
+      prunedAppTokens: 0,
+      prunedSpentRefresh: 0,
     })
     const feeds = await db.all<{
       feed_url: string
@@ -87,6 +90,35 @@ describe('daily', () => {
     expect((await daily(db, NOW)).prunedOpens).toBe(2)
     const days = await db.all<{ day: string }>(sql`select day from post_opens order by day`)
     expect(days.map((r) => r.day)).toEqual(['2026-09-19', '2026-09-20'])
+  })
+
+  test("clears apps' credentials past any use (ADR 0064)", async () => {
+    const { db } = await createTestDb()
+    await addTestUser(db, 'u')
+    await db.batch([
+      db.run(sql`insert into apps (id, client_id, name, developer, contact_email, created_at, updated_at)
+        values (1, 'tela_app_x', 'App', 'Dev', 'dev@example.com', 0, 0)`),
+      db.run(sql`insert into app_grants (id, app_id, user_id, scope, created_at, updated_at)
+        values (1, 1, 'u', 'read', 0, 0)`),
+      // Ended five weeks ago, ended yesterday, live.
+      db.run(sql`insert into app_tokens (id, grant_id, scope, access_hash, access_expires_at, created_at, ended_at)
+        values (1, 1, 'read', 'a1', 0, 0, ${NOW - 35 * DAY}), (2, 1, 'read', 'a2', 0, 0, ${NOW - DAY}),
+          (3, 1, 'read', 'a3', ${NOW + DAY}, 0, null)`),
+      // Token 1's goes with it; on the live token, one past the idle limit and one recent.
+      db.run(sql`insert into app_refresh_spent (hash, token_id, replaced_at)
+        values ('s1', 1, ${NOW - 35 * DAY}), ('s3old', 3, ${NOW - 100 * DAY}), ('s3', 3, ${NOW - DAY})`),
+      db.run(sql`insert into app_codes (hash, app_id, user_id, scope, created_at, expires_at)
+        values ('c-old', 1, 'u', 'read', 0, ${NOW - 1}), ('c-new', 1, 'u', 'read', 0, ${NOW + 60_000})`),
+    ] as never)
+    const report = await daily(db, NOW)
+    expect([report.prunedAppCodes, report.prunedAppTokens, report.prunedSpentRefresh]).toEqual([
+      1, 1, 1,
+    ])
+    const ids = async (q: ReturnType<typeof sql>) =>
+      (await db.all<{ k: unknown }>(q)).map((r) => r.k)
+    expect(await ids(sql`select id as k from app_tokens order by id`)).toEqual([2, 3])
+    expect(await ids(sql`select hash as k from app_refresh_spent order by hash`)).toEqual(['s3'])
+    expect(await ids(sql`select hash as k from app_codes`)).toEqual(['c-new'])
   })
 
   test('counts the rate counters it prunes, however many there are', async () => {
