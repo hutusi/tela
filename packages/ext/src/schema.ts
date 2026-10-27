@@ -15,7 +15,13 @@
  * Apps never import this module; the gateway's handlers, the contract suite and the OpenAPI
  * generator do.
  */
-import { API_VERSION_STATUSES, APP_SCOPES, BLOGROLL_ID, READING_LANGUAGES } from '@tela/shared'
+import {
+  API_VERSION_STATUSES,
+  APP_SCOPES,
+  BLOGROLL_ID,
+  FEED_STATUSES,
+  READING_LANGUAGES,
+} from '@tela/shared'
 import { z } from 'zod'
 import { API_ERRORS, V1_PREF_KEYS, V1_REJECTIONS, V1_ROW_TYPES, type V1PrefKey } from './transform'
 
@@ -36,11 +42,27 @@ const highlightLang = z.string().max(16).nullable().meta({
   description: 'The translation’s language for a highlight made on one; null on the original',
 })
 
+/**
+ * The metadata key that marks an enum open: new values may appear within v1, and an app treats one
+ * it does not know as documented. The OpenAPI document writes such an enum as a string with its
+ * known values under `x-extensible-enum`, so no generated client refuses a new one; zod still holds
+ * what Tela sends to the known values, so the contract suite catches a value added unannounced.
+ */
+export const OPEN_ENUM = 'x-open-enum'
+
+/** An open enum (`OPEN_ENUM`) of `values`. */
+function openEnum<const T extends readonly [string, ...string[]]>(
+  values: T,
+  description = 'Open enum',
+) {
+  return z.enum(values).meta({ description, [OPEN_ENUM]: true })
+}
+
 // ———————————————————————————————————————————— errors
 
 /** Every error answer. Open: an app treats an unknown `error` by its HTTP status. */
 export const errorSchema = z.looseObject({
-  error: z.enum(API_ERRORS).meta({ description: 'Open enum' }),
+  error: openEnum(API_ERRORS),
 })
 
 /** 429 `post_limit` / `feed_limit`, and a refused body in a bundle. */
@@ -59,7 +81,7 @@ export const metaSchema = z.object({
   versions: z.array(
     z.object({
       version: z.number().int(),
-      status: z.enum(API_VERSION_STATUSES).meta({ description: 'Open enum' }),
+      status: openEnum(API_VERSION_STATUSES),
       sunsetAt: time.nullable(),
     }),
   ),
@@ -155,6 +177,18 @@ export const prefRowSchema = z.discriminatedUnion('key', [
   prefRow('translate.never'),
 ])
 
+/**
+ * A pref row as the OpenAPI document gives it: one of the documented keys, or any other, which an
+ * app ignores rather than refuse the answer for. Only the document takes it: what Tela sends is
+ * held to `prefRowSchema`.
+ */
+export const prefRowDocSchema = z.union([
+  prefRowSchema,
+  z
+    .object({ key: z.string(), value: z.unknown(), updatedAt: time })
+    .meta({ description: 'A pref this version does not name yet: ignore it' }),
+])
+
 export const subscriptionRowSchema = z.object({
   feedId: id,
   /**
@@ -172,7 +206,7 @@ export const feedRowSchema = z.object({
   siteId: id,
   feedUrl: url,
   title: z.string().nullable(),
-  status: z.string().meta({ description: 'Open enum: active, failing, dead, paused, …' }),
+  status: openEnum(FEED_STATUSES),
   lastFetchedAt: time.nullable(),
   lastItemAt: time.nullable(),
 })
@@ -265,9 +299,10 @@ export const highlightRowSchema = z.object({
 export const translationRowSchema = z.object({
   contentKey,
   lang: language,
-  state: z
-    .enum(['waiting', 'requested', 'running', 'done', 'partial', 'failed', 'skipped'])
-    .meta({ description: 'Open enum. `waiting`: due at `dueAt`, not before.' }),
+  state: openEnum(
+    ['waiting', 'requested', 'running', 'done', 'partial', 'failed', 'skipped'],
+    'Open enum. `waiting`: due at `dueAt`, not before.',
+  ),
   /** Finished chunks while it runs, as content paths (`/o/tc/…`), in order. */
   chunks: z.array(z.string()),
   /** The finished translation's content path (`/o/t/…`), once there is one. */
@@ -318,7 +353,7 @@ export const syncSchema = z.object({
   /** A snapshot: drop every row held and take these. */
   reset: z.boolean(),
   lang: language,
-  types: z.array(z.enum(V1_ROW_TYPES)),
+  types: z.array(openEnum(V1_ROW_TYPES)),
   rows: z.object({
     profile: profileRowSchema.nullable(),
     prefs: z.array(prefRowSchema),
@@ -412,7 +447,7 @@ export const pushSchema = z.object({
       mid: z.string().nullable(),
       status: z.enum(['applied', 'rejected']),
       /** Why it was rejected (`V1_REJECTIONS`). */
-      error: z.enum(V1_REJECTIONS).meta({ description: 'Open enum' }).optional(),
+      error: openEnum(V1_REJECTIONS).optional(),
     }),
   ),
 })
@@ -449,7 +484,7 @@ export const translationObjectSchema = z.looseObject({
   norm: z.number().int(),
   source: z.string(),
   lang: z.string(),
-  status: z.enum(['done', 'partial', 'failed']).meta({ description: 'Open enum' }),
+  status: openEnum(['done', 'partial', 'failed']),
   /** HTML per block; a block with no translation carries its source. */
   blocks: z.array(z.string()),
   failedLeaves: z.array(z.string()),
@@ -472,7 +507,7 @@ export const translationAnswerSchema = z.object({
    * the member's or the site's day is full; due at `dueAt`. `refused`: no room today or tomorrow,
    * see `reason` and `resetsAt`. `unavailable`: the writer said no translation, or there is no body.
    */
-  status: z.enum(['ready', 'running', 'waiting', 'refused', 'unavailable']),
+  status: openEnum(['ready', 'running', 'waiting', 'refused', 'unavailable']),
   translation: translationRowSchema.nullable(),
   reason: z.enum(['member', 'site']).optional(),
   resetsAt: time.optional(),

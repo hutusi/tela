@@ -27,6 +27,8 @@ import {
   meSchema,
   metaSchema,
   mutationSchema,
+  OPEN_ENUM,
+  prefRowDocSchema,
   profilePageSchema,
   publicQuerySchema,
   pushSchema,
@@ -85,6 +87,11 @@ const PUBLIC_CACHE =
 /** The push as the docs show it: each mutation one of the 17 kinds (`mutationSchema`). */
 const pushRequestDoc = z.object({ mutations: z.array(mutationSchema).max(50) })
 
+/** Sync as the docs show it: a pref row may name a key this version does not, to be ignored. */
+const syncDoc = syncSchema.extend({
+  rows: syncSchema.shape.rows.extend({ prefs: z.array(prefRowDocSchema) }),
+})
+
 const ROUTES: Route[] = [
   {
     method: 'get',
@@ -122,7 +129,7 @@ const ROUTES: Route[] = [
     summary: 'A snapshot, then deltas: the member’s rows after the cursor',
     scope: 'read',
     query: syncQuerySchema,
-    answer: { name: 'Sync', schema: syncSchema },
+    answer: { name: 'Sync', schema: syncDoc },
     errors: [400],
   },
   {
@@ -342,17 +349,26 @@ function jsonSchema(schema: z.ZodType, io: 'input' | 'output'): Record<string, u
 }
 
 /**
- * A schema with no `additionalProperties: false`, which zod writes for every object it outputs:
- * v1 grows by adding fields, and an app ignores the ones it does not know, so no generated client
- * may refuse an answer for carrying one. The contract suite holds tela-api to the exact fields.
+ * A schema as open as v1 is: v1 grows by addition, and an app ignores what it does not know, so no
+ * generated client may refuse an answer for it. The contract suite holds tela-api to the exact
+ * fields and values.
+ *
+ * - No `additionalProperties: false`, which zod writes for every object it outputs: an answer may
+ *   carry a field added later.
+ * - An open enum (`OPEN_ENUM`) is a string with its known values under `x-extensible-enum`, not a
+ *   closed `enum`: an answer may carry a value added later.
  */
 function open(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(open)
   if (value === null || typeof value !== 'object') return value
+  const node = value as Record<string, unknown>
+  const extensible = node[OPEN_ENUM] === true && Array.isArray(node.enum)
   return Object.fromEntries(
-    Object.entries(value)
-      .filter(([k, v]) => !(k === 'additionalProperties' && v === false))
-      .map(([k, v]) => [k, open(v)]),
+    Object.entries(node)
+      .filter(([k, v]) => !(k === 'additionalProperties' && v === false) && k !== OPEN_ENUM)
+      .map(([k, v]): [string, unknown] =>
+        extensible && k === 'enum' ? ['x-extensible-enum', v] : [k, open(v)],
+      ),
   )
 }
 

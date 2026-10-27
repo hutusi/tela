@@ -70,6 +70,79 @@ describe('the OpenAPI document', () => {
     }
   })
 
+  test('writes every open enum as a string with its known values beside it, never a closed list', () => {
+    type Node = Record<string, unknown>
+    const doc = openapiDocument() as { components: { schemas: Record<string, Node> } }
+    const schemas = doc.components.schemas
+    const at = (node: unknown, ...path: string[]): Node =>
+      path.reduce((n, key) => (n as Node | undefined)?.[key] as Node, node as Node)
+    const open: [string, Node, string][] = [
+      ['Error.error', at(schemas.Error, 'properties', 'error'), 'invalid_token'],
+      [
+        'Meta.versions.status',
+        at(schemas.Meta, 'properties', 'versions', 'items', 'properties', 'status'),
+        'preview',
+      ],
+      ['Sync.types', at(schemas.Sync, 'properties', 'types', 'items'), 'articles'],
+      [
+        'Sync.feeds.status',
+        at(
+          schemas.Sync,
+          'properties',
+          'rows',
+          'properties',
+          'feeds',
+          'items',
+          'properties',
+          'status',
+        ),
+        'active',
+      ],
+      [
+        'Sync.translations.state',
+        at(
+          schemas.Sync,
+          'properties',
+          'rows',
+          'properties',
+          'translations',
+          'items',
+          'properties',
+          'state',
+        ),
+        'waiting',
+      ],
+      ['TranslationAnswer.status', at(schemas.TranslationAnswer, 'properties', 'status'), 'ready'],
+      [
+        'TranslationObject.status',
+        at(schemas.TranslationObject, 'properties', 'status'),
+        'partial',
+      ],
+      [
+        'Push.error',
+        at(schemas.Push, 'properties', 'results', 'items', 'properties', 'error'),
+        'subscription_limit',
+      ],
+    ]
+    for (const [name, node, known] of open) {
+      expect(node.type, name).toBe('string')
+      expect(node.enum, name).toBeUndefined()
+      expect(node['x-extensible-enum'], name).toContain(known)
+    }
+    // No marker of ours is left in the document, and no open enum anywhere keeps a closed list.
+    const text = JSON.stringify(doc)
+    expect(text.includes('x-open-enum')).toBe(false)
+    // A pref the document does not name is one an app ignores, not an answer it refuses.
+    const prefs = at(schemas.Sync, 'properties', 'rows', 'properties', 'prefs', 'items')
+    const variants = (prefs.anyOf ?? []) as Node[]
+    expect(
+      variants.some((v) => {
+        const key = at(v, 'properties', 'key')
+        return key?.type === 'string' && key.const === undefined && key.enum === undefined
+      }),
+    ).toBe(true)
+  })
+
   test('says every 429 and 503 carries Retry-After', () => {
     const doc = openapiDocument() as {
       paths: Record<string, Record<string, { responses: Record<string, { headers?: object }> }>>
