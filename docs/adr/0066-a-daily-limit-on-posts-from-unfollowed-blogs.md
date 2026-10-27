@@ -32,9 +32,12 @@ does it beyond the cap on how many feeds they follow at once (`member.maxSubscri
 scraper can subscribe to 300 feeds, fetch all their bodies free, unsubscribe, and do the same with
 the next 300. This limit closes the public-page route only.
 
-**Open question for the owner:** whether to close the subscribing route too, for example with a
-daily limit on new subscriptions, or by treating a subscription as free only once it is a day old.
-Neither is decided here.
+**Left open on purpose (the owner, 2026-10-28).** Closing the subscribing route was weighed and
+not taken for now: a daily limit on new subscriptions would also hold back an OPML import, a
+subscription counted only once a day old delays the copy by a day at most (300 places against
+~150 blogs), sign-up is by invitation, most of these blogs publish their full text in their own
+feeds, and what only Tela has, the translations, has a daily limit of its own. To revisit when
+sign-up opens, or when a member's subscriptions are seen churning.
 
 **One decision, `admitOpens`, in one batch:**
 
