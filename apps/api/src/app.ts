@@ -41,6 +41,7 @@ import { clientErrorRoutes } from './routes/client-errors'
 import { connectRoutes } from './routes/connect'
 import { curate } from './routes/curate'
 import { discoverRoutes } from './routes/discover'
+import { edgeRoutes } from './routes/edge'
 import { feedRoutes } from './routes/feeds'
 import { inviteMember } from './routes/invite-member'
 import { inviteRoutes, operatorCodeRoutes } from './routes/invites'
@@ -392,6 +393,9 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
   app.route('/api/websub', websubRoutes(deps))
   // What breaks in a browser, a visitor's too: no session, counted per IP, logged and kept nowhere.
   app.route('/api/client-errors', clientErrorRoutes(deps, auth))
+  // tela-web's edge, asking before it serves a member content (ADR 0066): the session's cookie
+  // and nothing else, so outside the member checks below. tela-web refuses it to browsers.
+  app.route('/api/edge', edgeRoutes(deps, auth))
 
   // The app surface (ADRs 0064, 0065): bearer tokens only, outside `/api/` so tela-web never
   // forwards here; tela-gateway does, from api.telaread.com. Nothing under it reads a cookie, and
