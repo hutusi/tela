@@ -10,56 +10,40 @@
  * says how a blog was listed: nothing public renders it, and beside a held-back count it would
  * tell a blog an operator listed from the queue from an editorial pick (ADR 0041).
  */
-import {
-  ARTICLE_COLUMNS,
-  avatarOf,
-  consumeLimit,
-  first,
-  isShown,
-  signupState,
-  standingOk,
-} from '@tela/data'
-import { HANDLE, isTopic, RESERVED_HANDLES } from '@tela/shared'
+import { consumeLimit, first, signupState } from '@tela/data'
+import { HANDLE, RESERVED_HANDLES } from '@tela/shared'
 import { getIP } from 'better-auth/api'
 import { sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import type { ApiEnv } from '../app'
 import type { Auth } from '../auth'
+import { pageOf, readDiscover, readProfile, readSitePage } from '../core/public'
 import type { ApiDeps } from '../deps'
 import {
-  blogrollCard,
-  blogrollCardOf,
   DAY,
   editionStatement,
-  LANG,
   PROFILE_CACHE,
   PUBLIC_CACHE,
   PUBLIC_LISTING,
   parseLangMap,
-  profileIndexable,
   publicNotFound,
-  READER_COUNT,
-  SITE_INDEXABLE,
-  siteCard,
-  TITLES,
   withTitles,
 } from './public-sql'
 
+/**
+ * Blogs on one page of Discover. The directory outgrew one page when the editorial list reached
+ * 110, and a bare `limit` dropped the newest blogs from All with nothing to say so. Blogs a
+ * blogroll's card on a profile names, in the blogroll's order.
+ */
+export { DISCOVER_PAGE, PROFILE_CARD_BLOGS } from '../core/public'
 export { PROFILE_CACHE, PUBLIC_CACHE }
 
 /** The front page's edition: the week's newest post from each blog, at most this many. */
 export const EDITION_POSTS = 11
-/**
- * Blogs on one page of Discover. The directory outgrew one page when the editorial list reached
- * 110, and a bare `limit` dropped the newest blogs from All with nothing to say so.
- */
-export const DISCOVER_PAGE = 60
 /** better-auth's bucket for a request whose IP it cannot tell, which all such requests share. */
 const NO_IP = 'no-trusted-ip'
 /** Suffixes tried, in order, for a free handle near one that is taken or reserved. */
 const HANDLE_SUFFIXES = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '_writes']
-/** Blogs a blogroll's card on a profile names, in the blogroll's order. */
-export const PROFILE_CARD_BLOGS = 3
 
 export function publicRoutes(deps: ApiDeps, auth: Auth) {
   const { db } = deps
@@ -87,269 +71,31 @@ export function publicRoutes(deps: ApiDeps, auth: Auth) {
     )
   })
 
-  routes.get('/discover', async (c) => {
-    const topic = c.req.query('topic')
-    const lang = c.req.query('lang')
-    const byTopic = isTopic(topic)
-      ? sql`and exists (select 1 from site_topics t where t.site_id = s.id and t.topic = ${topic})`
-      : sql``
-    const byLang = lang && LANG.test(lang) ? sql`and s.primary_lang = ${lang}` : sql``
-    const asked = Number(c.req.query('page'))
-    const page = Number.isInteger(asked) && asked > 1 && asked <= 1000 ? asked : 1
-    const now = deps.clock.now()
-    const since = now - 30 * DAY
-    const [sites, languages, topics, totals] = (await db.batch([
-      db.all(sql`
-        select ${siteCard(since, now)}
-        from sites s
-        where s.listing in ${PUBLIC_LISTING} ${byTopic} ${byLang}
-        order by s.listing = 'featured' desc, s.claimed_by is not null desc,
-          coalesce(${READER_COUNT}, 0) desc, s.id
-        limit ${DISCOVER_PAGE} offset ${(page - 1) * DISCOVER_PAGE}
-      `),
-      db.all(sql`
-        select s.primary_lang as lang, count(*) as count from sites s
-        where s.listing in ${PUBLIC_LISTING} and s.primary_lang is not null ${byTopic}
-        group by s.primary_lang order by count desc
-      `),
-      db.all(sql`
-        select t.site_id as "siteId", t.topic from site_topics t
-        join sites s on s.id = t.site_id where s.listing in ${PUBLIC_LISTING}
-      `),
-      db.all(sql`
-        select count(*) as total from sites s
-        where s.listing in ${PUBLIC_LISTING} ${byTopic} ${byLang}
-      `),
-    ] as never)) as unknown as [
-      Record<string, unknown>[],
-      { lang: string; count: number }[],
-      { siteId: number; topic: string }[],
-      { total: number }[],
-    ]
-    return c.json(
-      {
-        sites: sites.map((s) => ({
-          ...s,
-          claimed: s.claimed === 1,
-          topics: topics.filter((t) => t.siteId === s.id).map((t) => t.topic),
-        })),
-        languages,
-        total: Number(totals[0]?.total ?? 0),
-        page,
-        pageSize: DISCOVER_PAGE,
-      },
+  // Discover's Blogs, which `readDiscover` decides as the API's does (ADR 0065).
+  routes.get('/discover', async (c) =>
+    c.json(
+      await readDiscover(deps, 'blogs', {
+        topic: c.req.query('topic'),
+        lang: c.req.query('lang'),
+        page: pageOf(c.req.query('page')),
+      }),
       200,
       cached,
-    )
-  })
+    ),
+  )
 
   routes.get('/sites/:siteId', async (c) => {
-    const siteId = Number(c.req.param('siteId'))
-    if (!Number.isInteger(siteId)) return publicNotFound()
-    const since = deps.clock.now() - 30 * DAY
-    const [sites, feeds, posts, topics, notes] = (await db.batch([
-      db.all(sql`
-        select s.id, s.title, s.home_url as "homeUrl", s.description, s.favicon_key as "faviconKey",
-          s.primary_lang as "primaryLang", ${READER_COUNT} as "readerCount",
-          ${SITE_INDEXABLE} as indexable, p.handle as "claimedBy", p.display_name as "claimantName", p.bio as "claimantBio",
-          ${avatarOf('p')} as "claimantAvatar",
-          (select count(*) from articles a join feeds f on f.id = a.feed_id
-            where f.site_id = s.id and f.merged_into is null and a.sort_at >= ${since})
-            as "postsLast30d"
-        from sites s left join profiles p on p.user_id = s.claimed_by and ${standingOk('p')}
-        where s.id = ${siteId} and s.listing in ${PUBLIC_LISTING}
-      `),
-      db.all(sql`
-        select f.id, f.feed_url as "feedUrl", f.title from feeds f
-        join sites s on s.id = f.site_id
-        where f.site_id = ${siteId} and f.merged_into is null and s.listing in ${PUBLIC_LISTING}
-        order by f.id
-      `),
-      // Posts as the reader holds them, so a member can open one from here. A merged feed's
-      // posts are duplicates of its target's (ADR 0028).
-      db.all(sql`
-        select ${ARTICLE_COLUMNS}, ${TITLES}
-        from articles a join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
-        where f.site_id = ${siteId} and f.merged_into is null and s.listing in ${PUBLIC_LISTING}
-        order by a.sort_at desc, a.id desc limit 20
-      `),
-      db.all(sql`select topic from site_topics where site_id = ${siteId}`),
-      // What readers said recommending its posts: recommendations are public (ADR 0031).
-      db.all(sql`
-        select r.note, r.created_at as "createdAt", p.user_id as "userId", p.handle,
-          p.display_name as "displayName", ${ARTICLE_COLUMNS}, ${TITLES}
-        from recommendations r join articles a on a.id = r.article_id
-        join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
-        join profiles p on p.user_id = r.user_id
-        where f.site_id = ${siteId} and s.listing in ${PUBLIC_LISTING} and ${standingOk('p')}
-          and r.deleted_at is null and r.note is not null and r.note <> ''
-        order by r.created_at desc limit 5
-      `),
-    ] as never)) as unknown as Record<string, unknown>[][]
-    const row = sites?.[0]
-    if (!row) return publicNotFound()
-    const { claimantName, claimantBio, claimantAvatar, indexable, ...site } = row
-    return c.json(
-      {
-        site: {
-          ...site,
-          // Whether search engines may index its page (ADR 0060).
-          indexable: indexable === 1,
-          // Who writes it, for the page's About: the claimant's own name and bio.
-          claimant: site.claimedBy
-            ? {
-                handle: site.claimedBy,
-                displayName: claimantName,
-                bio: claimantBio,
-                avatar: claimantAvatar,
-              }
-            : null,
-        },
-        feeds,
-        posts: (posts ?? []).map(withTitles),
-        topics: (topics ?? []).map((t) => t.topic),
-        notes: (notes ?? []).map((n) => {
-          const { note, createdAt, userId, handle, displayName, ...article } = n
-          return {
-            note,
-            createdAt,
-            // The account id: what a report of the note names (ADR 0059).
-            person: { id: userId, handle, displayName },
-            article: withTitles(article),
-          }
-        }),
-      },
-      200,
-      cached,
-    )
+    const found = await readSitePage(deps, Number(c.req.param('siteId')))
+    if (!found) return publicNotFound()
+    const { more: _more, ...page } = found
+    return c.json(page, 200, cached)
   })
 
   routes.get('/profiles/:handle', async (c) => {
-    const handle = c.req.param('handle').toLowerCase()
-    const profile = await first<{
-      user_id: string
-      handle: string
-      display_name: string | null
-      bio: string | null
-      created_at: number
-      public_subscriptions: number
-      public_likes: number
-      avatar: string | null
-      indexable: number
-    }>(
-      db,
-      sql`select user_id, handle, display_name, bio, created_at, public_subscriptions, public_likes,
-            ${avatarOf('p')} as avatar, ${profileIndexable(deps.clock.now())} as indexable
-          from profiles p where handle = ${handle} and ${standingOk('p')}`,
-    )
-    if (!profile) return publicNotFound()
-    const id = profile.user_id
-    const none = sql`select 1 where false`
-    const [blogs, recommendations, subscriptions, liked, counts, blogrolls] = (await db.batch([
-      db.all(sql`
-        select id, title, home_url as "homeUrl", favicon_key as "faviconKey" from sites
-        where claimed_by = ${id} and listing in ${PUBLIC_LISTING} order by title
-      `),
-      db.all(sql`
-        select r.note, r.created_at as "createdAt", s.id as "siteId", s.title as "siteTitle",
-          s.home_url as "homeUrl", (s.listing in ${PUBLIC_LISTING}) as listed,
-          ${SITE_INDEXABLE} as vouched, ${ARTICLE_COLUMNS}, ${TITLES}
-        from recommendations r join articles a on a.id = r.article_id
-        join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
-        where r.user_id = ${id} and r.deleted_at is null
-        order by r.created_at desc limit 100
-      `),
-      profile.public_subscriptions
-        ? db.all(sql`
-            select distinct s.id, s.title, s.home_url as "homeUrl", s.description,
-              s.favicon_key as "faviconKey", (s.listing in ${PUBLIC_LISTING}) as listed
-            from subscriptions sub join feeds f on f.id = sub.feed_id join sites s on s.id = f.site_id
-            where sub.user_id = ${id} and sub.deleted_at is null order by s.title
-          `)
-        : db.all(none),
-      // Liked posts only if the member shows them (ADR 0031).
-      profile.public_likes
-        ? db.all(sql`
-            select st.liked_at as "likedAt", s.id as "siteId", s.title as "siteTitle",
-              s.home_url as "homeUrl", (s.listing in ${PUBLIC_LISTING}) as listed,
-              ${SITE_INDEXABLE} as vouched, ${ARTICLE_COLUMNS}, ${TITLES}
-            from user_article_states st join articles a on a.id = st.article_id
-            join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
-            where st.user_id = ${id} and st.liked_at is not null
-            order by st.liked_at desc limit 100
-          `)
-        : db.all(none),
-      db.all(sql`
-        select
-          (select count(*) from follows fo join profiles fp on fp.user_id = fo.followee_id
-            where fo.follower_id = ${id} and fo.deleted_at is null and ${standingOk('fp')})
-            as following,
-          (select count(*) from follows fo join profiles fp on fp.user_id = fo.follower_id
-            where fo.followee_id = ${id} and fo.deleted_at is null and ${standingOk('fp')})
-            as followers,
-          (select count(*) from recommendations where user_id = ${id} and deleted_at is null)
-            as recommendations,
-          (select count(*) from user_article_states where user_id = ${id} and liked_at is not null)
-            as liked
-      `),
-      // Every public blogroll (ADR 0050), the ones the operator hid from Discover too: Hide takes
-      // a blogroll out of Discover, not off its member's profile.
-      db.all(sql`
-        select ${blogrollCard(PROFILE_CARD_BLOGS)}
-        from blogrolls r join profiles p on p.user_id = r.user_id
-        where r.user_id = ${id} and ${isShown('r')}
-        order by r.created_at desc, r.id desc
-      `),
-    ] as never)) as unknown as Record<string, unknown>[][]
-    const count = counts?.[0] ?? {}
-    const shownSubscriptions = profile.public_subscriptions
-      ? (subscriptions ?? []).map((s) => ({ ...s, listed: s.listed === 1 }))
-      : null
-    // The post as the reader holds one, beside the note (or when it was liked) and its blog.
-    const withArticle = (r: Record<string, unknown>) => {
-      const { note, createdAt, likedAt, siteId, siteTitle, homeUrl, listed, vouched, ...article } =
-        r
-      return {
-        ...(likedAt === undefined ? { note, createdAt } : { likedAt }),
-        siteId,
-        siteTitle,
-        homeUrl,
-        listed: listed === 1,
-        // An operator listed the blog: the post's link is followed (ADR 0060).
-        vouched: vouched === 1,
-        article: withTitles(article),
-      }
-    }
-    return c.json(
-      {
-        profile: {
-          // The account id: what a follow names (ADR 0031). It grants nothing on its own.
-          id,
-          handle: profile.handle,
-          displayName: profile.display_name,
-          bio: profile.bio,
-          avatar: profile.avatar,
-          memberSince: profile.created_at,
-          // Whether search engines may index it (ADR 0060).
-          indexable: profile.indexable === 1,
-        },
-        counts: {
-          following: Number(count.following ?? 0),
-          followers: Number(count.followers ?? 0),
-          recommendations: Number(count.recommendations ?? 0),
-          liked: profile.public_likes ? Number(count.liked ?? 0) : null,
-          subscriptions: shownSubscriptions ? shownSubscriptions.length : null,
-        },
-        blogs,
-        recommendations: (recommendations ?? []).map(withArticle),
-        // The member chose to show what they read; a private blog shows no link to its page.
-        subscriptions: shownSubscriptions,
-        liked: profile.public_likes ? (liked ?? []).map(withArticle) : null,
-        blogrolls: (blogrolls ?? []).map(blogrollCardOf),
-      },
-      200,
-      { 'cache-control': PROFILE_CACHE },
-    )
+    const found = await readProfile(deps, c.req.param('handle'))
+    if (!found) return publicNotFound()
+    const { more: _more, ...page } = found
+    return c.json(page, 200, { 'cache-control': PROFILE_CACHE })
   })
 
   /**
