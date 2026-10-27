@@ -19,23 +19,34 @@ Browser ──▶ tela-web (edge, unpinned): static SPA, public pages, /o/* obje
    tela-jobs ──▶ Bailian (translation) · Resend (mail) · healthchecks.io (dead-man's switch)
    apps/relay (Node, HK box, not provisioned until a feed needs it) ◀── signed POST /fetch
 
+Apps ──▶ tela-gateway (edge, unpinned, api.telaread.com): bearer only; /o/*, /img/*, /v1/bodies from R2
+           │ service binding: everything else, as /gateway/*
+           ▼
+         tela-api
+
 tela.ainaive.com, www.telaread.com ──▶ tela-redirect: 301 to the same path on telaread.com; /sw.js the kill switch
 ```
 
 The reader never waits on that picture: every screen renders from the rows the device holds,
-and a sync keeps them current behind it (ADR 0025).
+and a sync keeps them current behind it (ADR 0025). Approved apps work the same way through their
+own API at `api.telaread.com` (ADRs 0064, 0065): `telaread.com` is the origin for people, and
+`api.telaread.com` the origin for apps.
 
 ## Monorepo
 
 ```
 apps/reader       tela-web: the Vite + React SPA (src/) and the edge Worker (worker/);
                   tela-redirect, the old address's Worker (redirect/)
-apps/api          tela-api: Hono, better-auth, sync, every reader RPC
+apps/api          tela-api: Hono, better-auth, sync, every reader RPC; the shared rules (src/core/),
+                  the OAuth server and the API for apps (src/gateway/)
+apps/gateway      tela-gateway: api.telaread.com, the API's bearer-only edge
 apps/jobs         tela-jobs: the sweeps, queue consumers, the Ingest RPC, upkeep, backups, digest
 apps/relay        the China fetch relay, the one Node process (ADR 0008)
 packages/platform the seams: Db, Blobs, Jobs, Clock, Mail; ./cloudflare and ./portable adapters
 packages/data     the SQLite schema, migrations, leases, the sync sequence, queries, backups
 packages/sync     the sync protocol: row types, pull response, mutation schemas, the reducer
+packages/ext      the API for apps, v1: each route's format (zod), the mappers, the opaque cursor
+packages/edge     what both edges serve: content objects, bundles, the image proxy, behind authorize
 packages/content  the content contract: sanitize, blocks, tagged text, hashing, objects
 packages/ingest   fetching: HTTP client, discovery, the ingest pipeline, WebSub, relay client
 packages/llm      translation adapter, prompts, output validation
@@ -82,6 +93,8 @@ epoch milliseconds; arrays read whole are JSON text; every row a device syncs ca
 | `pending_feeds` | An import's feeds new to Tela beyond the member's day, which `member.pendingFeeds` adds on the days after (ADR 0063) |
 | `reports` | Reports of public content (ADR 0059): who reported, what (`target_kind`, `target_key`), why, and where it stands. Not synced |
 | `ops_alerts`, `robots_rules` | Operator mail already sent, one row per alert and day or hour (ADR 0063); a host's robots.txt as Tela last read it, the group that applies to Tela (ADR 0061). Neither is exported |
+| `apps`, `app_grants`, `app_tokens`, `app_refresh_spent`, `app_codes` | Approved apps (ADR 0064, migration 0015), none synced. `apps`: the public `client_id` (`tela_app_…`), name, developer, the contact address the operator writes to, homepage and privacy URLs, `redirect_uris` and `grant_types` (JSON; only `code` is built, `device` is reserved), the ceilings `max_scope` and `allow_email`, which reach live tokens at once, `status` (`draft`, `approved`, `suspended`), `owner_user_id` (the one account a draft connects for) and its limits (`per_member_per_min`, `per_app_per_min`, `max_connections`: null is the default, 0 none). `app_grants`: a member's connection to an app, with the scope and email granted, `last_used_at` (stamped at most hourly) and `ended_at` with its `end_reason`; a partial unique index keeps one live connection per app and member. `app_tokens`: one row per device, its own scope and email, the SHA-256 of its current access and refresh tokens and their ends, `rotated_at`, and `pristine` (neither token used since made: only then is a lost answer swapped again); `kind` is `oauth` (`personal` reserved). `app_refresh_spent`: every refresh hash a device swapped away, so one coming back is reuse. `app_codes`: authorization codes by hash, two minutes, bound to their redirect and PKCE challenge, with the tokens they minted. Tokens, spent hashes and codes are not exported, so apps connect again after a restore |
+| `post_opens` | Posts a member opened in full from blogs they do not subscribe to, one row per `(user_id, day, content_key)` (ADR 0066): what `member.unsubscribedPostsPerDay` counts. Swept after two days, not exported, deleted with the account |
 | `action_limits`, `applied_mutations`, `tombstones`, `counters` | Reader action limits, and sign-in limits per email address; pushed mutation ids (replays change nothing); hard deletes for sync; the `seq` counter |
 
 ## Content pipeline
@@ -188,7 +201,8 @@ ADR 0053).
   a like or a read or unread chosen by hand), then the export and its verification (`backUp`).
   The pruning takes old limits and
   mutation ids, and personal data with no further use: invite holds a day past their expiry,
-  ended sessions, better-auth's counters after a day, and spent sign-in codes and OAuth states.
+  ended sessions, better-auth's counters after a day, spent sign-in codes and OAuth states, and
+  the day before yesterday's `post_opens` (ADR 0066).
 - Mondays (`0 8 * * 1`): the digest, which also counts Discover's review queue (`DISCOVER_REVIEW`
   in `@tela/data`, the console's predicate, ADR 0041). Every five minutes after the tick: the
   health check and the dead-man's ping (`src/ops.ts`). The health check itself is `health()` in
@@ -264,7 +278,12 @@ tela-api is Hono, built by `createApp(deps)` from portable dependencies.
 | `GET /api/v1/following`, `GET /api/v1/sites/:id/followed-readers` | What the people a member follows recommended, liked and subscribed to, thirty entries a page behind a (time, offset, key) cursor, a day's likes grouped and placed at the newest; which of them read a blog. Only as far as each shows it (ADR 0031). Readers to follow come from Discover's pool, matched on the device (ADR 0044): `suggested` is always empty, kept for shells cached before that, which read it |
 | `GET /api/v1/export` | "Your data": the member's own rows as one JSON file, their live blogrolls included, private ones too, with their blogs and notes; their claims, invite codes and who joined by them, the invitation they joined by, read states, and their picture's address (ADR 0058) |
 | `POST /api/v1/account/delete/code`, `POST /api/v1/account/delete` | Closing one's own account (ADR 0058): a code mailed from Tela's own `verification` row (`otpSend`), then the code (`otpVerify`, three tries); refused for an admin. `closeAccount` empties the account in one batch, `closures/<id>` is written to R2 first, and the answer clears the browser's cookies |
-| `GET /api/v1/account/usage` | A member's limits, live (ADR 0063): today's translations against `member.translationsPerDay` and how many wait, today's new feeds and how many wait in `pending_feeds`, subscriptions against the cap; null for an exempt admin |
+| `GET /api/v1/account/usage` | A member's limits, live (ADR 0063): today's translations against `member.translationsPerDay` and how many wait, today's new feeds and how many wait in `pending_feeds`, subscriptions against the cap, and today's posts opened from blogs they do not follow against `member.unsubscribedPostsPerDay` (ADR 0066); null for an exempt admin. `readUsage` in `src/core/usage.ts`, which the API's `/v1/usage` words its own way |
+| `GET /api/v1/articles/:id` | A post by id, as the device holds a synced one (ADR 0066): `{article, feed, site}` in the sync's row shapes, content key included. What a member opens from a public page, whose answers carry no key; the day's limit counts when the body is fetched, not here, since anyone holding a key could skip this route. Reads the member's standing from D1, as a write does |
+| `GET /api/v1/connect/request`, `POST /api/v1/connect/decide` | The consent page's two questions (ADR 0064, `routes/connect.ts`), behind the web's origin, member and client checks, so an app's token never reaches them. The authorization request is checked in an order the page can trust (the client, then the redirect, then the rest: a loopback redirect matches on any port, a registered scheme exactly, `localhost` never) and answered as the page shows it (`ConnectRequest`) or as `{error}`, which the page shows and never redirects on. A draft is offered only to its owner, a suspended app to no one, a full app to no new member. The decision checks it all again and answers `{redirect}`: a new code on approval (single-use, two minutes, bound to the PKCE challenge and the redirect), even for an app already connected (RFC 8252 §8.6); `access_denied` on decline; `iss` either way (RFC 9207). 30 answers an hour per member (`appConnect`) |
+| `GET /api/v1/connections`, `DELETE /api/v1/connections/:id` | Settings → Connected apps, live: each live connection with what it may do now (lowered by the app's ceiling), when it was connected and last used, and how many devices hold tokens; disconnecting ends it and every device's tokens under it in one batch |
+| `POST /api/edge/opens` | tela-web's edge asking whether the session's member may have these posts (ADR 0066, `routes/edge.ts`): `{keys}`, at most 25 content keys, answers `admitOpens`'s `{allowed, refused}`. Outside the `/api/v1/*` member checks, since the edge forwards the member's cookie and nothing else; standing and `is_admin` in one read (a closed or suspended account is a 401; an admin is exempt, on the web only). tela-web answers `/api/edge/*` 404 to browsers, so only the edge reaches it |
+| `/gateway/*` | The API for apps (ADRs 0064, 0065; *The API for apps*, below): the OAuth endpoints and `/v1/*`, bearer tokens only, reached only through tela-gateway |
 | `POST /api/v1/claims/:siteId/release` | The claimant lets a blog go (ADR 0058, `releaseClaim`); its switches stay as they set them |
 | `PUT /api/v1/sites/:id/feed-only` | The claimant's "Only use what my feed provides" (ADR 0061); due extractions of the blog go back to `none` |
 | `POST /api/v1/reports` | A member reports a profile, blogroll, blog or note shown now (ADR 0059); one open report per reporter per target, `report` 20 a day |
@@ -272,7 +291,7 @@ tela-api is Hono, built by `createApp(deps)` from portable dependencies.
 | `GET /api/v1/public/feeds/blogrolls/:id`, `/feeds/discover?topic=` | What tela-web's RSS and OPML are made of (ADR 0062): listed blogs only, every language's current titles at once, none for a blog that opted out of translation |
 | `GET`, `POST /api/admin/settings`, `POST /api/admin/closures` | Bearer `ADMIN_TOKEN`: the runtime settings, read and set as the console's `setting.set` does (ADR 0056); close again the accounts whose closures R2 holds, after a restore (ADR 0058) |
 | `GET /api/v1/public/auth` | Which providers the sign-in sheet may offer, `{google, github}`, each once its app is configured (ADR 0036), and `signup` (`open` or `invite`) and `paused` (the day's new accounts reached `signup.maxPerDay`, ADR 0056); cached 60 s |
-| `/api/v1/public/*` | Discover's Blogs at `/discover`, which the page `/discover/blogs` reads (60 blogs a page, `?page=`, with the `total` its filters match), a blog's page (with its claimant and readers' notes), a profile (with follow counts, its public blogrolls newest first, each with its first three blogs and its count, hidden from Discover or not, and liked posts only if shown): listed and featured blogs only; a page tela-web renders from them keeps its copy per colo for their `s-maxage`. A blog's reader count is given from three readers and is null below, in Discover's order as well as its value (`publicReaderCount`, ADR 0041); member search gives it the same way |
+| `/api/v1/public/*` | Discover's Blogs at `/discover`, which the page `/discover/blogs` reads (60 blogs a page, `?page=`, with the `total` its filters match), a blog's page (with its claimant and readers' notes), a profile (with follow counts, its public blogrolls newest first, each with its first three blogs and its count, hidden from Discover or not, and liked posts only if shown): listed and featured blogs only; a page tela-web renders from them keeps its copy per colo for their `s-maxage`. No public answer, nor the Following feed (other members' posts), carries a content key (`PUBLIC_ARTICLE_COLUMNS`, ADR 0066), for visitors and members alike, so the colo's copy stays one; a member opens such a post through `GET /api/v1/articles/:id`. Search keeps the key: it finds only posts of the member's own feeds A blog's reader count is given from three readers and is null below, in Discover's order as well as its value (`publicReaderCount`, ADR 0041); member search gives it the same way |
 | `GET /api/v1/public/avatars/:userId?v=` | A member's picture, only at the version it is at (ADR 0032, 0033): the one they uploaded, from R2, else their Gravatar while they show it and the check found one, fetched here by the hash of their email, which never leaves tela-api; raster types only, 512 KB, immutable for 30 days; none is a 404 the letter stands in for |
 | `GET /api/v1/public/front` | The front page's edition (ADR 0035): each public blog's newest post, newest first, from the last seven days, or the latest ones when nobody wrote that week, eleven at most, with its titles and translated excerpts, its blog and its claimant; and the counts the copy states, public blogs and the week's distinct blogs, languages and posts. Each blog's newest post is one seek per live feed down `articles_feed_sort_idx`; future-dated posts wait. Cached as a profile is |
 | `GET /api/v1/public/discover/week`, `/articles`, `/readers` | Discover's other tabs (ADR 0044), in `apps/api/src/routes/discover.ts`: one answer for everyone, which the device personalizes from its own rows, so nothing about the viewer is asked. This week: the rolling seven days' recommended posts, the most recommended first, then the newest; the front page's edition beside them (`editionStatement`, shared with `/front`), for the device to fall back on; twelve blogs new in the directory, every listed blog alike, by when it arrived or was claimed and never by an operator's review; and readers to suggest. Articles (`?topic&lang&cursor`): every public post newest first, thirty a page behind a `sortAt:id` cursor cut by key down `articles_sort_idx`, never by offset; the week's recommended, whole, on the first page only; the languages of the last 90 days within the topic. Readers: `readersPool`, the people who recommend or show what they read, in two round trips, each with their newest recommendations as `[articleId, siteId]`, the public blogs they show (null unless they do), their earliest find (by recommendation id, never the device's `at`, from two others after) and their newest note, of posts whose date has come. A post carries its week's recommendations, up to twenty recommender ids and its newest note. Listed and featured blogs, live feeds and posts whose date has come only; no answer says how a blog was listed. Cached as a profile is |
@@ -281,7 +300,7 @@ tela-api is Hono, built by `createApp(deps)` from portable dependencies.
 | `GET /api/v1/public/handles/:handle` | Whether a handle is free, for For writers' card as it is typed: `invalid`, `reserved`, `taken` or `available` (by `@tela/shared`'s rules, read lowercase), and the first free one among it, it plus a digit and it plus `_writes`. `no-store`; a valid shape is counted per IP (`handleCheck`, 300 an hour) |
 | `PUT`, `DELETE /api/v1/avatar` | A member's own picture (ADR 0033): its bytes say what it is (PNG, JPEG or WebP, square, 64–1024 px, 512 KB), kept in R2 `tela-content` under `avatars/<userId>/<random id>.<ext>`, a key never used twice, so a deletion can only take the object its own change replaced; the body is read no further than 512 KB, and twenty an hour are counted before any is read; each change moves the version and deletes the object it replaces |
 | `POST /api/admin/admins` | Bearer `ADMIN_TOKEN`: open or close the admin console to a member (`profiles.is_admin`, ADR 0039); only the token grants it |
-| `/api/v1/admin/*` | The admin console (ADR 0039), for a member with `is_admin`, read from D1 on every call past the signed session copy: `counts` and `overview`; `claims`, `sites`, `feeds`, `discover`, `people`, `invites`, `translation` and `system` as filtered, searched lists (500 rows at most; People and Invitations take a search as a POST body, since it is often an email address and a URL reaches the Workers' logs) and their records; `translation/report` and `system/report`; `POST act` (an action on up to 50 targets, each its own audited batch) and `POST undo` (a group restored only while every target still holds what the action wrote). Discover's `blogrolls` filter and `blogrolls/:id` list public, live blogrolls only, never a private one, with the owner's handle and their visible and total counts; `blogroll.hide` and `blogroll.restore` write `hidden_at` with no `seq` and no `updated_at`, so nothing syncs and the owner is not told (ADR 0050). Under `/api/v1`, never `/api/admin`, so its writes are held to the same origin |
+| `/api/v1/admin/*` | The admin console (ADR 0039), for a member with `is_admin`, read from D1 on every call past the signed session copy: `counts` and `overview`; `claims`, `sites`, `feeds`, `discover`, `people`, `invites`, `apps` (ADR 0064), `translation` and `system` as filtered, searched lists (500 rows at most; People and Invitations take a search as a POST body, since it is often an email address and a URL reaches the Workers' logs) and their records; `translation/report` and `system/report`; `POST act` (an action on up to 50 targets, each its own audited batch) and `POST undo` (a group restored only while every target still holds what the action wrote). Discover's `blogrolls` filter and `blogrolls/:id` list public, live blogrolls only, never a private one, with the owner's handle and their visible and total counts; `blogroll.hide` and `blogroll.restore` write `hidden_at` with no `seq` and no `updated_at`, so nothing syncs and the owner is not told (ADR 0050). Under `/api/v1`, never `/api/admin`, so its writes are held to the same origin |
 | `/api/websub/:feedId` | The hub callback: intent checks, and signed pings that make the feed due |
 | `POST /api/client-errors` | What breaks in a reader's browser (`routes/client-errors.ts`): a render an error boundary caught, an error or rejection left unhandled, a failed boot, a CSP violation, and why a device started over from a snapshot (`restart`, logged apart as `client restart`). No session, so a visitor's page reports too; 8 KB, counted per IP (`clientError`, 30 an hour, and CSP violations apart as `clientCsp`, named in the `x-tela-report` header) before it is read; one log line each (kind, message, stack cut to 4 KB, path, build), with every query string cut first, and nothing stored |
 | `/api/health` | Liveness and D1 latency |
@@ -291,6 +310,20 @@ signed five-minute cookie cache; `/api/v1/account/*` reads it from D1 again, so 
 elsewhere changes nothing there. A closed or suspended account (ADRs 0058, 0059) is refused a
 session (`session.create.before`), and `guarded` reads its standing from D1 on `/me`, the sync,
 the export and every call that writes, answering 401 within the signed copy's five minutes. Reader actions are rate-limited per member (`action_limits`).
+
+**Shared rules** (`src/core/`, ADR 0065). Every rule the web and the API for apps both apply is
+one function that takes an actor (`{userId, exempt}`, `Actor` in `@tela/data`) and returns a plain
+result, never a Response, and never reads a request, a header or `is_admin`: asking for a body
+translation and its status (`requestBodyTranslation`, `translationStatus`), discovering, adding
+and importing feeds (`discoverFeeds`, `addFeedFor`, `importFeeds`), usage (`readUsage`), and the
+public side's reads (`core/public.ts`: `readDiscover`, `readSitePage`, `readProfile`,
+`readBlogroll`, `search`, `readArticle`), which decide inside what may be shown (listing,
+standing, privacy switches, reader counts from three, no translated title of a blog that opted
+out). The pull and the push (`answerPull`, `applyPush`), the limits in `@tela/data`
+(`feedRoom`, `subscriptionRoom`, the translation ask) and `admitOpens` take `exempt` the same
+way. The web's routes pass `exempt` from `is_admin`, read beside the standing the member check
+already reads for every write (`memberStanding`); the API always passes `false`. Each surface
+words the result its own way, so the web's routes stay free to change.
 
 No request body is read past 64 KB, a push past 1 MB (`bodyCap` in `src/app.ts`), a 413
 `too_large` before any route sees it; the picture, an OPML file (1 MB) and a hub's notification
@@ -322,12 +355,25 @@ The only public Worker, unpinned, with no D1.
   what its data's five minutes had left, so the two caches never add up to ten. The app does not
   read that copy: served from it, a member's own claim, hide or follow stayed out of the lists for
   up to five minutes, since nothing they did could tell every list it touched to ask again.
-- `/o/c|t|tc/…` and `/o/bundle` serve immutable objects from R2 to members, cached per colo after
-  the session check; raw HTML (`r/`) and backups are never served.
-- `/img/<contentKey>/<i>` proxies the image the content object names: the object is the
-  allowlist. Raster types only, no SVG, 10 MB, cached for seven days; a failure (the host's
-  error or timeout, a private host, no such image) is cached ten minutes, at the colo and in the
-  browser, so a broken image is not asked for on every view.
+- `/o/c|t|tc/…` and `/o/bundle` serve immutable objects from R2 to members, cached per colo;
+  raw HTML (`r/`) and backups are never served. `/img/<contentKey>/<i>` proxies the image the
+  content object names: the object is the allowlist. Raster types only, no SVG, 10 MB, cached for
+  seven days; a failure (the host's error or timeout, a private host, no such image) is cached ten
+  minutes, at the colo and in the browser, so a broken image is not asked for on every view. Both
+  are `@tela/edge`'s (`packages/edge`), the same handler tela-gateway serves.
+- **Every object and image is decided before it is served** (ADR 0066). `authorize` is the session
+  check, then `POST /api/edge/opens` over the binding with the member's cookie alone, for the
+  content keys this colo has not already allowed the member today. A translation, a chunk or an
+  image is decided by its post's content key, so it costs no place of its own. Each key allowed is
+  kept in the colo until the UTC day ends, under the SHA-256 of the member's id and the day
+  (`createMarks`, with the end checked on read as well as told to the cache), so a body's
+  translations and images cost one cache read, not a round trip to Singapore, and no member id
+  sits in a cache key. The decision runs before the colo's copy of the object is read, so a post
+  refused today is never served from a copy another member put there. A refusal is never kept: a
+  member who subscribes reads the post at once. A refused object or image is a 429 with
+  `Retry-After` and `{error: 'post_limit', limit, resetsAt}`, kept by nobody; a bundle answers
+  `{objects, refused}`, immutable only when it refused nothing. A decision tela-api cannot give is
+  a 503 with `Retry-After`, never an allowance.
 - `/avatar/<userId>?v=<n>` is a member's picture (ADR 0032), from tela-api's
   `/api/v1/public/avatars/:userId`, cached per colo for as long as tela-api says (30 days for a
   picture, since the version is in the address). Public, and it asks tela-api nothing for an
@@ -369,6 +415,88 @@ The only public Worker, unpinned, with no D1.
   with no file is answered 200 with `index.html`, a missing `/assets/*` script included:
   `run_worker_first` is a list, and then the fallback applies to every request, not only
   navigations.
+
+## The API for apps (`apps/gateway`, `apps/api/src/gateway`, `packages/ext`, ADRs 0064, 0065)
+
+Apps the operator approves act for a member at `https://api.telaread.com`, never with a cookie and
+never as an admin. What a developer reads is `docs/api/`.
+
+- **tela-gateway** (`apps/gateway`) is a thin edge Worker on the custom domain, unpinned, with
+  `tela-content` (read-only), the colo cache and the `API` binding to tela-api: no assets, no D1,
+  no vars, no secrets. Every request loses its `Cookie`, and any `Authorization` that is not
+  `Bearer tela_at_…` is refused here with a 401, except on the routes that take no token (`/meta`,
+  `/robots.txt`, `/.well-known/oauth-authorization-server`, `/oauth/*`). Every answer carries
+  `x-robots-tag: noindex`, HSTS and `tela-api-version`, and never a `Set-Cookie`; `/robots.txt`
+  disallows everything. Paths are logged, query strings never.
+  - `/o/*`, `/img/*` and `/v1/bodies?keys=` are served here by `@tela/edge`, as tela-web serves
+    them. `authorize` is `POST /gateway/opens` with the app's token; tela-api's 401, 403, 429 and
+    503 reach the app as they are. An allowed (token, key) is kept 60 s in the colo under the
+    SHA-256 of the token, never the token itself, so an app cut off loses its images within a
+    minute; a refusal is never kept.
+  - The public side (`/v1/discover/*`, `/v1/sites/*`, `/v1/profiles/*`, `/v1/blogrolls/*`) is the
+    same for every viewer, so tela-api's answer is kept five minutes per colo, keyed by path and
+    sorted query and never by token, and served only to a token tela-api accepted in the last
+    minute. Only answers that name `?lang=` are kept (without it, tela-api answers in the member's
+    own reading language), and nothing tela-api marks `private`, `no-store` or `no-cache`.
+  - Everything else goes to tela-api as `/gateway<path>`: outside `/api/`, so tela-web's forward
+    never reaches it, and tela-api keeps no public route (ADR 0024). tela-api not answering is a
+    503 `unavailable` with `Retry-After`.
+- **tela-api's mount** (`src/gateway/`, at `/gateway`): nothing under it reads a cookie or a
+  session, and nothing under `/api/` reads its tokens. Every answer says `tela-api-version` and is
+  `no-store` unless its route says otherwise.
+- **The authorization server** (`gateway/oauth.ts`, `gateway/authorize.ts`, `queries/apps.ts`):
+  OAuth 2.1 for public native clients (RFC 8252), the authorization code with S256 PKCE and
+  nothing else; RFC 7009 revocation, RFC 8414 metadata, RFC 9207 `iss`. The issuer is `API_URL`;
+  the authorization endpoint is the reader's `/connect` (`PUBLIC_URL`), whose questions are
+  `routes/connect.ts`. Every write that decides is one conditional statement or one batch read back
+  through `RETURNING`:
+  - the code exchange spends the code only if it is unspent, unexpired and bound to its client,
+    redirect and verifier, with the app usable, the member in good standing and the connection
+    live, and inserts the device's tokens only if it was spent. A code that comes back with its
+    verifier ends the tokens it made;
+  - a refresh is one conditional swap of both hashes. The hash it replaces goes to
+    `app_refresh_spent`; a spent hash coming back ends the device, except the one swapped away at
+    the device's last rotation, within two minutes, while its replacement is `pristine` (a lost
+    answer);
+  - revocation ends the device whose access or refresh token it is, for that client, and answers
+    200 whatever it found;
+  - the token endpoint counts 30 requests a minute per app and IP (`appToken`), only for a
+    `client_id` that exists, and answers 503 `apps_paused` while `apps.enabled` is off.
+- **The bearer** (`gateway/auth.ts`, `resolveToken`): one batch reads token, connection, app and
+  profile together (the app approved, or a draft of this member's; `apps.enabled` on;
+  `standingOk`), counts the app's requests for this member and in all (`appMember`, `appTotal`, a
+  minute each: the app's own limits, else 120 and 6,000; 0 is none), clears `pristine` and stamps
+  last use at most hourly. Only a token the read accepts counts or stamps anything. The principal
+  (`AppPrincipal`) is the member, the app, the device and a scope, the lower of the token's and
+  the app's `max_scope`, so lowering an app reaches live tokens; email needs both the token's and
+  the app's permission. It holds no admin flag, and every shared rule is called with `exempt:
+  false`. `requireScope('write')` answers 403 `insufficient_scope` with `WWW-Authenticate`.
+- **Formats** (`packages/ext`): each v1 route's request and answer as a zod schema (`./schema`,
+  the source of the OpenAPI document), and the parts an edge may import without zod (`./transform`:
+  the error codes, the row types, the opaque cursor). Conventions are the internal API's (camelCase,
+  epoch milliseconds, integer server ids, string ids a client mints); every enum says whether it
+  is open. The cursor is base64url JSON of the seq, the one reading language and the row types it
+  holds whole; another language, a type it does not cover, or a cursor Tela did not make starts a
+  snapshot. v1's sync sends titles and translation rows in the asked language only, and none of a
+  blog that opted out of translation, so the web's per-language storage (ADR 0052) never reaches
+  apps. Each route's answer is a mapper from a shared function's result, and golden fixtures
+  (`docs/api/`'s examples, checked `.strict()`) pin every route: a change to a shared function
+  that moves v1 fails the suite, and the fix goes in the mapper.
+- **Connections end** wherever Tela ends a member's other sessions, in the same batch
+  (`endConnections`): `endOtherSessions` in `auth.ts` (a password set or changed, a provider
+  linked, sign out everywhere), `onPasswordReset` (better-auth deletes those sessions itself), the
+  console's sign-out and suspension (held to the suspension's own condition with `onlyIf`), and
+  `closeAccount`, so `reapplyClosures` too. A member disconnecting in Settings and the console's
+  *End all connections* (`endAppConnections`, reason `appEnded`) end them too. Cutting an app off
+  ends nothing: its status refuses every token on the next call, and a restore brings it back for
+  those who connected it. A token is read from D1 on every call, so an app stops at once, where a
+  browser's signed session copy lasts five more minutes.
+- **The console's Apps area** (`routes/admin/members/apps.ts`, ADR 0039's framework): `app.create`
+  (a draft, its `tela_app_` client id), `app.edit`, `app.approve`, `app.suspend` (*Cut off*),
+  `app.restore`, each audited with an undo, and `app.endConnections`, one-shot and confirmed. Its
+  settings are checked by `parseAppSettings` (`@tela/shared/admin`), the rule the console's form
+  runs too. An audit row never holds the contact address, and the record counts who connected an
+  app without naming them.
 
 ## The reader (`apps/reader/src`, ADRs 0025, 0026)
 
@@ -443,8 +571,9 @@ A Vite + React SPA that renders from the device.
 | `/search?q=` | The device first, then blogs and older posts from the server |
 | `/add`, `/claim?url=&taken=`, `/sites/:id/claim` | Add feeds and OPML; claim a blog (For writers' card lands on `/claim` with its blog filled in) |
 | `/writers` | For writers: a calling card made as you type, beside a labelled sample (ADR 0037); SPA-only (ADR 0035) |
-| `/settings/:section?` | Profile, Reading, Translation, Subscriptions (with OPML in and out; from `lg` up the manager of `components/subscriptions-manager.tsx`, below it the sections of `components/folders-manage.tsx`, ADR 0049; a folder makes a private blogroll of its blogs from either, ADR 0050), Privacy (with "Your data"); Invites and Account read `/api/v1/invites` and `/api/v1/account` live, not synced rows (`lib/account-api.ts`). Bare `/settings` is the list of sections below `md` and goes to `/settings/profile`, Profile at every width, from it (ADR 0047) |
+| `/settings/:section?` | Profile, Reading, Translation, Subscriptions (with OPML in and out; from `lg` up the manager of `components/subscriptions-manager.tsx`, below it the sections of `components/folders-manage.tsx`, ADR 0049; a folder makes a private blogroll of its blogs from either, ADR 0050), Privacy (with "Your data"), Connected apps (ADR 0064); Connected apps, Invites and Account read `/api/v1/connections`, `/api/v1/invites` and `/api/v1/account` live, not synced rows (`lib/apps-api.ts`, `lib/account-api.ts`). Bare `/settings` is the list of sections below `md` and goes to `/settings/profile`, Profile at every width, from it (ADR 0047) |
 | `/dashboard` | The author's view |
+| `/connect?client_id=&redirect_uri=&…` | Connecting an app (ADR 0064), the OAuth authorization endpoint: the request checked by tela-api, the app and what it asks for, Approve or Decline, then `location.assign` to the answer tela-api gives. A visitor signs in through the sheet and stays here (`STAY_PAGES`). SPA-only and out of `run_worker_first`, so its query reaches no Worker's logs; the plain shell says noindex |
 | `/admin/:area?f=&q=&id=&sort=&dir=` | The admin console (ADR 0039), its own chunk loaded only when an admin opens it, reading tela-api over the network; anyone else sees Not found. The URL alone holds the area, filter, search, open record and sort |
 
 ## Sync (`packages/sync`, `packages/data/src/queries/sync.ts`, `apps/api/src/sync`, ADR 0025)
@@ -518,6 +647,18 @@ A Vite + React SPA that renders from the device.
 - **Every operator change is audited and undone only if nothing moved since:** the audit row is
   read in the change's own batch, and an undo's guards abort its batch through `lease_fence` when
   any target changed after the action.
+- **The API host is bearer-only, and nothing else takes a bearer token** (ADRs 0064, 0065). Cookies
+  are host-only, tela-gateway drops any that come and sets none, and tela-api's `/gateway/*`
+  reads no session; every internal `/api/*` route refuses an app's token (a test walks Hono's
+  route table). better-auth's `bearer` plugin is never enabled.
+- **An app is never an admin:** its principal carries no admin flag, it reaches no admin route,
+  and every shared rule is called for it with `exempt: false`, so an app acting for the operator is
+  held to every member limit, the day's posts included.
+- **Connections end with sessions:** every path that ends a member's other sessions ends their
+  apps' connections and tokens in the same batch, and tokens are read from D1 on every call.
+- **Content keys reach only members** (ADR 0066): no public answer carries one, and every object
+  and image is decided by tela-api (`admitOpens`) before either edge serves it, from R2 or the
+  colo's copy. Tokens, codes and member ids never go into a cache key as they are.
 - **A small count is not published:** below three readers a blog's public count is null, and
   Discover orders it as none, so neither the number nor the order names who reads a blog an
   operator listed from the review queue (ADR 0041), and no public answer carries `listing`. A
@@ -532,7 +673,8 @@ A Vite + React SPA that renders from the device.
 - `bun run test:workers`: the data contract and tela-api's sign-in, push and pull on real D1 in
   workerd.
 - `bun run e2e` (`apps/reader/e2e`): the built reader, tela-api and tela-jobs in one `wrangler dev`
-  on fresh local D1, R2 and queues, against the fixture feed server. Test mode (`ENV=test`) adds
+  on fresh local D1, R2 and queues, and tela-gateway in a `wrangler dev` of its own beside it,
+  against the fixture feed server. Test mode (`ENV=test`) adds
   the sign-in outbox, `POST /api/test/cycle`, which runs tela-jobs' sweeps to completion,
   because local dev fires no crons, and `POST /api/test/age`, which makes a profile older than
   the week a new account waits before Discover suggests it. Service workers are blocked there, except in the
