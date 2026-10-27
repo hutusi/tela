@@ -362,11 +362,22 @@ export async function exchangeCode(
 }
 
 /**
+ * True (as SQL) when `hash` is the refresh token the device, `alias` in the statement, swapped away
+ * last, within the grace, and neither of its replacements has been used since: the answer to that
+ * swap was lost, not stolen. Only the one before the current token: any earlier one is reuse.
+ */
+function lostAnswer(alias: string, hash: string, now: number): SQL {
+  const t = sql.raw(alias)
+  return sql`(${t}.pristine = 1 and exists (select 1 from app_refresh_spent s
+    where s.hash = ${hash} and s.token_id = ${t}.id and s.replaced_at = ${t}.rotated_at
+      and s.replaced_at > ${now - REFRESH_GRACE_MS}))`
+}
+
+/**
  * True (as SQL) for a device's tokens, `alias` in the statement, that the refresh token hashed
  * `hash` may swap now, for `clientId`: live, used within the last 90 days, under a live connection
  * to an app still usable for a member in good standing; and either the device's current refresh
- * token, or one it swapped away within the grace while neither of its replacements has been used
- * since (a lost answer, retried).
+ * token, or a lost answer's (`lostAnswer`), retried.
  */
 function swappable(alias: string, input: { hash: string; clientId: string; now: number }): SQL {
   const t = sql.raw(alias)
@@ -376,10 +387,7 @@ function swappable(alias: string, input: { hash: string; clientId: string; now: 
       join profiles p on p.user_id = g.user_id
       where g.ended_at is null and a.client_id = ${input.clientId}
         and ${usableFor('a', sql`g.user_id`)} and ${standingOk('p')})
-    and (${t}.refresh_hash = ${hash}
-      or (${t}.pristine = 1 and exists (select 1 from app_refresh_spent s
-        where s.hash = ${hash} and s.token_id = ${t}.id
-          and s.replaced_at > ${now - REFRESH_GRACE_MS})))`
+    and (${t}.refresh_hash = ${hash} or ${lostAnswer(alias, hash, now)})`
 }
 
 export type Rotated = { ok: true; tokens: IssuedTokens } | { ok: false; reuse: boolean }
@@ -391,8 +399,8 @@ export type Rotated = { ok: true; tokens: IssuedTokens } | { ok: false; reuse: b
  * 2. One conditional update swaps both hashes (`swappable`), and says through `RETURNING` whether
  *    it did: of two requests racing with one token, exactly one finds the current hash.
  * 3. Otherwise a spent hash coming back ends the device it belonged to (`reuse`): someone else
- *    holds a token the device let go. The one exception is a lost answer: within the grace, and
- *    only while the device's replacement tokens are unused, the spent token is swapped again by
+ *    holds a token the device let go. The one exception is a lost answer: the token swapped away
+ *    last, within the grace, and only while its replacements are unused, is swapped again by
  *    step 2. That exception is also the race's loser: it gets a pair too, and the winner's pair,
  *    replaced before it was used, stops working.
  *
@@ -425,8 +433,7 @@ export async function rotateRefresh(
       update app_tokens set ended_at = ${now}, end_reason = 'reuse'
       where ended_at is null
         and id in (select token_id from app_refresh_spent where hash = ${hash})
-        and not (pristine = 1 and exists (select 1 from app_refresh_spent
-          where hash = ${hash} and replaced_at > ${now - REFRESH_GRACE_MS}))
+        and not ${lostAnswer('app_tokens', hash, now)}
         and not exists (select 1 from app_tokens n where n.refresh_hash = ${pair.refreshHash})
       returning id
     `),

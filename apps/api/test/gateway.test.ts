@@ -335,6 +335,18 @@ describe('refresh rotation', () => {
     expect((await refresh(api, app, kept.refresh_token)).status).toBe(200)
   })
 
+  test('only the token swapped away last is a lost answer: an earlier one is reuse', async () => {
+    const second = await json<TokenAnswer>(await refresh(api, app, first_.refresh_token))
+    api.clock.advance(10_000)
+    // Swapped again, its new pair still unused: the first token is two swaps old.
+    await refresh(api, app, second.refresh_token)
+    api.clock.advance(10_000)
+    expect(await body(await refresh(api, app, first_.refresh_token))).toEqual({
+      error: 'invalid_grant',
+    })
+    expect((await devices()).map((d) => d.end_reason)).toEqual(['reuse'])
+  })
+
   test('ends the device when a spent token comes back after the grace', async () => {
     await refresh(api, app, first_.refresh_token)
     api.clock.advance(REFRESH_GRACE_MS)
