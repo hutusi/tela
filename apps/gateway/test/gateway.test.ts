@@ -161,12 +161,18 @@ describe('every request and answer', () => {
     }
     expect(calls).toEqual([])
     // What tela-api reads itself: its metadata, OAuth's endpoints (form-encoded, no bearer).
-    for (const path of ['/meta', '/.well-known/oauth-authorization-server', '/oauth/token']) {
+    for (const path of [
+      '/meta',
+      '/v1/openapi.json',
+      '/.well-known/oauth-authorization-server',
+      '/oauth/token',
+    ]) {
       const res = await ask(path, { token: null, headers: { authorization: 'Basic eDp5' } })
       expect([path, res.status]).toEqual([path, 200])
     }
     expect(calls.map((c) => [c.path, c.authorization])).toEqual([
       ['/gateway/meta', 'Basic eDp5'],
+      ['/gateway/v1/openapi.json', 'Basic eDp5'],
       ['/gateway/.well-known/oauth-authorization-server', 'Basic eDp5'],
       ['/gateway/oauth/token', 'Basic eDp5'],
     ])

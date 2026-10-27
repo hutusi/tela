@@ -3,8 +3,8 @@
  * of tela-api, bearer-only by construction:
  *
  * - Every request loses its `Cookie`, and any `Authorization` that is not an access token
- *   (`Bearer tela_at_…`) is refused here, except on the routes that take none (`/meta`, OAuth's
- *   own endpoints and metadata, `robots.txt`). Every answer says `noindex`, HSTS and the API's
+ *   (`Bearer tela_at_…`) is refused here, except on the routes that take none (`/meta`, the
+ *   OpenAPI document, OAuth's own endpoints and metadata, `robots.txt`). Every answer says `noindex`, HSTS and the API's
  *   version, and sets no cookie.
  * - Content is served here, from R2 through the colo (`@tela/edge`, the same handler as
  *   tela-web's): `/o/*`, `/img/*` and `/v1/bodies?keys=`. Each is decided first by tela-api
@@ -74,6 +74,7 @@ const ROBOTS = 'User-agent: *\nDisallow: /\n'
 export function takesNoToken(path: string): boolean {
   return (
     path === '/meta' ||
+    path === '/v1/openapi.json' ||
     path === '/robots.txt' ||
     path === '/.well-known/oauth-authorization-server' ||
     path.startsWith('/oauth/')
