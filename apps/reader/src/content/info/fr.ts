@@ -292,8 +292,8 @@ export const fr = {
           { h: 'Ce qu’une application voit' },
           {
             list: [
-              'Lecture seule : vos abonnements et leurs articles, vos surlignages, votre historique de lecture, et les pages publiques de Tela. Elle ne peut rien modifier.',
-              'Lecture et écriture : tout cela, et elle peut faire des changements pour vous : marquer des articles comme lus, s’abonner, ajouter des flux, surligner, et demander des traductions, qui comptent dans vos traductions du jour ([Conditions](/terms#limits)).',
+              'Lecture seule : vos abonnements et vos dossiers, les articles et leur texte en entier, vos coups de cœur, recommandations et surlignages, votre historique de lecture, les personnes que vous suivez, vos préférences de lecture, et les pages publiques de Tela. Elle ne peut rien modifier.',
+              'Lecture et écriture : tout cela, et elle peut faire des changements pour vous : marquer des articles comme lus, donner un coup de cœur, recommander, surligner, s’abonner, ajouter des flux, classer des blogs dans des dossiers, suivre des personnes, changer vos préférences de lecture, et demander des traductions, qui comptent dans vos traductions du jour ([Conditions](/terms#limits)).',
               'Votre adresse e-mail, seulement si l’application la demande, que Tela le lui permet et que vous l’acceptez en la connectant.',
               'Aucune application ne peut supprimer votre compte, changer votre façon de vous connecter, télécharger vos données, ni faire ce que seule la personne qui gère Tela peut faire.',
             ],
@@ -301,7 +301,8 @@ export const fr = {
           { h: 'Ce que Tela garde, et ce que l’application garde' },
           {
             list: [
-              'Tela garde une trace de chaque connexion : l’application, ce que vous lui avez permis, quand vous l’avez connectée, et quand elle a servi pour la dernière fois, à l’heure près. Cette trace est gardée jusqu’à ce que vous déconnectiez l’application, et vous la retrouvez dans Paramètres → Apps connectées.',
+              'Tela garde une trace de chaque connexion : l’application, ce que vous lui avez permis, quand vous l’avez connectée, et quand elle a servi pour la dernière fois. Tela note cette dernière utilisation à l’heure près ; Paramètres → Apps connectées, où vous retrouvez chaque connexion tant qu’elle dure, en affiche le jour.',
+              'Cette trace est gardée jusqu’à la fin de la connexion, quand vous déconnectez l’application ou pour l’une des raisons ci-dessous, puis supprimée 30 jours plus tard.',
               'Ce qu’une application conserve relève de sa propre responsabilité, selon sa politique de confidentialité, que la page où vous la connectez indique.',
               'Déconnecter une application l’arrête aussitôt, sur tous vos appareils. Ce qu’elle a déjà conservé n’est pas supprimé pour autant : demandez-le à l’application.',
               'Toutes les connexions prennent fin quand vous définissez, changez ou réinitialisez votre mot de passe, associez Google ou GitHub, vous déconnectez partout, ou supprimez votre compte. La personne qui gère Tela peut aussi mettre fin aux connexions d’une application, ou l’arrêter pour tout le monde.',
@@ -341,7 +342,7 @@ export const fr = {
               'Cloudflare garde ses journaux de requêtes 7 jours.',
               'Une recommandation, un surlignage ou une blogroll que vous retirez, ou un blog que vous enlevez d’une blogroll, reste dans la base de données, marqué comme retiré et avec son texte, pour que vos autres appareils se mettent à jour. La suppression de votre compte les efface ([voir plus bas](#delete)).',
               'La trace des articles que vous avez ouverts depuis des blogs auxquels vous n’êtes pas abonné est supprimée au bout de deux jours.',
-              'La trace d’une application que vous avez connectée est gardée jusqu’à ce que vous la déconnectiez. Ses jetons ne sont gardés que sous forme d’empreintes.',
+              'La trace d’une application que vous avez connectée est gardée jusqu’à la fin de la connexion, puis supprimée 30 jours plus tard. Ses jetons ne sont gardés que sous forme d’empreintes, et supprimés dès qu’ils ne peuvent plus jamais servir.',
               'Cloudflare conserve un point de restauration de toute la base de données sur 30 jours, et Tela copie la base chaque nuit en gardant chaque copie 30 jours. Ce que vous modifiez ou retirez peut subsister aussi longtemps dans l’un ou l’autre. La copie nocturne exclut les sessions, les codes de connexion, les compteurs d’abus, les jetons des applications et les articles que vous avez ouverts.',
             ],
           },

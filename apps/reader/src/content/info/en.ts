@@ -287,8 +287,8 @@ export const en = {
           { h: 'What an app sees' },
           {
             list: [
-              "Read only: your subscriptions and the posts in them, your highlights, your reading history, and Tela's public pages. It can't change anything.",
-              'Read and write: all of that, and it can make changes for you: mark posts read, subscribe, add feeds, highlight, and ask for translations, which count toward your daily translations ([Terms](/terms#limits)).',
+              "Read only: your subscriptions and folders, posts and their full text, your likes, recommendations and highlights, your reading history, the people you follow, your reading preferences, and Tela's public pages. It can't change anything.",
+              'Read and write: all of that, and it can make changes for you: mark posts read, like, recommend, highlight, subscribe, add feeds, file blogs in folders, follow people, change your reading preferences, and ask for translations, which count toward your daily translations ([Terms](/terms#limits)).',
               'Your email address, only when the app asks for it, Tela allows it, and you agree when you connect it.',
               'No app can delete your account, change how you sign in, download your data, or do anything only the person who runs Tela can.',
             ],
@@ -296,7 +296,8 @@ export const en = {
           { h: 'What Tela keeps, and what the app keeps' },
           {
             list: [
-              'Tela keeps a record of each connection: the app, what you allowed it, when you connected it, and when it was last used, to the hour. The record is kept until you disconnect the app, and you can see it in Settings → Connected apps.',
+              'Tela keeps a record of each connection: the app, what you allowed it, when you connected it, and when it was last used. Tela records the hour it was last used; Settings → Connected apps, where you can see each connection while it lasts, shows the day.',
+              'The record is kept until the connection ends, when you disconnect the app or for one of the reasons below, and deleted 30 days after that.',
               "What an app stores is that app's responsibility, under its own privacy policy, which the page you connect it on links to.",
               "Disconnecting an app stops it at once, on all your devices. It doesn't delete what the app has already stored: ask the app to delete it.",
               "Every connection ends when you set, change or reset your password, link Google or GitHub, sign out everywhere, or delete your account. The person who runs Tela can also end an app's connections, or stop an app for everyone.",
@@ -336,7 +337,7 @@ export const en = {
               'Cloudflare keeps its request logs for 7 days.',
               'A recommendation, highlight or blogroll you remove, or a blog you take out of a blogroll, stays in the database marked as removed, with its text, so your other devices catch up. Deleting your account removes them ([below](#delete)).',
               "The record of which posts you opened from blogs you don't subscribe to is deleted after two days.",
-              'The record of an app you connected is kept until you disconnect it. Its tokens are kept only as hashes.',
+              'The record of an app you connected is kept until the connection ends, and deleted 30 days after that. Its tokens are kept only as hashes, and deleted once they can never be used again.',
               'Cloudflare keeps a 30-day restore point of the whole database, and Tela copies the database every night, keeping each copy 30 days. Something you change or remove can stay in either that long. The nightly copy leaves out sessions, sign-in codes, abuse counters, app tokens and the posts you opened.',
             ],
           },

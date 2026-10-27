@@ -1161,9 +1161,9 @@
     "level": {
       "label": "What it can do",
       "read": "Read only",
-      "readBody": "See your subscriptions, posts, highlights, reading history and public pages. It can’t change anything, or ask for translations.",
+      "readBody": "See your subscriptions and folders, posts and their full text, your likes, recommendations and highlights, your reading history, the people you follow, your reading preferences, and public pages. It can’t change anything, or ask for translations.",
       "write": "Read and write",
-      "writeBody": "See all of that, and change it for you: mark posts read, subscribe, add feeds, highlight, and ask for translations, which count toward your daily translations."
+      "writeBody": "See all of that, and change it for you: mark posts read, like, recommend, highlight, subscribe, add feeds, file blogs in folders, follow people, change your reading preferences, and ask for translations, which count toward your daily translations."
     },
     "email": "Let it see your email address",
     "never": {

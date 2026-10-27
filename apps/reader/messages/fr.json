@@ -1161,9 +1161,9 @@
     "level": {
       "label": "Ce qu’elle peut faire",
       "read": "Lecture seule",
-      "readBody": "Voir vos abonnements, vos articles, vos surlignages, votre historique de lecture et les pages publiques. Elle ne peut rien modifier, ni demander de traductions.",
+      "readBody": "Voir vos abonnements et vos dossiers, les articles et leur texte en entier, vos coups de cœur, recommandations et surlignages, votre historique de lecture, les personnes que vous suivez, vos préférences de lecture, et les pages publiques. Elle ne peut rien modifier, ni demander de traductions.",
       "write": "Lecture et écriture",
-      "writeBody": "Voir tout cela, et le modifier pour vous : marquer des articles comme lus, s’abonner, ajouter des flux, surligner, et demander des traductions, qui comptent dans vos traductions du jour."
+      "writeBody": "Voir tout cela, et le modifier pour vous : marquer des articles comme lus, donner un coup de cœur, recommander, surligner, s’abonner, ajouter des flux, classer des blogs dans des dossiers, suivre des personnes, changer vos préférences de lecture, et demander des traductions, qui comptent dans vos traductions du jour."
     },
     "email": "L’autoriser à voir votre adresse e-mail",
     "never": {

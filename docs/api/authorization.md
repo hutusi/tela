@@ -269,7 +269,9 @@ of posts a device was allowed in the last minute (see [v1.md](v1.md#rate-limits)
 
 The operator lowering your app's level, or taking the email away, reaches live tokens at once: a
 `write` token then acts as `read`. Settings lists each connection with what it may do, when it was
-connected and last used (to the day), and how many devices hold tokens.
+connected and last used, and how many devices hold tokens. Tela records last use to the hour, and
+Settings shows the day. Tela deletes a connection's record 30 days after it ends, and deletes
+tokens once they can never be used again.
 
 ## Errors
 

@@ -29,11 +29,12 @@ route.
 
 An app asks for one of two levels, and the member may lower it:
 
-- **`read`:** see the member's subscriptions, posts, reading state, likes, recommendations,
-  highlights, folders and the people they follow, and browse the public side.
+- **`read`:** see the member's subscriptions and folders, posts and their bodies, reading state,
+  likes, recommendations, highlights, the people they follow and their reading preferences, and
+  browse the public side.
 - **`write`:** all of that, and change it: mark posts read, like, subscribe, add feeds, highlight,
-  recommend, follow, file blogs in folders, and ask for translations (which count toward the
-  member's daily translations).
+  recommend, follow, file blogs in folders, change reading preferences, and ask for translations
+  (which count toward the member's daily translations).
 
 Beside either, an app may ask for **`email`**, the member's address, if the operator allows it.
 
