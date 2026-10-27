@@ -159,7 +159,8 @@ it('connects, resolves, rotates and ends an app on D1', async () => {
       where key like 'appMember.%' or key like 'appTotal:%' order by key`),
   ).toEqual([
     { key: `appMember.1:${ann.id}`, count: 4 },
-    { key: 'appTotal:1', count: 4 },
+    // The call refused for the member's own limit spends none of the app's.
+    { key: 'appTotal:1', count: 3 },
   ])
   // The device was marked used, and when, on it and its connection.
   expect(
