@@ -92,6 +92,18 @@ export const ARTICLE_COLUMNS = sql.raw(`a.id, a.feed_id as "feedId", a.url, a.ti
   a.word_count as "wordCount", a.reading_minutes as "readingMinutes",
   a.extract_state as "extractState", a.like_count as "likeCount",
   a.recommend_count as "recommendCount", a.seq`)
+/**
+ * An article as a public answer, or one about other members, shows it: `ARTICLE_COLUMNS` without
+ * its content key (ADR 0066). The key is what fetches the full post, so it goes only to the
+ * member's own sync and to `GET /api/v1/articles/:id`, where the day's limit on posts from blogs
+ * they do not follow is counted when the body is fetched; a public page cached for everyone, or
+ * walked by a script, hands out none.
+ */
+export const PUBLIC_ARTICLE_COLUMNS = sql.raw(`a.id, a.feed_id as "feedId", a.url, a.title,
+  a.author, a.published_at as "publishedAt", a.fetched_at as "fetchedAt", a.sort_at as "sortAt",
+  a.source_lang as "sourceLang", a.excerpt, a.word_count as "wordCount",
+  a.reading_minutes as "readingMinutes", a.extract_state as "extractState",
+  a.like_count as "likeCount", a.recommend_count as "recommendCount", a.seq`)
 const TITLE = sql.raw(`t.article_id as "articleId", t.lang, t.title, t.excerpt, t.status, t.seq`)
 const STATE = sql.raw(`article_id as "articleId", read_at as "readAt",
   read_updated_at as "readUpdatedAt", liked_at as "likedAt", liked_updated_at as "likedUpdatedAt",

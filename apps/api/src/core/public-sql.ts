@@ -6,10 +6,10 @@
  * disagree about what it is or whether it may be shown, whichever surface answers.
  */
 import {
-  ARTICLE_COLUMNS,
   avatarOf,
   BLOG_NAME,
   inDiscover,
+  PUBLIC_ARTICLE_COLUMNS,
   publicReaderCount,
   standingOk,
   visibleBlogCount,
@@ -202,7 +202,7 @@ export const siteCard = (since: number, now: number): SQL => sql`
  * has. Future-dated posts wait for their date.
  */
 export const editionStatement = (now: number, extras?: SQL): SQL => sql`
-  select ${ARTICLE_COLUMNS}, ${TITLES}, ${EXCERPTS},
+  select ${PUBLIC_ARTICLE_COLUMNS}, ${TITLES}, ${EXCERPTS},
     s.id as "siteId", s.title as "siteTitle", s.home_url as "homeUrl",
     s.favicon_key as "faviconKey", s.primary_lang as "primaryLang", ${SITE_VOUCHED},
     p.handle as "claimantHandle", p.display_name as "claimantName"${extras ? sql`, ${extras}` : sql``}

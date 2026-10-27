@@ -20,6 +20,7 @@ import {
   BLOG_NAME,
   inDiscover,
   isShown,
+  PUBLIC_ARTICLE_COLUMNS,
   publicReaderCount,
   standingOk,
   type TelaDb,
@@ -168,7 +169,7 @@ function discoverPost(row: Row): DiscoverPost {
  * the newest; `filters` narrows them further, over `articles a` and `sites s`.
  */
 const recommendedStatement = (now: number, since: number, filters: SQL, limit: number) => sql`
-  select ${ARTICLE_COLUMNS}, ${TITLES}, ${EXCERPTS}, ${POST_SITE}, ${postExtras(since)}
+  select ${PUBLIC_ARTICLE_COLUMNS}, ${TITLES}, ${EXCERPTS}, ${POST_SITE}, ${postExtras(since)}
   from (select rr.article_id, count(*) as n from recommendations rr
         join profiles rp on rp.user_id = rr.user_id
         where rr.deleted_at is null and rr.created_at >= ${since} and rr.created_at <= ${now}
@@ -265,14 +266,14 @@ export async function readersPool(
         select mine.*, row_number() over (partition by user_id order by later desc, id desc) as k
         from mine where later >= ${sql.raw(String(EARLY_MIN))}
       )
-      select ranked.user_id as "userId", ranked.later as others, ${ARTICLE_COLUMNS}, ${TITLES},
+      select ranked.user_id as "userId", ranked.later as others, ${PUBLIC_ARTICLE_COLUMNS}, ${TITLES},
         ${POST_SITE}
       from ranked join articles a on a.id = ranked.article_id
       join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
       where ranked.k = 1
     `),
     db.all(sql`
-      select x.user_id as "userId", x.note, ${ARTICLE_COLUMNS}, ${TITLES}, ${POST_SITE}
+      select x.user_id as "userId", x.note, ${PUBLIC_ARTICLE_COLUMNS}, ${TITLES}, ${POST_SITE}
       from (
         select r.user_id, r.article_id, r.note,
           row_number() over (partition by r.user_id order by r.id desc) as k
@@ -547,7 +548,7 @@ async function readArticles(
   const first = !cursor && page === 1
   const [posts, recommended, languages] = (await db.batch([
     db.all(sql`
-      select ${ARTICLE_COLUMNS}, ${TITLES}, ${EXCERPTS}, ${POST_SITE}, ${postExtras(since)}
+      select ${PUBLIC_ARTICLE_COLUMNS}, ${TITLES}, ${EXCERPTS}, ${POST_SITE}, ${postExtras(since)}
       from articles a
       join feeds f on f.id = a.feed_id and f.merged_into is null
       join sites s on s.id = f.site_id
@@ -659,7 +660,7 @@ export async function readSitePage(
     // Posts as the reader holds them, so a member can open one from here. A merged feed's
     // posts are duplicates of its target's (ADR 0028).
     db.all(sql`
-      select ${ARTICLE_COLUMNS}, ${TITLES}
+      select ${PUBLIC_ARTICLE_COLUMNS}, ${TITLES}
       from articles a join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
       where f.site_id = ${siteId} and f.merged_into is null and s.listing in ${PUBLIC_LISTING}
       order by a.sort_at desc, a.id desc
@@ -669,7 +670,7 @@ export async function readSitePage(
     // What readers said recommending its posts: recommendations are public (ADR 0031).
     db.all(sql`
       select r.note, r.created_at as "createdAt", p.user_id as "userId", p.handle,
-        p.display_name as "displayName", ${ARTICLE_COLUMNS}, ${TITLES}
+        p.display_name as "displayName", ${PUBLIC_ARTICLE_COLUMNS}, ${TITLES}
       from recommendations r join articles a on a.id = r.article_id
       join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
       join profiles p on p.user_id = r.user_id
@@ -793,7 +794,7 @@ export async function readProfile(
     db.all(sql`
       select r.note, r.created_at as "createdAt", s.id as "siteId", s.title as "siteTitle",
         s.home_url as "homeUrl", (s.listing in ${PUBLIC_LISTING}) as listed,
-        ${SITE_INDEXABLE} as vouched, ${ARTICLE_COLUMNS}, ${TITLES}
+        ${SITE_INDEXABLE} as vouched, ${PUBLIC_ARTICLE_COLUMNS}, ${TITLES}
       from recommendations r join articles a on a.id = r.article_id
       join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
       where r.user_id = ${id} and r.deleted_at is null
@@ -812,7 +813,7 @@ export async function readProfile(
       ? db.all(sql`
           select st.liked_at as "likedAt", s.id as "siteId", s.title as "siteTitle",
             s.home_url as "homeUrl", (s.listing in ${PUBLIC_LISTING}) as listed,
-            ${SITE_INDEXABLE} as vouched, ${ARTICLE_COLUMNS}, ${TITLES}
+            ${SITE_INDEXABLE} as vouched, ${PUBLIC_ARTICLE_COLUMNS}, ${TITLES}
           from user_article_states st join articles a on a.id = st.article_id
           join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
           where st.user_id = ${id} and st.liked_at is not null
