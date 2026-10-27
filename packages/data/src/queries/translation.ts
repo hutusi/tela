@@ -338,13 +338,18 @@ export async function loadBodyTranslationShown(
   lang: string,
 ): Promise<{ translation: BodyTranslationRow | null; optedOut: boolean }> {
   // Every post that has held this content, its current version or an earlier one: a key an
-  // opted-out post moved on from is still that writer's (Codex's review).
-  const on = (optOut: 0 | 1) => sql`exists (select 1 from articles a
-    join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
-    where (a.content_key = b.content_key
-        or exists (select 1 from article_versions v
-          where v.article_id = a.id and v.content_key = b.content_key))
-      and s.translation_opt_out = ${sql.raw(String(optOut))})`
+  // opted-out post moved on from is still that writer's (Codex's review). Two lookups, each
+  // through its own content-key index: one OR inside a single join scanned every article, and a
+  // status poll grew with the catalogue (Codex's second review).
+  const on = (optOut: 0 | 1) => {
+    const opt = sql.raw(String(optOut))
+    return sql`(exists (select 1 from articles a
+        join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
+        where a.content_key = b.content_key and s.translation_opt_out = ${opt})
+      or exists (select 1 from article_versions v join articles a on a.id = v.article_id
+        join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
+        where v.content_key = b.content_key and s.translation_opt_out = ${opt}))`
+  }
   const rows = await db.all<RawBodyTranslation & { opted_out: number }>(sql`
     select b.*, (${on(1)} and not ${on(0)}) as opted_out
     from body_translations b where b.content_key = ${contentKey} and b.lang = ${lang}
