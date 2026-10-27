@@ -888,6 +888,7 @@
       "translation": "语言",
       "subscriptions": "订阅",
       "privacy": "隐私",
+      "apps": "已连接的应用",
       "invites": "邀请",
       "account": "账户"
     },
@@ -1115,6 +1116,93 @@
         "rate_limited": "尝试次数太多，请稍后再试。",
         "failed": "操作没有成功，请重试。"
       }
+    }
+  },
+  "connectedApps": {
+    "intro": "你连接到 Tela 账号的应用，以及每个应用能做什么。每个应用都要先经过 Tela 批准，才能被任何人连接。",
+    "none": "还没有连接任何应用",
+    "noneBody": "其他开发者做的应用可以读取你在 Tela 的内容；如果你允许，还能替你做些更改，比如标记已读。每个应用都要先经过 Tela 批准，才能被任何人连接；从应用里连接时，由你决定它能做什么。",
+    "by": "开发者：{developer}",
+    "level": {
+      "read": "仅读取",
+      "write": "读取和修改"
+    },
+    "levelWithEmail": "{level}，以及你的邮箱地址",
+    "when": "连接于 {since} · {used} · {devices, plural, =0 {没有设备} other {# 台设备}}",
+    "lastUsed": "最近使用于 {date}",
+    "neverUsed": "尚未使用",
+    "disconnect": "断开连接",
+    "confirm": "要断开与 {name} 的连接吗？它会立即在你所有设备上停用。它已经保存的内容仍在它那里，请让应用删除。",
+    "disconnectYes": "断开连接",
+    "cancel": "取消",
+    "more": "<link>应用能看到什么</link>，以及 Tela 为每个连接保存哪些记录。",
+    "errors": {
+      "load": "无法加载已连接的应用，请稍后再试。",
+      "failed": "没能断开连接，请重试。"
+    }
+  },
+  "connect": {
+    "title": "连接应用",
+    "signIn": {
+      "title": "把应用连接到 Tela",
+      "body": "有一个应用请求连接你的 Tela 账号。登录后可以看到它要求的权限。在你同意之前，什么都不会共享。",
+      "logIn": "登录",
+      "join": "加入 Tela"
+    },
+    "draft": "尚未经过 Tela 批准。只有你能连接它，因为它登记在你的账号下，供你测试。",
+    "heading": "把 {app} 连接到你的 Tela 账号？",
+    "by": "开发者：{developer}",
+    "byWithHome": "开发者：{developer} · <home>网站</home>",
+    "account": {
+      "label": "你的账号",
+      "as": "已登录账号",
+      "switch": "换一个账号"
+    },
+    "level": {
+      "label": "它能做什么",
+      "read": "仅读取",
+      "readBody": "查看你的订阅、文章、划线、阅读记录和公开页面。它不能做任何更改，也不能请求翻译。",
+      "write": "读取和修改",
+      "writeBody": "查看上面这些，并替你修改：标记已读、订阅、添加订阅源、划线，以及请求翻译，翻译会计入你每天的翻译次数。"
+    },
+    "email": "允许它查看你的邮箱地址",
+    "never": {
+      "label": "任何应用都不能",
+      "delete": "删除你的账号",
+      "signIn": "更改你的登录方式或密码",
+      "export": "下载你的数据",
+      "admin": "做只有运营 Tela 的人才能做的事"
+    },
+    "returns": {
+      "loopback": "你回答之后，会回到这台电脑上的应用（{target}）。",
+      "scheme": "你回答之后，会回到应用（{target}）。"
+    },
+    "responsibility": "{app} 保存的内容由它自己负责，适用<policy>它的隐私政策</policy>，而不是 Tela 的。",
+    "responsibilityNoPolicy": "{app} 保存的内容由它自己负责，而不是 Tela。它没有向 Tela 提供隐私政策。",
+    "later": "你可以随时在“设置 → 已连接的应用”里断开连接。断开后它会立即停用，但它已经保存的内容不会因此删除。<link>关于应用的更多说明</link>",
+    "approve": "同意",
+    "decline": "拒绝",
+    "sent": {
+      "approved": "{app} 已连接",
+      "declined": "你拒绝了 {app}",
+      "loopback": "浏览器正在返回应用。如果没有反应，请自己切换到应用；这个页面可以关闭了。",
+      "scheme": "浏览器正在请求打开应用。如果没有反应，请自己切换到应用；这个页面可以关闭了。"
+    },
+    "errors": {
+      "title": "这个应用无法连接",
+      "failedTitle": "无法连接到 Tela",
+      "invalid_client": "Tela 不认识这个应用。它可能已被移除，或者把你带到这里的链接有误。",
+      "invalid_redirect": "这个应用要求 Tela 把你送到一个它从未登记过的地址，所以 Tela 不会这样做。",
+      "invalid_request": "应用发来的请求不完整或格式有误。请回到应用里重新连接。",
+      "unsupported_response_type": "应用请求的连接方式 Tela 不提供。",
+      "invalid_scope": "应用请求的权限超出了 Tela 允许的范围。",
+      "app_unavailable": "这个应用现在无法连接：它还没有获得批准，或者已被 Tela 暂停。",
+      "max_connections": "这个应用的连接人数已达到 Tela 目前允许的上限。请稍后再试。",
+      "failed": "请检查网络后重试。",
+      "nothingShared": "什么都没有共享给应用。",
+      "retry": "重试",
+      "toReading": "去阅读",
+      "decideFailed": "你的回答没有送达 Tela。请重试。"
     }
   },
   "search": {

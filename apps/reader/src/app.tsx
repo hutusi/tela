@@ -15,6 +15,7 @@ import { forgetPublic } from './lib/use-public'
 import { AddPage } from './pages/add'
 import { BlogrollPage } from './pages/blogroll'
 import { ClaimPage, ClaimSitePage } from './pages/claim'
+import { ConnectPage } from './pages/connect'
 import { DashboardPage } from './pages/dashboard'
 import { ArticlesPage, BlogsPage, DiscoverHome, ReadersPage } from './pages/discover'
 import { BlogrollsPage } from './pages/discover-blogrolls'
@@ -302,6 +303,16 @@ function Routed({ rendered }: { rendered: string | null }) {
           <div className="flex min-h-full flex-col">
             <Routes>
               <Route path="/login" element={<LoginPage />} />
+              {/* An app's consent page (ADR 0064): a page of its own, like /login, with no
+                  header to wander off from while an app waits for the answer. */}
+              <Route
+                path="/connect"
+                element={
+                  <PageBoundary>
+                    <ConnectPage />
+                  </PageBoundary>
+                }
+              />
               <Route path="/admin/*" element={<AdminGate />} />
               <Route
                 path="*"

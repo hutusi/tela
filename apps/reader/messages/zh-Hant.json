@@ -888,6 +888,7 @@
       "translation": "語言",
       "subscriptions": "訂閱",
       "privacy": "隱私",
+      "apps": "已連線的應用程式",
       "invites": "邀請",
       "account": "帳戶"
     },
@@ -1115,6 +1116,93 @@
         "rate_limited": "嘗試次數太多，請稍後再試。",
         "failed": "操作沒有成功，請重試。"
       }
+    }
+  },
+  "connectedApps": {
+    "intro": "你連線到 Tela 帳號的應用程式，以及每個應用程式能做什麼。每個應用程式都要先經過 Tela 核准，才能被任何人連線。",
+    "none": "還沒有連線任何應用程式",
+    "noneBody": "其他開發者做的應用程式可以讀取你在 Tela 的內容；如果你允許，還能替你做些更改，比如標記已讀。每個應用程式都要先經過 Tela 核准，才能被任何人連線；從應用程式裡連線時，由你決定它能做什麼。",
+    "by": "開發者：{developer}",
+    "level": {
+      "read": "僅讀取",
+      "write": "讀取和修改"
+    },
+    "levelWithEmail": "{level}，以及你的電子郵件地址",
+    "when": "連線於 {since} · {used} · {devices, plural, =0 {沒有裝置} other {# 臺裝置}}",
+    "lastUsed": "最近使用於 {date}",
+    "neverUsed": "尚未使用",
+    "disconnect": "中斷連線",
+    "confirm": "要中斷與 {name} 的連線嗎？它會立即在你所有裝置上停用。它已經儲存的內容仍在它那裡，請讓應用程式刪除。",
+    "disconnectYes": "中斷連線",
+    "cancel": "取消",
+    "more": "<link>應用程式能看到什麼</link>，以及 Tela 為每個連線儲存哪些記錄。",
+    "errors": {
+      "load": "無法載入已連線的應用程式，請稍後再試。",
+      "failed": "沒能中斷連線，請重試。"
+    }
+  },
+  "connect": {
+    "title": "連線應用程式",
+    "signIn": {
+      "title": "把應用程式連線到 Tela",
+      "body": "有一個應用程式請求連線你的 Tela 帳號。登入後可以看到它要求的權限。在你同意之前，什麼都不會共享。",
+      "logIn": "登入",
+      "join": "加入 Tela"
+    },
+    "draft": "尚未經過 Tela 核准。只有你能連線它，因為它登記在你的帳號下，供你測試。",
+    "heading": "把 {app} 連線到你的 Tela 帳號？",
+    "by": "開發者：{developer}",
+    "byWithHome": "開發者：{developer} · <home>網站</home>",
+    "account": {
+      "label": "你的帳號",
+      "as": "已登入帳號",
+      "switch": "換一個帳號"
+    },
+    "level": {
+      "label": "它能做什麼",
+      "read": "僅讀取",
+      "readBody": "檢視你的訂閱、文章、劃線、閱讀記錄和公開頁面。它不能做任何更改，也不能請求翻譯。",
+      "write": "讀取和修改",
+      "writeBody": "檢視上面這些，並替你修改：標記已讀、訂閱、新增訂閱源、劃線，以及請求翻譯，翻譯會計入你每天的翻譯次數。"
+    },
+    "email": "允許它檢視你的電子郵件地址",
+    "never": {
+      "label": "任何應用程式都不能",
+      "delete": "刪除你的帳號",
+      "signIn": "更改你的登入方式或密碼",
+      "export": "下載你的資料",
+      "admin": "做只有運營 Tela 的人才能做的事"
+    },
+    "returns": {
+      "loopback": "你回答之後，會回到這臺電腦上的應用程式（{target}）。",
+      "scheme": "你回答之後，會回到應用程式（{target}）。"
+    },
+    "responsibility": "{app} 儲存的內容由它自己負責，適用<policy>它的隱私政策</policy>，而不是 Tela 的。",
+    "responsibilityNoPolicy": "{app} 儲存的內容由它自己負責，而不是 Tela。它沒有向 Tela 提供隱私政策。",
+    "later": "你可以隨時在「設定 → 已連線的應用程式」裡中斷連線。中斷後它會立即停用，但它已經儲存的內容不會因此刪除。<link>關於應用程式的更多說明</link>",
+    "approve": "同意",
+    "decline": "拒絕",
+    "sent": {
+      "approved": "{app} 已連線",
+      "declined": "你拒絕了 {app}",
+      "loopback": "瀏覽器正在返回應用程式。如果沒有反應，請自己切換到應用程式；這個頁面可以關閉了。",
+      "scheme": "瀏覽器正在請求開啟應用程式。如果沒有反應，請自己切換到應用程式；這個頁面可以關閉了。"
+    },
+    "errors": {
+      "title": "這個應用程式無法連線",
+      "failedTitle": "無法連線到 Tela",
+      "invalid_client": "Tela 不認識這個應用程式。它可能已被移除，或者把你帶到這裡的連結有誤。",
+      "invalid_redirect": "這個應用程式要求 Tela 把你送到一個它從未登記過的地址，所以 Tela 不會這樣做。",
+      "invalid_request": "應用程式發來的請求不完整或格式有誤。請回到應用程式裡重新連線。",
+      "unsupported_response_type": "應用程式請求的連線方式 Tela 不提供。",
+      "invalid_scope": "應用程式請求的權限超出了 Tela 允許的範圍。",
+      "app_unavailable": "這個應用程式現在無法連線：它還沒有獲得核准，或者已被 Tela 暫停。",
+      "max_connections": "這個應用程式的連線人數已達到 Tela 目前允許的上限。請稍後再試。",
+      "failed": "請檢查網路後重試。",
+      "nothingShared": "什麼都沒有共享給應用程式。",
+      "retry": "重試",
+      "toReading": "去閱讀",
+      "decideFailed": "你的回答沒有送達 Tela。請重試。"
     }
   },
   "search": {

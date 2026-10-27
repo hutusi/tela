@@ -55,16 +55,29 @@ export function safeNext(next: string | null, fallback = '/reading'): string {
 }
 
 /**
+ * Pages the sheet keeps whoever it lets in on, query and all: the consent page (`/connect`, ADR
+ * 0064), whose query is the authorization request being answered. Sent to their reading or to
+ * Discover instead, a member would never see what the app asks.
+ */
+export const STAY_PAGES: ReadonlySet<string> = new Set(['/connect'])
+
+/**
  * Where the sheet sends whoever it lets in. One it signs in goes to `next`: the blog a card claims,
  * a log-in's own `next`, or for a joiner Discover. One it finds already a member (`/me` answering
  * while it is open) was not signed in by it, and goes where a member goes: a log-in's `next` still,
- * but a join has nothing to make, so its reading rather than a newcomer's Discover.
+ * but a join has nothing to make, so its reading rather than a newcomer's Discover. On a page in
+ * `STAY_PAGES` (`here`, as the sheet opened on it), everyone it lets in, by any door, stays there.
  */
 export function doorRoutes(
   mode: DoorMode,
   asked: string | null,
   claim: string | null,
+  here?: { pathname: string; search: string },
 ): { next: string; newcomer: string; settledNext: string } {
+  if (!claim && here && STAY_PAGES.has(here.pathname)) {
+    const stay = safeNext(`${here.pathname}${here.search}`)
+    return { next: stay, newcomer: stay, settledNext: stay }
+  }
   const next = claim ?? (mode === 'login' ? safeNext(asked) : NEWCOMER)
   return {
     next,

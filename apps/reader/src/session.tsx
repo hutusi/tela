@@ -28,7 +28,11 @@ type Session = {
   retrying: boolean
   /** After a sign-in: learn who, and start syncing. */
   signedIn(next: string): Promise<SignedIn>
-  signOut(): Promise<void>
+  /**
+   * Sign out, and start again as a guest at `to` ('/' unless a page asks to come back to itself:
+   * the consent page, switching account, keeps the request it answers).
+   */
+  signOut(to?: string): Promise<void>
   /**
    * The account was deleted from this tab (ADR 0058): tela-api has ended the session and cleared
    * its cookies, so there is nothing to send. Forget the copy and start over at `/`.
@@ -266,6 +270,16 @@ export function whenReachable(again: () => void, delay: number): () => void {
 /** The longest signing out waits for the changes still unsent to go (`SyncEngine.flush`). */
 export const SIGN_OUT_FLUSH_MS = 3000
 
+/** Whether `to` is a page on this site as a browser reads it: `//x` and `/\x` are other sites. */
+function sameSite(to: string): boolean {
+  if (!to.startsWith('/') || /[\\\p{Cc}]/u.test(to)) return false
+  try {
+    return new URL(to, window.location.origin).origin === window.location.origin
+  } catch {
+    return false
+  }
+}
+
 /** A signed-out session that never changes: the edge renders public pages for guests with it. */
 export function GuestSession({ children }: { children: React.ReactNode }) {
   const guest: Session = {
@@ -396,31 +410,34 @@ export function SessionProvider({
     [ask, settle, showing],
   )
 
-  const signOut = useCallback(async () => {
-    // What the member did last goes first, a change held for an Undo included, since forgetting
-    // the account drops whatever is unsent. Not for long: offline, signing out goes on without.
-    const epoch = store.epoch
-    await engine.flush(SIGN_OUT_FLUSH_MS)
-    // A push was told that another tab signed in as someone else (api() has sent this tab to
-    // start again as them), or that the session had ended (the tab has forgotten the account):
-    // a sign-out now would name no one, and could end the other account's session.
-    if (store.epoch !== epoch) return
-    engine.stop()
-    // One request names this tab's account and ends the session, so tela-api can refuse it when
-    // another tab has since signed in as someone else: a stale tab must not end their session.
-    // Refused, api() has already sent this tab to start again as them; there is nothing to add.
-    try {
-      await api('/api/auth/sign-out', { method: 'POST', body: {} })
-    } catch (err) {
-      if (err instanceof AccountChanged || err instanceof UpgradeRequired) return
-      // Offline, or signed out already: this tab forgets its account either way.
-    }
-    await store.clear()
-    // A fresh page rather than a state change: the page a member leaves from may be one only
-    // members see, whose gate would send them to sign in again, and nothing this visit held in
-    // memory should outlive the session.
-    window.location.assign('/')
-  }, [engine, store])
+  const signOut = useCallback(
+    async (to?: string) => {
+      // What the member did last goes first, a change held for an Undo included, since forgetting
+      // the account drops whatever is unsent. Not for long: offline, signing out goes on without.
+      const epoch = store.epoch
+      await engine.flush(SIGN_OUT_FLUSH_MS)
+      // A push was told that another tab signed in as someone else (api() has sent this tab to
+      // start again as them), or that the session had ended (the tab has forgotten the account):
+      // a sign-out now would name no one, and could end the other account's session.
+      if (store.epoch !== epoch) return
+      engine.stop()
+      // One request names this tab's account and ends the session, so tela-api can refuse it when
+      // another tab has since signed in as someone else: a stale tab must not end their session.
+      // Refused, api() has already sent this tab to start again as them; there is nothing to add.
+      try {
+        await api('/api/auth/sign-out', { method: 'POST', body: {} })
+      } catch (err) {
+        if (err instanceof AccountChanged || err instanceof UpgradeRequired) return
+        // Offline, or signed out already: this tab forgets its account either way.
+      }
+      await store.clear()
+      // A fresh page rather than a state change: the page a member leaves from may be one only
+      // members see, whose gate would send them to sign in again, and nothing this visit held in
+      // memory should outlive the session. Only a page on this site, whatever `to` says.
+      window.location.assign(to !== undefined && sameSite(to) ? to : '/')
+    },
+    [engine, store],
+  )
 
   const closed = useCallback(async () => {
     // Unsent changes go with the account: there is no one left to apply them to.

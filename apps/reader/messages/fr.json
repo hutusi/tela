@@ -888,6 +888,7 @@
       "translation": "Langue",
       "subscriptions": "Abonnements",
       "privacy": "Confidentialité",
+      "apps": "Apps connectées",
       "invites": "Invitations",
       "account": "Compte"
     },
@@ -1115,6 +1116,93 @@
         "rate_limited": "Trop d’essais. Réessayez plus tard.",
         "failed": "Cela n’a pas fonctionné. Réessayez."
       }
+    }
+  },
+  "connectedApps": {
+    "intro": "Les applications que vous avez connectées à votre compte Tela, et ce que chacune peut faire. Tela approuve chaque application avant que quiconque puisse la connecter.",
+    "none": "Aucune application connectée",
+    "noneBody": "Des applications faites par d’autres développeurs peuvent lire votre Tela et, si vous le leur permettez, faire des changements pour vous, comme marquer des articles comme lus. Tela approuve chacune avant que quiconque puisse la connecter, et vous choisissez ce qu’elle peut faire en la connectant depuis l’application.",
+    "by": "Par {developer}",
+    "level": {
+      "read": "Lecture seule",
+      "write": "Lecture et écriture"
+    },
+    "levelWithEmail": "{level}, et votre adresse e-mail",
+    "when": "Connectée le {since} · {used} · {devices, plural, =0 {aucun appareil} one {# appareil} other {# appareils}}",
+    "lastUsed": "utilisée pour la dernière fois le {date}",
+    "neverUsed": "pas encore utilisée",
+    "disconnect": "Déconnecter",
+    "confirm": "Déconnecter {name} ? Elle cesse aussitôt de fonctionner sur tous vos appareils. Ce qu’elle a déjà conservé reste chez elle : demandez à l’application de le supprimer.",
+    "disconnectYes": "Déconnecter",
+    "cancel": "Annuler",
+    "more": "<link>Ce que les applications peuvent voir</link>, et ce que Tela garde de chaque connexion.",
+    "errors": {
+      "load": "Impossible de charger vos applications connectées. Réessayez plus tard.",
+      "failed": "La déconnexion n’a pas abouti. Réessayez."
+    }
+  },
+  "connect": {
+    "title": "Connecter une application",
+    "signIn": {
+      "title": "Connecter une application à Tela",
+      "body": "Une application demande à se connecter à votre compte Tela. Connectez-vous pour voir ce qu’elle demande. Rien n’est partagé tant que vous n’avez pas dit oui.",
+      "logIn": "Se connecter",
+      "join": "Rejoindre Tela"
+    },
+    "draft": "Pas encore approuvée par Tela. Vous seul pouvez la connecter, car elle est enregistrée sur votre compte pour des essais.",
+    "heading": "Connecter {app} à votre compte Tela ?",
+    "by": "Par {developer}",
+    "byWithHome": "Par {developer} · <home>Site web</home>",
+    "account": {
+      "label": "Votre compte",
+      "as": "Connecté en tant que",
+      "switch": "Utiliser un autre compte"
+    },
+    "level": {
+      "label": "Ce qu’elle peut faire",
+      "read": "Lecture seule",
+      "readBody": "Voir vos abonnements, vos articles, vos surlignages, votre historique de lecture et les pages publiques. Elle ne peut rien modifier, ni demander de traductions.",
+      "write": "Lecture et écriture",
+      "writeBody": "Voir tout cela, et le modifier pour vous : marquer des articles comme lus, s’abonner, ajouter des flux, surligner, et demander des traductions, qui comptent dans vos traductions du jour."
+    },
+    "email": "L’autoriser à voir votre adresse e-mail",
+    "never": {
+      "label": "Aucune application ne peut",
+      "delete": "Supprimer votre compte",
+      "signIn": "Changer votre façon de vous connecter, ni votre mot de passe",
+      "export": "Télécharger vos données",
+      "admin": "Faire ce que seule la personne qui gère Tela peut faire"
+    },
+    "returns": {
+      "loopback": "Une fois votre réponse donnée, vous revenez à l’application sur cet ordinateur ({target}).",
+      "scheme": "Une fois votre réponse donnée, vous revenez à l’application ({target})."
+    },
+    "responsibility": "Ce que {app} conserve relève de sa propre responsabilité, selon <policy>sa politique de confidentialité</policy>, et non de celle de Tela.",
+    "responsibilityNoPolicy": "Ce que {app} conserve relève de sa propre responsabilité, et non de celle de Tela. Elle n’a fourni aucune politique de confidentialité à Tela.",
+    "later": "Vous pouvez la déconnecter à tout moment dans Paramètres → Apps connectées. Elle s’arrête aussitôt, mais ce qu’elle a déjà conservé n’est pas supprimé pour autant. <link>En savoir plus sur les applications</link>",
+    "approve": "Autoriser",
+    "decline": "Refuser",
+    "sent": {
+      "approved": "{app} est connectée",
+      "declined": "Vous avez refusé {app}",
+      "loopback": "Votre navigateur revient à l’application. Si rien ne se passe, passez vous-même à l’application ; vous pouvez fermer cette page.",
+      "scheme": "Votre navigateur demande à ouvrir l’application. Si rien ne se passe, passez vous-même à l’application ; vous pouvez fermer cette page."
+    },
+    "errors": {
+      "title": "Cette application ne peut pas se connecter",
+      "failedTitle": "Impossible de joindre Tela",
+      "invalid_client": "Tela ne connaît pas cette application. Elle a peut-être été retirée, ou le lien qui vous a mené ici est erroné.",
+      "invalid_redirect": "L’application a demandé à Tela de vous envoyer vers une adresse qu’elle n’a jamais enregistrée : Tela ne le fera pas.",
+      "invalid_request": "La demande de l’application est incomplète ou mal formée. Réessayez de vous connecter depuis l’application.",
+      "unsupported_response_type": "L’application demande à se connecter d’une façon que Tela ne propose pas.",
+      "invalid_scope": "L’application demande plus que ce que Tela lui permet.",
+      "app_unavailable": "Cette application ne peut pas être connectée pour l’instant : elle n’est pas encore approuvée, ou Tela l’a suspendue.",
+      "max_connections": "Cette application compte déjà autant de personnes connectées que Tela le permet pour l’instant. Réessayez plus tard.",
+      "failed": "Vérifiez votre connexion et réessayez.",
+      "nothingShared": "Rien n’a été partagé avec l’application.",
+      "retry": "Réessayer",
+      "toReading": "Aller à votre lecture",
+      "decideFailed": "Votre réponse n’est pas parvenue à Tela. Réessayez."
     }
   },
   "search": {
