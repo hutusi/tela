@@ -31,7 +31,9 @@ const RESTORE_CHUNK = 200
 
 /**
  * Not kept: leases, limits and heartbeats are live coordination, rebuilt as work runs; sign-in
- * codes and sessions are credentials, and a restored database signs everyone in again.
+ * codes and sessions are credentials, and a restored database signs everyone in again. Apps'
+ * tokens and codes are credentials too, so a connected app connects again after a restore (ADR
+ * 0064); a day's opened posts are a counter, swept after two days (ADR 0066).
  */
 const SKIPPED = new Set([
   'leases',
@@ -43,6 +45,10 @@ const SKIPPED = new Set([
   'robots_rules',
   'verification',
   'session',
+  'app_tokens',
+  'app_refresh_spent',
+  'app_codes',
+  'post_opens',
 ])
 
 export type BackupTable = {

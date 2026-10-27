@@ -22,7 +22,12 @@ import {
 
 export default async function setup() {
   const context = await request.newContext({ baseURL: BASE })
-  for (const key of ['member.translationsPerDay', 'member.feedsPerDay', 'member.maxSubscriptions'])
+  for (const key of [
+    'member.translationsPerDay',
+    'member.feedsPerDay',
+    'member.maxSubscriptions',
+    'member.unsubscribedPostsPerDay',
+  ])
     await setSetting(context, key, null)
   await signInRequest(context, READER)
   for (const path of ['/hutusi.xml', '/jvns.xml']) await addFeed(context, `${FIXTURES}${path}`)

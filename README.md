@@ -18,11 +18,14 @@ join.
 |---|---|
 | `apps/reader` | The reader, deployed as `tela-web`: a Vite + React SPA that renders from the device and syncs behind, and the edge Worker that serves it (content objects, image proxy, public pages, the `/api` forward) |
 | `apps/api` | The `tela-api` Worker: sign-in, sync, mutations and reader RPCs, pinned beside D1 |
+| `apps/gateway` | The `tela-gateway` Worker at `api.telaread.com`: Tela's API for approved apps, bearer-only, content at the edge and the rest from tela-api |
 | `apps/jobs` | The `tela-jobs` Worker: cron sweeps claim due work under leases, queues fan it out, jobs run pinned beside D1; upkeep, backups, the health check and the weekly digest |
 | `apps/relay` | The China fetch relay: a signed fetch endpoint for an HK or mainland box, the one Node process Tela would run. Not provisioned until a feed needs it |
 | `packages/platform` | The seams (Db, Blobs, Jobs, Clock, Mail) with Cloudflare and portable adapters (ADRs 0020, 0021) |
 | `packages/data` | The SQLite data model for D1 and libSQL: schema, migrations, leases, the sync sequence, queries, the nightly export |
 | `packages/sync` | The sync protocol between the reader and tela-api, and the device's reducer |
+| `packages/ext` | The API for approved apps, v1: each route's documented format, its mappers and the OpenAPI document |
+| `packages/edge` | What both edge Workers serve: content objects, bundles and the image proxy |
 | `packages/content` | The content pipeline: feed parsing, sanitization, block ids and hashing, content objects |
 | `packages/ingest` | Fetching: HTTP client, feed discovery, the ingest pipeline, region routing, WebSub |
 | `packages/llm` | Translation provider adapter, prompts, validation |

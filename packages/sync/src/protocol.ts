@@ -39,8 +39,12 @@ export const TITLE_IDS_MAX = 1000
  * - 4: a body translation may wait for the next UTC day (`dueAt`, ADR 0057), and a refusal says
  *   whose limit it met (`reason`). A protocol-3 shell would poll a waiting row every 1.5 s until
  *   midnight, and word the site's budget as the member's own allowance.
+ * - 5: public answers carry no content key, so a post opened from a public page is fetched by id
+ *   (`GET /api/v1/articles/:id`), and a body may be refused for the day's limit on posts from
+ *   blogs the member does not follow (ADR 0066). A protocol-4 shell would open a public post with
+ *   no body, and retry a refused one on every pull.
  */
-export const MIN_CLIENT = 4
+export const MIN_CLIENT = 5
 /**
  * The first protocol whose clients name the member (`MEMBER_HEADER`). Signing out checks that name
  * from here on, whatever `MIN_CLIENT` has become: a tab told to reload may still sign out, and a

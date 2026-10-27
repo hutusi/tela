@@ -34,6 +34,19 @@
         "wrangler": "^4.143.0",
       },
     },
+    "apps/gateway": {
+      "name": "@tela/gateway",
+      "version": "0.0.0",
+      "dependencies": {
+        "@tela/edge": "workspace:*",
+        "@tela/platform": "workspace:*",
+        "@tela/shared": "workspace:*",
+      },
+      "devDependencies": {
+        "@cloudflare/workers-types": "^5.20260927.1",
+        "wrangler": "^4.143.0",
+      },
+    },
     "apps/jobs": {
       "name": "@tela/jobs",
       "version": "0.0.0",
@@ -137,6 +150,22 @@
         "@vitest/snapshot": "^4.1.0",
         "drizzle-kit": "^0.31.10",
         "vitest": "^4.1.0",
+      },
+    },
+    "packages/edge": {
+      "name": "@tela/edge",
+      "version": "0.0.0",
+      "dependencies": {
+        "@tela/platform": "workspace:*",
+        "@tela/shared": "workspace:*",
+      },
+    },
+    "packages/ext": {
+      "name": "@tela/ext",
+      "version": "0.0.0",
+      "dependencies": {
+        "@tela/shared": "workspace:*",
+        "zod": "^4.5.4",
       },
     },
     "packages/ingest": {
@@ -520,6 +549,12 @@
     "@tela/content": ["@tela/content@workspace:packages/content"],
 
     "@tela/data": ["@tela/data@workspace:packages/data"],
+
+    "@tela/edge": ["@tela/edge@workspace:packages/edge"],
+
+    "@tela/ext": ["@tela/ext@workspace:packages/ext"],
+
+    "@tela/gateway": ["@tela/gateway@workspace:apps/gateway"],
 
     "@tela/ingest": ["@tela/ingest@workspace:packages/ingest"],
 
