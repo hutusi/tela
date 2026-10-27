@@ -34,7 +34,13 @@ import {
   type Waiter,
 } from '@tela/edge'
 import type { Blobs } from '@tela/platform'
-import { ACCESS_TOKEN_PREFIX, API_VERSION_HEADER, apiVersionOf, OPENS_KEYS_MAX } from '@tela/shared'
+import {
+  ACCESS_TOKEN_PREFIX,
+  API_VERSION_HEADER,
+  apiVersionOf,
+  OPENS_KEYS_MAX,
+  TOKEN_ACCEPTED_HEADER,
+} from '@tela/shared'
 
 export type GatewayDeps = {
   blobs: Blobs
@@ -161,10 +167,14 @@ export function createGateway(deps: GatewayDeps) {
     await marks.forget(`gw/token/${who}`, waiter)
   }
 
-  /** What tela-api's answer says of the token: good for a minute, or no good at all. */
+  /**
+   * What tela-api's answer says of the token: good for a minute when tela-api says it resolved it
+   * (`TOKEN_ACCEPTED_HEADER`), or no good at all on a 401. A 2xx alone proves nothing: a route
+   * that takes no token answers one to any made-up token (Codex's review).
+   */
   async function learn(who: string | null, res: Response, waiter?: Waiter): Promise<void> {
     if (who === null) return
-    if (res.ok) await rememberToken(who, waiter)
+    if (res.ok && res.headers.get(TOKEN_ACCEPTED_HEADER) === '1') await rememberToken(who, waiter)
     else if (res.status === 401) await forgetToken(who, waiter)
   }
 
@@ -325,6 +335,9 @@ export function createGateway(deps: GatewayDeps) {
         },
       })
     }
+    // No path of the API needs an escape (handles, ids and keys are plain ASCII), and tela-api's
+    // router decodes one: `/v1/%6fpenapi.json` would reach a route this classifies otherwise.
+    if (path.includes('%')) return json({ error: 'not_found' }, 404)
     if (!servedHere(path) && !forwarded(path)) return json({ error: 'not_found' }, 404)
     // Cookies never cross: host-only cookies should never come here, and none is ever read.
     const headers = new Headers(request.headers)
@@ -371,6 +384,7 @@ export function createGateway(deps: GatewayDeps) {
       // the API it is, by its path: a v1 answer says 1 whatever version is current.
       const response = new Response(answer.body, answer)
       response.headers.delete('set-cookie')
+      response.headers.delete(TOKEN_ACCEPTED_HEADER)
       response.headers.set('x-robots-tag', 'noindex')
       response.headers.set('strict-transport-security', HSTS)
       response.headers.set(API_VERSION_HEADER, String(apiVersionOf(new URL(request.url).pathname)))

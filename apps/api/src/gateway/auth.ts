@@ -5,7 +5,7 @@
  * route takes and which is never admin.
  */
 import { type AppPrincipal, resolveToken } from '@tela/data'
-import type { AppScope } from '@tela/shared'
+import { type AppScope, TOKEN_ACCEPTED_HEADER } from '@tela/shared'
 import type { Context, MiddlewareHandler } from 'hono'
 import type { ApiDeps } from '../deps'
 
@@ -84,7 +84,10 @@ export function bearer(deps: Pick<ApiDeps, 'db' | 'clock'>): MiddlewareHandler<G
       return invalidToken(c, true)
     }
     c.set('app', resolved.principal)
-    return next()
+    await next()
+    // Said only here, after the token resolved: tela-gateway remembers a token as good by this,
+    // never by a 2xx from a route that takes no token.
+    c.res.headers.set(TOKEN_ACCEPTED_HEADER, '1')
   }
 }
 

@@ -91,6 +91,12 @@ export const API_VERSIONS: readonly ApiVersion[] = [
 export const API_CURRENT_VERSION = 1
 /** The response header every API answer carries: `apiVersionOf` its path. */
 export const API_VERSION_HEADER = 'tela-api-version'
+/**
+ * What tela-api adds to an answer once it has resolved the request's access token, and the only
+ * thing tela-gateway takes as proof a token is good: a 2xx alone is not, since a route that takes
+ * no token answers 2xx to any. The gateway removes it before an app sees the answer.
+ */
+export const TOKEN_ACCEPTED_HEADER = 'x-tela-token-accepted'
 
 /**
  * The version an answer on the API host belongs to, from its path: `/v<n>/…` is version n when

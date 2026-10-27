@@ -1,7 +1,14 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 import type { EdgeCache, OpensDecision } from '@tela/edge'
 import { memoryBlobs } from '@tela/platform/portable'
-import { createGateway, DECISION_TTL_MS, PUBLIC_TTL_MS, TOKEN_TTL_MS } from '../src/gateway'
+import { TOKEN_ACCEPTED_HEADER } from '@tela/shared'
+import {
+  createGateway,
+  DECISION_TTL_MS,
+  PUBLIC_TTL_MS,
+  TOKEN_TTL_MS,
+  takesNoToken,
+} from '../src/gateway'
 
 const ORIGIN = 'https://api.telaread.test'
 const TOKEN = `tela_at_${'x'.repeat(43)}`
@@ -98,13 +105,26 @@ beforeEach(async () => {
             )
           }
           const token = (call.authorization ?? '').slice('Bearer '.length)
-          return Response.json(decide(token, (JSON.parse(call.body) as { keys: string[] }).keys))
+          return accepted(
+            Response.json(decide(token, (JSON.parse(call.body) as { keys: string[] }).keys)),
+          )
         }
-        return answer(call)
+        const res = answer(call)
+        // As tela-api's bearer middleware does: a route that resolved a token says so; one that
+        // takes no token (`/meta`, the OpenAPI document, OAuth) never does.
+        return res.ok && !takesNoToken(url.pathname.slice('/gateway'.length)) && call.authorization
+          ? accepted(res)
+          : res
       },
     },
   })
 })
+
+function accepted(res: Response): Response {
+  const out = new Response(res.body, res)
+  out.headers.set(TOKEN_ACCEPTED_HEADER, '1')
+  return out
+}
 
 const ask = (
   path: string,
@@ -371,6 +391,26 @@ describe('the public side', () => {
     expect(forwarded()).toHaveLength(3)
     now = NOW + PUBLIC_TTL_MS
     expect(((await (await ask(page)).json()) as { n: number }).n).toBe(4)
+  })
+
+  test('a made-up token is never taken as good from a route that takes none', async () => {
+    await ask(page)
+    expect(forwarded()).toHaveLength(1)
+    // The OpenAPI document answers 200 to anyone; that proves nothing about the token.
+    expect((await ask('/v1/openapi.json', { token: OTHER_TOKEN })).status).toBe(200)
+    await ask(page, { token: OTHER_TOKEN })
+    expect(forwarded()).toHaveLength(2)
+  })
+
+  test('an escaped path is refused before anything classifies it', async () => {
+    for (const path of ['/v1/%6fpenapi.json', '/v1/discover/%61rticles?lang=en', '/%6deta']) {
+      const res = await ask(path, { token: OTHER_TOKEN })
+      expect([path, res.status]).toEqual([path, 404])
+    }
+    expect(calls).toEqual([])
+    // And tela-api's word never reaches an app.
+    const res = await ask(page)
+    expect(res.headers.get(TOKEN_ACCEPTED_HEADER)).toBeNull()
   })
 
   test('a token tela-api refused is forgotten, and gets nothing the colo kept', async () => {
