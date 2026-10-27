@@ -307,6 +307,43 @@ describe('content at the edge (ADR 0066)', () => {
   })
 })
 
+describe('/meta', () => {
+  const metas = () => calls.filter((c) => c.path === '/gateway/meta')
+
+  test('is kept five minutes per colo, for every caller, token or none', async () => {
+    let n = 0
+    answer = (call) =>
+      Response.json(
+        { path: call.path, n: ++n },
+        { headers: { 'cache-control': 'public, max-age=300' } },
+      )
+    const first = await ask('/meta', { token: null })
+    expect(await first.json()).toEqual({ path: '/gateway/meta', n: 1 })
+    for (const token of [null, TOKEN, OTHER_TOKEN]) {
+      const res = await ask('/meta', { token })
+      expect(res.status).toBe(200)
+      expect(await res.json()).toEqual({ path: '/gateway/meta', n: 1 })
+      expect(res.headers.get('tela-api-version')).toBe('1')
+      expect(res.headers.get('x-tela-until')).toBe(null)
+    }
+    expect(metas()).toHaveLength(1)
+    now = NOW + PUBLIC_TTL_MS
+    expect(((await (await ask('/meta')).json()) as { n: number }).n).toBe(2)
+    expect(metas()).toHaveLength(2)
+  })
+
+  test('is not kept when tela-api fails or marks it as nobody’s to keep', async () => {
+    answer = () => Response.json({ error: 'unavailable' }, { status: 503 })
+    await ask('/meta')
+    await ask('/meta')
+    answer = (call) =>
+      Response.json({ path: call.path }, { headers: { 'cache-control': 'no-store' } })
+    await ask('/meta')
+    await ask('/meta')
+    expect(metas()).toHaveLength(4)
+  })
+})
+
 describe('the public side', () => {
   const page = '/v1/discover/articles?page=2&lang=en'
   const forwarded = () => calls.filter((c) => c.path.startsWith('/gateway/v1/discover/'))

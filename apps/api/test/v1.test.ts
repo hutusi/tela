@@ -106,6 +106,8 @@ describe('scopes', () => {
   test('meta and the OpenAPI document take no token, and every other route does', async () => {
     const meta = await gateway(world.api, '/meta')
     expect(meta.status).toBe(200)
+    // The same for everyone, so the gateway's colo keeps it rather than read D1 each time.
+    expect(meta.headers.get('cache-control')).toBe('public, max-age=300')
     const doc = await gateway(world.api, '/v1/openapi.json')
     expect(doc.status).toBe(200)
     expect(await doc.json()).toEqual(openapiDocument())

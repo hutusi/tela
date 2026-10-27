@@ -13,6 +13,7 @@
  * - The public side (`/v1/discover/*`, `/v1/sites/*`, `/v1/profiles/*`, `/v1/blogrolls/*`) is the
  *   same for every viewer: tela-api's answer is kept five minutes per colo, keyed by path and
  *   query and never by token, and served only to a token tela-api accepted in the last minute.
+ *   `/meta`, which takes no token, is kept five minutes per colo for every caller.
  * - The rest of the API, `/meta` and OAuth's endpoints go to tela-api under `/gateway`
  *   (`/v1/sync` → `/gateway/v1/sync`): outside `/api/`, so nothing tela-web forwards ever reaches
  *   it. Any other path is a 404 here (`forwarded`): `/gateway/opens` is this edge's own question.
@@ -280,7 +281,22 @@ export function createGateway(deps: GatewayDeps) {
     const query = new URLSearchParams(url.searchParams)
     query.sort()
     const key = new Request(`${CACHE_ORIGIN}/gw/public${url.pathname}?${query.toString()}`)
-    if (await tokenKnown(who)) {
+    return throughTheColo(request, url, key, who, await tokenKnown(who), waiter)
+  }
+
+  /**
+   * tela-api's answer through the colo's copy under `key`: the copy while it lasts and `serveKept`
+   * allows, else tela-api's answer, kept `PUBLIC_TTL_MS` when tela-api did not mark it as anyone's.
+   */
+  async function throughTheColo(
+    request: Request,
+    url: URL,
+    key: Request,
+    who: string | null,
+    serveKept: boolean,
+    waiter?: Waiter,
+  ): Promise<Response> {
+    if (serveKept) {
       const hit = await cache.match(key)
       if (hit && Number(hit.headers.get(UNTIL)) > now()) {
         const response = new Response(hit.body, hit)
@@ -328,6 +344,18 @@ export function createGateway(deps: GatewayDeps) {
       if (token === null) return invalidToken(false)
       if (path === '/v1/bodies') return bodies(inbound, url, waiter)
       return (await content.serve(inbound, waiter)) ?? json({ error: 'not_found' }, 404)
+    }
+    // `/meta` takes no token and says the same to everyone: kept per colo for every caller, so
+    // an app starting up reads no D1 (the site's limits it names move by an operator's hand).
+    if (request.method === 'GET' && path === '/meta') {
+      return throughTheColo(
+        inbound,
+        url,
+        new Request(`${CACHE_ORIGIN}/gw/meta`),
+        null,
+        true,
+        waiter,
+      )
     }
     const who = token === null ? null : await sha256Hex(token)
     if (request.method === 'GET' && who !== null && PUBLIC_PATH.test(path)) {

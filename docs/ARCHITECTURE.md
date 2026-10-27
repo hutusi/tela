@@ -438,6 +438,9 @@ never as an admin. What a developer reads is `docs/api/`.
     sorted query and never by token, and served only to a token tela-api accepted in the last
     minute. Only answers that name `?lang=` are kept (without it, tela-api answers in the member's
     own reading language), and nothing tela-api marks `private`, `no-store` or `no-cache`.
+  - `/meta` takes no token and says the same to everyone, so tela-api's answer
+    (`public, max-age=300`) is kept five minutes per colo for every caller, and an app starting up
+    reads no D1.
   - The rest of `/v1/*`, `/meta`, `/oauth/*` and `/.well-known/oauth-authorization-server` go
     to tela-api as `/gateway<path>`: outside `/api/`, so tela-web's forward never reaches it, and
     tela-api keeps no public route (ADR 0024). tela-api not answering is a 503 `unavailable` with

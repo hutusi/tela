@@ -986,8 +986,10 @@ D1, no assets, no vars and no secrets, so nothing in it needs rotating.
   `noindex`, HSTS and `tela-api-version`. `robots.txt` disallows everything.
 - **Caches** (the colo's, purged by nothing): an allowed post per token for 60 s, so an app cut
   off loses its images within a minute; a public answer that names `?lang=` for five minutes, by
-  path and query, served only to a token tela-api accepted in the last minute. A blog hidden or a
-  profile suspended leaves the apps' public pages within those five minutes, as on the web.
+  path and query, served only to a token tela-api accepted in the last minute; and `/meta` for
+  five minutes, for every caller, so an operator's change to a daily limit reaches what it says
+  within those five minutes. A blog hidden or a profile suspended leaves the apps' public pages
+  within those five minutes, as on the web.
 - **Logs:** paths only (`redact_query_string`: a query names content keys and a member's
   searches). Failure signatures:
   - `tela-api unreachable <path>`: the binding failed; apps get 503 `unavailable` with
