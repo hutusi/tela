@@ -15,9 +15,9 @@
  * Apps never import this module; the gateway's handlers, the contract suite and the OpenAPI
  * generator do.
  */
-import { API_VERSION_STATUSES, APP_SCOPES, READING_LANGUAGES } from '@tela/shared'
+import { API_VERSION_STATUSES, APP_SCOPES, BLOGROLL_ID, READING_LANGUAGES } from '@tela/shared'
 import { z } from 'zod'
-import { API_ERRORS, V1_ROW_TYPES } from './transform'
+import { API_ERRORS, V1_PREF_KEYS, V1_ROW_TYPES, type V1PrefKey } from './transform'
 
 const id = z.number().int().positive()
 const time = z.number().int().nonnegative().meta({ description: 'Epoch milliseconds' })
@@ -29,6 +29,12 @@ const language = z.enum(READING_LANGUAGES)
 const url = z.string()
 /** A string a client mints: a mutation, highlight or folder id. */
 const clientId = z.string().min(8).max(40)
+/** A blogroll's id: twelve letters and digits, minted by its member's device. */
+const blogrollId = z.string().regex(BLOGROLL_ID)
+/** A highlight's language: the translation's it was made on; null on the original. */
+const highlightLang = z.string().max(16).nullable().meta({
+  description: 'The translation’s language for a highlight made on one; null on the original',
+})
 
 // ———————————————————————————————————————————— errors
 
@@ -121,12 +127,40 @@ export const profileRowSchema = z.object({
   publicLikes: z.boolean(),
 })
 
-/** Prefs from a documented allowlist only; a key an app does not know, it ignores. */
-export const prefRowSchema = z.object({ key: z.string(), value: z.unknown(), updatedAt: time })
+/**
+ * Each pref v1 speaks (`V1_PREF_KEYS`), with its value's type. Others are never sent, and
+ * `setPref` takes no other.
+ */
+export const prefSchemas = {
+  'reader.hide_read': z
+    .boolean()
+    .meta({ description: 'Lists show unread posts only; default true' }),
+  'reader.mark_on_open': z.boolean().meta({ description: 'Opening a post reads it; default true' }),
+  'translate.auto': z
+    .boolean()
+    .meta({ description: 'A post in another language is translated as it opens; default true' }),
+  'translate.never': z
+    .array(z.string().min(2).max(16))
+    .max(20)
+    .meta({ description: 'Language tags the member reads as written; default none' }),
+} satisfies Record<V1PrefKey, z.ZodType>
+
+/** A pref from the documented allowlist. Open: a key an app does not know, it ignores. */
+const prefRow = <K extends V1PrefKey>(key: K) =>
+  z.object({ key: z.literal(key), value: prefSchemas[key], updatedAt: time })
+export const prefRowSchema = z.discriminatedUnion('key', [
+  prefRow('reader.hide_read'),
+  prefRow('reader.mark_on_open'),
+  prefRow('translate.auto'),
+  prefRow('translate.never'),
+])
 
 export const subscriptionRowSchema = z.object({
   feedId: id,
-  /** Every post of the feed with an id at or below this is read, unless a state says otherwise. */
+  /**
+   * Every post of the feed with an id at or below this is read, unless its state is
+   * `markedUnread` (see `stateRowSchema` for the whole rule).
+   */
   watermarkId: z.number().int().nonnegative(),
   createdAt: time,
   /** Set: unsubscribed. The app drops the feed's posts it does not keep. */
@@ -163,6 +197,8 @@ export const articleRowSchema = z.object({
   title: z.string(),
   author: z.string().nullable(),
   publishedAt: time.nullable(),
+  /** When Tela first fetched it: the horizon (`limits.horizonDays`) counts from here. */
+  fetchedAt: time,
   /** The order lists sort by. */
   sortAt: time,
   sourceLang: z.string().nullable(),
@@ -183,9 +219,18 @@ export const titleRowSchema = z.object({
   excerpt: z.string().nullable(),
 })
 
+/**
+ * The member's read and like state of a post. A post is read when its state's `readAt` is set;
+ * otherwise unread when its state is `markedUnread`; otherwise read when its id is at or below its
+ * subscription's `watermarkId`, or it was fetched (`fetchedAt`) more than `limits.horizonDays`
+ * ago; otherwise, with no state at all included, unread. A post marked unread by hand is sent even
+ * past the horizon, and stays unread until a later read.
+ */
 export const stateRowSchema = z.object({
   articleId: id,
   readAt: time.nullable(),
+  /** True: the member marked it unread by hand, which beats the watermark until a later read. */
+  markedUnread: z.boolean(),
   likedAt: time.nullable(),
 })
 
@@ -201,7 +246,7 @@ export const highlightRowSchema = z.object({
   articleId: id,
   contentKey,
   side: z.enum(['original', 'translation']),
-  lang: z.string(),
+  lang: highlightLang,
   /** A leaf's `data-tb` id in the body. */
   leafId: z.string(),
   /** UTF-16 code units into the leaf's text. */
@@ -306,8 +351,13 @@ export const mutationSchema = z.discriminatedUnion('type', [
   z.object({ ...base, type: z.literal('markAllRead'), feedId: id.optional(), upTo: id }),
   z.object({ ...base, type: z.literal('subscribe'), feedId: id }),
   z.object({ ...base, type: z.literal('unsubscribe'), feedId: id }),
-  /** A key from the documented allowlist, with that key's value type. */
-  z.object({ ...base, type: z.literal('setPref'), key: z.string(), value: z.unknown() }),
+  /** A key from the documented allowlist, with that key's value type (`prefSchemas`). */
+  z.object({
+    ...base,
+    type: z.literal('setPref'),
+    key: z.enum(V1_PREF_KEYS),
+    value: z.unknown(),
+  }),
   /** Null follows the member's interface language. */
   z.object({ ...base, type: z.literal('setReadingLanguage'), language: language.nullable() }),
   z.object({
@@ -324,7 +374,7 @@ export const mutationSchema = z.discriminatedUnion('type', [
     articleId: id,
     contentKey,
     side: z.enum(['original', 'translation']),
-    lang: z.string(),
+    lang: highlightLang,
     leafId: z.string(),
     start: z.number().int().nonnegative(),
     end: z.number().int().nonnegative(),
@@ -492,6 +542,8 @@ export const blogCardSchema = z.object({
 })
 
 export const readerCardSchema = z.object({
+  /** The member's account id: what `follow` and `unfollow` name. It grants nothing on its own. */
+  userId: z.string(),
   handle: z.string(),
   displayName: z.string().nullable(),
   avatar: url.nullable(),
@@ -511,7 +563,7 @@ export const discoverReadersSchema = z.object({ readers: z.array(readerCardSchem
 export const discoverBlogrollsSchema = z.object({
   blogrolls: z.array(
     z.object({
-      id,
+      id: blogrollId,
       name: z.string(),
       description: z.string().nullable(),
       owner: readerCardSchema,
@@ -541,7 +593,7 @@ export const profilePageSchema = z.object({
 })
 
 export const blogrollPageSchema = z.object({
-  id,
+  id: blogrollId,
   name: z.string(),
   description: z.string().nullable(),
   owner: readerCardSchema,
