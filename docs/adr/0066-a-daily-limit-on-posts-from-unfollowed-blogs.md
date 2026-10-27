@@ -24,8 +24,17 @@ is no limit, `0` is none).
   free.
 - **Admins are exempt on the web**, as from every member limit, and never through an app.
 
-100 is more than anyone reads in a day from blogs they don't follow, and it makes copying Tela's
-~6,400 posts take one account over two months.
+100 is more than anyone reads in a day from blogs they don't follow. What it slows is copying by
+browsing public pages: at 100 a day, Tela's ~6,400 posts take one account over two months.
+
+It does not slow copying by subscribing. Subscribing is free, and nothing limits how often a member
+does it beyond the cap on how many feeds they follow at once (`member.maxSubscriptions`, 300). So a
+scraper can subscribe to 300 feeds, fetch all their bodies free, unsubscribe, and do the same with
+the next 300. This limit closes the public-page route only.
+
+**Open question for the owner:** whether to close the subscribing route too, for example with a
+daily limit on new subscriptions, or by treating a subscription as free only once it is a day old.
+Neither is decided here.
 
 **One decision, `admitOpens`, in one batch:**
 
