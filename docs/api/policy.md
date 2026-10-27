@@ -3,10 +3,14 @@
 ## Versions
 
 - **The major version is in the path:** `/v1/…`. Every answer says which version answered it, in
-  `Tela-API-Version`.
+  `Tela-API-Version`: `1` for everything under `/v1/`.
 - **Within a version, changes are additive.** New routes, new fields in an answer, new optional
-  fields in a request, new values of an enum documented as open, and new mutation types announced
-  in `/meta`'s `features`. An app that ignores what it does not know keeps working.
+  fields in a request, new values of an enum documented as open (marked `x-extensible-enum` in
+  [openapi.json](openapi.json)), and new mutation types announced in `/meta`'s `features`. An app
+  that ignores what it does not know keeps working.
+- **New sync row types are opt-in.** A pull that leaves out `types` gets v1's default set, the
+  fourteen types v1 started with, and that set never grows within v1. A type added later is sent
+  only to an app that asks for it by name.
 - **Anything else is a new major version:** a field removed or renamed, a field's meaning or type
   changed, a closed enum changed, a route removed, a limit made stricter in a way an app cannot
   read from `/meta`.
@@ -34,7 +38,8 @@ breaking change. `/meta` and [CHANGELOG.md](CHANGELOG.md) will say so.
   one is deprecated.
 - The old version keeps answering for **12 months after its successor ships**.
 - For at least the last **6 months** of that, its answers carry `Deprecation` (RFC 9745) and
-  `Sunset` (RFC 8594) headers, and `/meta` gives its `sunsetAt`.
+  `Sunset` (RFC 8594) headers, and `/meta` gives its `sunsetAt`. Tela adds these headers when a
+  version is deprecated; none is yet, so no answer carries them today.
 - A security or legal problem may need a change sooner. Tela will explain why, and give as much
   notice as it safely can.
 
