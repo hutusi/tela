@@ -340,14 +340,9 @@ const MEMBER_ROUTES: MemberRoute[] = [
     path: `/api/v1/admin/invites/code:${B_CODE}`,
     effect: 'reads',
   },
-  // Apps (ADR 0064): none is registered here, so a record is not found, past the checks.
+  // Apps (ADR 0064): app 1 is the one the setup registers for the consent routes.
   { route: 'GET /api/v1/admin/apps', path: '/api/v1/admin/apps?f=approved', effect: 'reads' },
-  {
-    route: 'GET /api/v1/admin/apps/:id',
-    path: '/api/v1/admin/apps/1',
-    effect: 'reads',
-    status: 404,
-  },
+  { route: 'GET /api/v1/admin/apps/:id', path: '/api/v1/admin/apps/1', effect: 'reads' },
   {
     route: 'POST /api/v1/admin/apps',
     path: '/api/v1/admin/apps',
