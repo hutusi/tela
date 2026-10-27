@@ -968,8 +968,10 @@ then an "On this page" list that sticks beside the text from `lg`, "The short ve
   the list showed them, then a `surface` card with a hairline that says the limit and when more
   open, in local time ("tomorrow" when the next UTC midnight is), *Subscribe to keep reading* (a
   filled ink pill; *Subscribing…* while tela-api has not answered, after which the post is asked
-  for again) and *Read it on the blog ↗*. No translation bar: nothing is translated, or paid
-  for, until the body comes. The post is asked for again by itself when the day turns.
+  for again) and *Read it on the blog ↗*. No translation bar: a post from a blog the member does
+  not subscribe to asks for no translation, and is not marked read, until its body comes
+  (`lib/open-post.ts`; a subscribed blog's post does both as it opens, as before). The post is
+  asked for again by itself when the day turns.
 - "Older articles" under a list longer than 200.
 - A not-found page (`notFound.*`).
 - A sign-in message for too many tries (`door.errors.rate_limited`), which is not a wrong code.

@@ -92,6 +92,11 @@ type Props = {
   next: { href: string; title: string; lang?: string | undefined; blog: string } | null
   /** What the list it was opened from is called: a phone's back bar goes back to it by name. */
   listName: string
+  /**
+   * Told when the post is there to read: its body is on screen, or it is known to have none. Not
+   * while it loads, failed, or was refused for the day's limit (ADR 0066).
+   */
+  onReadable?: (articleId: number) => void
 }
 
 /**
@@ -106,7 +111,16 @@ const END = 'max-w-[min(680px,var(--reader-measure))]'
 /** The longest a timer is set for: one past 2³¹ ms fires at once. */
 const MAX_TIMER_MS = 2 ** 31 - 1
 
-export function Reader({ article, readingLang, mode, onMode, onClose, next, listName }: Props) {
+export function Reader({
+  article,
+  readingLang,
+  mode,
+  onMode,
+  onClose,
+  next,
+  listName,
+  onReadable,
+}: Props) {
   const t = useTranslations('reader')
   const locale = useLocale()
   const now = useNow()
@@ -172,6 +186,12 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next, list
   useEffect(() => {
     if (loaded) pane.current?.focus({ preventScroll: true })
   }, [loaded])
+  // There to read: the body, or the answer that there is none. What a post from a blog the member
+  // does not subscribe to waits for before opening it reads it (`openMarker`).
+  const readable = loaded && !refused && !bodyFailed
+  useEffect(() => {
+    if (readable) onReadable?.(article.id)
+  }, [readable, onReadable, article.id])
   // Translated on opening, or only once asked (a pref), and never in a language the member reads
   // as written. The Reader is keyed by the article, so asking lasts for this post. A post from a
   // blog the member does not subscribe to is asked for once its body has answered, not refused

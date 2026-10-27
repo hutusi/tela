@@ -26,6 +26,7 @@ import {
   readingHref,
 } from '../lib/href'
 import { effectiveSidebar, gridColumns, toggleFocus, useLayout, useWide } from '../lib/layout'
+import { openMarker } from '../lib/open-post'
 import { PREF_KEYS, readingPrefsOf, useReadingPrefs } from '../lib/prefs'
 import { useTitle } from '../lib/title'
 import { useQuickPull } from '../lib/use-quick-pull'
@@ -36,7 +37,6 @@ import {
   feedTitle,
   folderTree,
   isLiked,
-  isRead,
   isSubscribed,
   type PrefetchPlan,
   prefetchCovers,
@@ -188,12 +188,16 @@ export function ReadingPage() {
 
   // Opening an article reads it, unless the member marks posts read themselves (a pref). Once per
   // open, so a post the member marks unread while it is open stays unread until the next open; one
-  // marked unread before is read by opening it, like any unread post.
+  // marked unread before is read by opening it, like any unread post. A post from a blog the member
+  // does not subscribe to is read once its body is there (the Reader's `onReadable`): one refused
+  // for the day's limit (ADR 0066) has nothing read, and stays unread.
   const articleId = article?.id ?? null
+  const marker = useMemo(() => openMarker(store), [store])
   // biome-ignore lint/correctness/useExhaustiveDependencies: once per article opened
   useEffect(() => {
-    if (!article || !prefs.markOnOpen || isRead(tables, article, Date.now())) return
-    store.mutate({ type: 'markRead', articleId: article.id })
+    if (article) marker.opened(article)
+    // Run before the next article's effects, the Reader's among them, in the same commit.
+    return () => marker.left()
   }, [articleId])
 
   // A new article opens at its top (the Reader moves focus into it once its body is there).
@@ -501,6 +505,7 @@ export function ReadingPage() {
             onClose={close}
             next={next}
             listName={listName}
+            onReadable={marker.readable}
           />
         </ErrorBoundary>
       ) : open && !synced ? (
