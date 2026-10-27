@@ -274,6 +274,28 @@ describe('the device store', () => {
     expect(store.getSnapshot().tables.states.get(7)).toBeUndefined()
   })
 
+  test('a change is unanswered until the server acknowledges or refuses it, held ones before it too', async () => {
+    const store = await member()
+    // A change held for an Undo keeps everything made after it from going (`unsent`).
+    store.mutate({ type: 'markRead', articleId: 7 }, { holdMs: 5000 })
+    const liked = store.mutate({ type: 'setLiked', articleId: 8, liked: true })
+    const subscribed = store.mutate({ type: 'subscribe', feedId: 2 })
+    expect(store.unsent()).toEqual([])
+    expect(store.unanswered(subscribed?.mid ?? '')).toBe(true)
+    store.releaseHolds()
+    await store.acknowledge(
+      {
+        applied: [subscribed?.mid ?? ''],
+        rejected: [{ mid: liked?.mid ?? '', error: 'invalid' }],
+        seq: 9,
+      },
+      store.epoch,
+    )
+    expect(store.unanswered(subscribed?.mid ?? '')).toBe(false)
+    expect(store.unanswered(liked?.mid ?? '')).toBe(false)
+    expect(store.unanswered('never-made')).toBe(false)
+  })
+
   test('a pull rewrites only the tables it touched', async () => {
     const storage = recording()
     const store = await member(storage)

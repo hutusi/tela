@@ -684,6 +684,15 @@ export class LocalStore {
   }
 
   /**
+   * Whether the server has yet to answer for the change stamped `mid`: made here, and neither
+   * acknowledged nor refused. Not `unsent`, which stops at the first change held for an Undo and
+   * so leaves out a change queued behind it that has not gone either.
+   */
+  unanswered(mid: string): boolean {
+    return this.pending.some((p) => p.mutation.mid === mid && p.ackedAt === undefined)
+  }
+
+  /**
    * Record the answer to a push sent in `epoch`, unless the tab has stopped holding those rows
    * since: acknowledged ones wait for a pull; refused ones are undone.
    */

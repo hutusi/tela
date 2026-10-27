@@ -219,7 +219,18 @@
     "likeCount": "Like · {n}",
     "likedCount": "Liked · {n}",
     "original": "Original",
-    "backTo": "Back to {list}"
+    "backTo": "Back to {list}",
+    "postLimit": {
+      "title": "You’ve reached today’s limit",
+      "limit": "You can open {n, plural, one {# post} other {# posts}} a day in full from blogs you don’t subscribe to, and any number from blogs you do.",
+      "limitUnknown": "You can open a few posts a day in full from blogs you don’t subscribe to, and any number from blogs you do.",
+      "againToday": "You can open more after {time}.",
+      "againTomorrow": "You can open more tomorrow, after {time}.",
+      "line": "{limit} {again}",
+      "subscribe": "Subscribe to keep reading",
+      "subscribing": "Subscribing…",
+      "onBlog": "Read it on the blog"
+    }
   },
   "add": {
     "title": "Add a blog",

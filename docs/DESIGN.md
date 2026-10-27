@@ -963,6 +963,13 @@ then an "On this page" list that sticks beside the text from `lg`, "The short ve
 - A body that could not be fetched says so where the text would be, with *Try again* and *Open
   the original ↗*, and asks again by itself once back online; only a post whose feed carries no
   text says it "has no readable content".
+- A body refused for the day's limit on blogs the member does not subscribe to (ADR 0066) is not
+  an error either (`reader.postLimit.*`, `components/post-limit.tsx`): the title and excerpt as
+  the list showed them, then a `surface` card with a hairline that says the limit and when more
+  open, in local time ("tomorrow" when the next UTC midnight is), *Subscribe to keep reading* (a
+  filled ink pill; *Subscribing…* while tela-api has not answered, after which the post is asked
+  for again) and *Read it on the blog ↗*. No translation bar: nothing is translated, or paid
+  for, until the body comes. The post is asked for again by itself when the day turns.
 - "Older articles" under a list longer than 200.
 - A not-found page (`notFound.*`).
 - A sign-in message for too many tries (`door.errors.rate_limited`), which is not a wrong code.

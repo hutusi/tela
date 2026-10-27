@@ -219,7 +219,18 @@
     "likeCount": "喜欢 · {n}",
     "likedCount": "已喜欢 · {n}",
     "original": "原文",
-    "backTo": "返回{list}"
+    "backTo": "返回{list}",
+    "postLimit": {
+      "title": "今天的篇数已达上限",
+      "limit": "未订阅的博客每天可以完整打开 {n} 篇文章，已订阅的博客不限篇数。",
+      "limitUnknown": "未订阅的博客每天可以完整打开几篇文章，已订阅的博客不限篇数。",
+      "againToday": "{time} 之后可以再打开。",
+      "againTomorrow": "明天 {time} 之后可以再打开。",
+      "line": "{limit}{again}",
+      "subscribe": "订阅以继续阅读",
+      "subscribing": "正在订阅…",
+      "onBlog": "去博客阅读"
+    }
   },
   "add": {
     "title": "添加博客",

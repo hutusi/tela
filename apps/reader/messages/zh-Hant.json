@@ -219,7 +219,18 @@
     "likeCount": "喜歡 · {n}",
     "likedCount": "已喜歡 · {n}",
     "original": "原文",
-    "backTo": "返回{list}"
+    "backTo": "返回{list}",
+    "postLimit": {
+      "title": "今天的篇數已達上限",
+      "limit": "未訂閱的部落格每天可以完整開啟 {n} 篇文章，已訂閱的部落格不限篇數。",
+      "limitUnknown": "未訂閱的部落格每天可以完整開啟幾篇文章，已訂閱的部落格不限篇數。",
+      "againToday": "{time} 之後可以再開啟。",
+      "againTomorrow": "明天 {time} 之後可以再開啟。",
+      "line": "{limit}{again}",
+      "subscribe": "訂閱以繼續閱讀",
+      "subscribing": "正在訂閱…",
+      "onBlog": "去部落格閱讀"
+    }
   },
   "add": {
     "title": "新增部落格",

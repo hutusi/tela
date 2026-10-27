@@ -219,7 +219,18 @@
     "likeCount": "J’aime · {n}",
     "likedCount": "Vous aimez · {n}",
     "original": "Original",
-    "backTo": "Retour à {list}"
+    "backTo": "Retour à {list}",
+    "postLimit": {
+      "title": "Vous avez atteint la limite du jour",
+      "limit": "Vous pouvez ouvrir en entier {n, plural, one {# article} other {# articles}} par jour des blogs hors de vos abonnements, et sans limite ceux de vos abonnements.",
+      "limitUnknown": "Vous pouvez ouvrir en entier quelques articles par jour des blogs hors de vos abonnements, et sans limite ceux de vos abonnements.",
+      "againToday": "Vous pourrez en ouvrir d’autres après {time}.",
+      "againTomorrow": "Vous pourrez en ouvrir d’autres demain, après {time}.",
+      "line": "{limit} {again}",
+      "subscribe": "S’abonner pour continuer",
+      "subscribing": "Abonnement en cours…",
+      "onBlog": "Le lire sur le blog"
+    }
   },
   "add": {
     "title": "Ajouter un blog",
