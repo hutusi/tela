@@ -340,6 +340,20 @@ const MEMBER_ROUTES: MemberRoute[] = [
     path: `/api/v1/admin/invites/code:${B_CODE}`,
     effect: 'reads',
   },
+  // Apps (ADR 0064): none is registered here, so a record is not found, past the checks.
+  { route: 'GET /api/v1/admin/apps', path: '/api/v1/admin/apps?f=approved', effect: 'reads' },
+  {
+    route: 'GET /api/v1/admin/apps/:id',
+    path: '/api/v1/admin/apps/1',
+    effect: 'reads',
+    status: 404,
+  },
+  {
+    route: 'POST /api/v1/admin/apps',
+    path: '/api/v1/admin/apps',
+    body: () => ({ f: 'draft', q: 'loom' }),
+    effect: 'reads',
+  },
   {
     route: 'POST /api/v1/mutations',
     path: '/api/v1/mutations',

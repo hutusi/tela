@@ -64,3 +64,22 @@ describe('what actions write', () => {
     ])
   })
 })
+
+describe('an app’s actions (ADR 0064)', () => {
+  test('approve, cut off and restore stand in each other’s way; an edit only in its own', () => {
+    expect(actionsCrossing('app.suspend').sort()).toEqual([
+      'app.approve',
+      'app.restore',
+      'app.suspend',
+    ])
+    expect(actionsCrossing('app.edit')).toEqual(['app.edit'])
+    // A feed's pause writes its own status, never an app's.
+    expect(actionsCrossing('feed.pause')).not.toContain('app.suspend')
+  })
+
+  test('ending the connections is one-shot: nothing gives a member’s grant back', () => {
+    expect(UNDOABLE_ACTIONS).not.toContain('app.endConnections' as never)
+    expect(writesOf('app.endConnections')).toEqual([])
+    expect(ADMIN_FILTERS.apps[0]).toBe('approved')
+  })
+})

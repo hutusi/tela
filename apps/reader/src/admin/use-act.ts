@@ -20,6 +20,14 @@ export type Prompt = {
   where: PromptPlace
   /** Words already given (a record's own act with arguments): only the yes is asked. */
   args?: AdminActArgs
+  /** What the question starts from, where it edits what is there: an app's settings. */
+  initial?: AdminActArgs
+}
+
+/** The name an app is being registered under, for the toast that says it was. */
+const appName = (app: unknown): string | null => {
+  const name = (app as { name?: unknown } | null | undefined)?.name
+  return typeof name === 'string' && name.trim() ? name.trim() : null
 }
 
 export type Acted = { action: AdminActionName; ids: string[]; done: string[] }
@@ -58,7 +66,8 @@ export function useAdminAct(options: {
       try {
         const response = await adminAct({ action, ids, ...(args ? { args } : {}) })
         const titleOf = (id: string) =>
-          latest.current.titleOf(id) ?? (id === '' ? (args?.code ?? args?.email ?? null) : null)
+          latest.current.titleOf(id) ??
+          (id === '' ? (args?.code ?? args?.email ?? appName(args?.app)) : null)
         admin.say(actMessage(t, { action, response, titleOf, words }), {
           undo: response?.undo?.group ?? null,
           error: !response || response.done.length === 0,

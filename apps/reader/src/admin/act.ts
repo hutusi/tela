@@ -29,6 +29,8 @@ const DANGER: ReadonlySet<AdminActionName> = new Set([
   'claim.remove',
   'code.revoke',
   'hold.cancel',
+  'app.suspend',
+  'app.endConnections',
 ])
 
 /**

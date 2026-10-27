@@ -354,7 +354,8 @@ export function Ledger({
       const now = parseLedgerState(area, new URLSearchParams(window.location.search))
       if (now.id !== row.id) go({ id: row.id })
       focus(row.id)
-      setPrompt({ action, ids: [row.id], where: 'record' })
+      const initial = specRef.current.initial?.(row, action)
+      setPrompt({ action, ids: [row.id], where: 'record', ...(initial ? { initial } : {}) })
     },
     [area, busy, run, go, focus, setPrompt],
   )

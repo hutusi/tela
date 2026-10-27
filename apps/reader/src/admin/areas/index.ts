@@ -1,6 +1,7 @@
 /** Every ledger area's hook, by area. The shell calls the one the address names. */
 import type { LedgerArea } from '@tela/shared/admin'
 import type { AnyAreaSpec } from '../area'
+import { useAppsArea } from './apps'
 import { useClaimsArea } from './claims'
 import { useDiscoverArea } from './discover'
 import { useFeedsArea } from './feeds'
@@ -20,6 +21,7 @@ export const AREA_HOOKS: Record<LedgerArea, () => AnyAreaSpec | null> = {
   discover: useDiscoverArea,
   people: usePeopleArea,
   invites: useInvitesArea,
+  apps: useAppsArea,
   translation: useTranslationArea,
   system: useSystemArea,
   settings: useSettingsArea,

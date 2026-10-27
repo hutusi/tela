@@ -7,7 +7,7 @@ export const NAV: readonly { group: NavGroup | null; areas: readonly AdminArea[]
   { group: null, areas: ['overview'] },
   { group: 'queues', areas: ['claims', 'reports'] },
   { group: 'library', areas: ['sites', 'feeds', 'discover'] },
-  { group: 'members', areas: ['people', 'invites'] },
+  { group: 'members', areas: ['people', 'invites', 'apps'] },
   { group: 'running', areas: ['translation', 'system', 'settings'] },
 ]
 
@@ -20,6 +20,7 @@ export const AREA_GROUP: Record<LedgerArea, NavGroup> = {
   discover: 'library',
   people: 'members',
   invites: 'members',
+  apps: 'members',
   translation: 'running',
   system: 'running',
   settings: 'running',

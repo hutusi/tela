@@ -165,5 +165,106 @@
     "entries": "檢舉",
     "gonePerson": "帳戶已不存在的成員",
     "from": "來自 {url}"
+  },
+  "apps": {
+    "filters": {
+      "approved": "已核准",
+      "draft": "草稿",
+      "suspended": "已停用"
+    },
+    "search": "按名稱、開發者、客戶端 ID 或電子郵件搜尋",
+    "name": "應用程式",
+    "columns": {
+      "developer": "開發者",
+      "connected": "已連線",
+      "lastUsed": "最近使用"
+    },
+    "status": {
+      "approved": "已核准",
+      "draft": "草稿",
+      "suspended": "已停用"
+    },
+    "connected": "{n, plural, =0 {無人} other {# 位成員}}",
+    "never": "從未",
+    "noOwner": "無",
+    "scope": {
+      "read": "僅讀取",
+      "write": "讀取和修改"
+    },
+    "email": {
+      "allowed": "可以請求檢視",
+      "never": "從不請求"
+    },
+    "limit": {
+      "default": "每分鐘 {n} 次（預設）",
+      "perMinute": "{n, plural, =0 {不允許} other {每分鐘 # 次}}",
+      "noCap": "不限"
+    },
+    "kv": {
+      "clientId": "客戶端 ID",
+      "developer": "開發者",
+      "contact": "聯絡電子郵件",
+      "homepage": "主頁",
+      "privacy": "隱私政策",
+      "scope": "最多",
+      "email": "電子郵件地址",
+      "owner": "所屬帳號",
+      "perMember": "每位成員",
+      "perApp": "合計",
+      "maxConnections": "連線上限",
+      "connections": "當前連線",
+      "lastUsed": "最近使用",
+      "registered": "登記於",
+      "approved": "核准於",
+      "suspended": "停用於"
+    },
+    "redirects": "重新導向網址",
+    "notes": {
+      "draft": "草稿：只有所屬帳號能連線，供開發者測試。核准後所有成員都能連線。",
+      "approved": "所有成員都能連線。降低它的權限或收回電子郵件權限，會立即作用於它現有的權杖。",
+      "suspended": "已停用：它持有的所有權杖都會被拒絕。連線會保留，恢復後已連線的成員可以繼續使用。",
+      "private": "後臺只統計有多少人連線了應用程式，不會顯示是誰。"
+    },
+    "history": {
+      "created": "已登記",
+      "ended": "中斷了 {n, plural, other {# 個連線}}"
+    },
+    "form": {
+      "name": "名稱",
+      "developer": "開發者",
+      "contactEmail": "聯絡電子郵件",
+      "contactHint": "用於溝通核准、變更和停用事宜。成員看不到。",
+      "homepageUrl": "主頁",
+      "privacyUrl": "隱私政策",
+      "urlHint": "都必須是 https 地址，會顯示在成員連線應用程式的頁面上。",
+      "redirectUris": "重新導向網址",
+      "redirectHint": "每行一個，最多 {n} 個：http://127.0.0.1/… 或 http://[::1]/…（任意埠均可），或應用程式自己的協議，例如 com.example.app:/callback。不能用 localhost。",
+      "maxScope": "最多可以請求的權限",
+      "allowEmail": "可以請求檢視成員的電子郵件地址",
+      "owner": "所屬帳號的使用者名稱",
+      "ownerHint": "草稿可以連線的帳號，供開發者測試。可不填。",
+      "perMemberPerMin": "每位成員每分鐘的請求數",
+      "perAppPerMin": "每分鐘的請求總數",
+      "maxConnections": "同時連線的成員上限",
+      "limitHint": "留空為預設值 {n}；填 0 表示不允許。",
+      "connectionsHint": "留空為不限。",
+      "register": "登記",
+      "save": "儲存",
+      "cancel": "取消",
+      "errors": {
+        "name": "請填寫名稱，最多 {name} 個字元。",
+        "developer": "請填寫開發者，最多 {text} 個字元。",
+        "contactEmail": "需要一個能收信的聯絡電子郵件。",
+        "homepageUrl": "主頁必須是 https 地址。",
+        "privacyUrl": "隱私政策必須是 https 地址。",
+        "redirectUris": "需要 1 到 {n} 個互不相同的重新導向網址：使用 http 的本機迴環地址，或應用程式自己的反向域名協議。不能用 localhost，也不能用 https。",
+        "maxScope": "請選擇它最多可以請求的權限。",
+        "allowEmail": "請選擇它能否請求檢視電子郵件地址。",
+        "owner": "這不是有效的使用者名稱。不設所屬帳號請留空。",
+        "perMemberPerMin": "請填寫 0 或更大的整數，留空為預設值。",
+        "perAppPerMin": "請填寫 0 或更大的整數，留空為預設值。",
+        "maxConnections": "請填寫 0 或更大的整數，留空為不限。"
+      }
+    }
   }
 }
