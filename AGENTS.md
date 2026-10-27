@@ -54,6 +54,7 @@ bun run dev                          # the reader in Vite, tela-api and tela-job
 bun run dev:seed [email]             # with dev running: the curated blogs, and members, claims, troubled feeds, spend and dead letters for /admin; an email is invited and made an admin
 bun run db:generate                  # drizzle-kit generate in packages/data; review the SQL, commit packages/data/migrations/*
 bun run i18n:hant                    # regenerate the zh-Hant catalog and info pages from zh-Hans (OpenCC, Taiwan phrasing); commit the result
+bun run api:openapi                  # regenerate docs/api/openapi.json from the v1 formats (packages/ext); commit the result. UPDATE_EXAMPLES=1 bun test apps/api/test/v1-contract.test.ts does the same for docs/api/v1/examples
 bun run admin invite <email>         # invite a member through tela-api (ADMIN_TOKEN=…, TELA_URL optional)
 bun run admin code <TEXT> --uses N   # an operator invite code for N people (ADR 0034)
 bun run admin codes                  # the operator's codes: places taken, live holds

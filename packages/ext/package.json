@@ -7,7 +7,8 @@
   "description": "Tela's API for approved apps, v1 (ADR 0065): each route's documented format, the mappers from the shared functions' results to it, and the OpenAPI generator",
   "exports": {
     "./schema": "./src/schema.ts",
-    "./transform": "./src/transform.ts"
+    "./transform": "./src/transform.ts",
+    "./openapi": "./src/openapi.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json"
