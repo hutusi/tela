@@ -63,7 +63,10 @@ type Route = {
   body?: { schema: z.ZodType; contentType: string; name: string }
   /** The 200 answer, by name in `components.schemas`; a binary answer gives a media type. */
   answer: { name: string; schema: z.ZodType } | { media: string; description: string }
-  /** Refusals this route gives besides those every token route gives. */
+  /**
+   * Refusals this route gives besides those every token route gives (401, 403, 429, 503) and the
+   * 400 every route with a query or a body gives.
+   */
   errors?: Status[]
   /** How long a cache may keep the 200 answer, as the route's `Cache-Control` says. */
   cache?: string
@@ -275,7 +278,7 @@ const ROUTES: Route[] = [
     params: [{ name: 'id', schema: z.number().int(), description: 'The blog’s id' }],
     query: publicQuerySchema.pick({ page: true, lang: true }),
     answer: { name: 'SitePage', schema: sitePageSchema },
-    errors: [404],
+    errors: [400, 404],
     cache: PUBLIC_CACHE,
   },
   {
@@ -317,7 +320,7 @@ const ROUTES: Route[] = [
     scope: 'read',
     params: [{ name: 'id', schema: z.number().int(), description: 'The post’s id' }],
     answer: { name: 'ArticlePage', schema: articlePageSchema },
-    errors: [404],
+    errors: [400, 404],
     cache: 'private, no-store',
   },
 ]
@@ -374,7 +377,8 @@ const ERRORS: Record<Status, Record<string, unknown>> = {
     content: json(errorRef),
   },
   403: {
-    description: '`insufficient_scope`: the token’s scope does not cover this route',
+    description:
+      '`app_suspended`: the operator cut this app off for now; keep the tokens, they work again once it is restored',
     headers: challenge,
     content: json(errorRef),
   },
@@ -438,12 +442,19 @@ function operation(route: Route, schemas: Record<string, unknown>) {
     }
   }
   const statuses = new Set<Status>(route.errors ?? [])
-  if (route.scope !== null) {
-    for (const s of [401, 429, 503] as const) statuses.add(s)
-    if (route.scope === 'write') statuses.add(403)
-  }
+  // A route that reads a query or a body refuses one it cannot take.
+  if (route.query || route.body) statuses.add(400)
+  // Any token can be refused, its app cut off, limited, or every app paused.
+  if (route.scope !== null) for (const s of [401, 403, 429, 503] as const) statuses.add(s)
   const responses: Record<string, unknown> = { 200: ok }
   for (const status of [...statuses].sort((a, b) => a - b)) responses[status] = ERRORS[status]
+  if (route.scope === 'write') {
+    responses[403] = {
+      ...ERRORS[403],
+      description:
+        '`insufficient_scope`: the token’s scope does not cover this route (`write`); or `app_suspended`: the operator cut this app off for now, keep the tokens',
+    }
+  }
   let requestBody: Record<string, unknown> | undefined
   if (route.body) {
     schemas[route.body.name] = jsonSchema(route.body.schema, 'input')

@@ -525,6 +525,8 @@ describe('a bearer token', () => {
     await api.db.run(sql`update apps set status = 'suspended' where id = ${app.id}`)
     const me = await gateway(api, '/v1/me', { token: tokens.access_token })
     expect([me.status, await body(me)]).toEqual([403, { error: 'app_suspended' }])
+    // A 403 carries its challenge, as `insufficient_scope`'s does (RFC 6750 §3).
+    expect(me.headers.get('www-authenticate')).toBe('Bearer realm="tela", error="app_suspended"')
     const refused = await refresh(api, app, tokens.refresh_token)
     expect(refused.status).toBe(400)
     expect(await body(refused)).toMatchObject({ error: 'unauthorized_client' })

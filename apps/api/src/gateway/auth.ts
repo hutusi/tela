@@ -45,6 +45,17 @@ export function invalidToken(c: Context, presented: boolean) {
   })
 }
 
+/**
+ * 403 `app_suspended`: the operator cut the app off for now. Its challenge names the error, as
+ * every 403 here does (RFC 6750 §3; an extension code, since the token itself is good: an app
+ * keeps it, and it works again once the app is restored).
+ */
+export function appSuspended(c: Context) {
+  return c.json({ error: 'app_suspended' }, 403, {
+    'www-authenticate': challenge('app_suspended'),
+  })
+}
+
 /** 503 `apps_paused`: the operator has stopped every app. */
 export function appsPaused(c: Context) {
   return c.json({ error: 'apps_paused' }, 503, { 'retry-after': String(PAUSED_RETRY_SEC) })
@@ -68,7 +79,7 @@ export function bearer(deps: Pick<ApiDeps, 'db' | 'clock'>): MiddlewareHandler<G
     const resolved = await resolveToken(deps.db, token, deps.clock.now())
     if (!resolved.ok) {
       if (resolved.error === 'apps_paused') return appsPaused(c)
-      if (resolved.error === 'app_suspended') return c.json({ error: 'app_suspended' }, 403)
+      if (resolved.error === 'app_suspended') return appSuspended(c)
       if (resolved.error === 'rate_limited') return rateLimited(c, resolved.retryAfterSec)
       return invalidToken(c, true)
     }

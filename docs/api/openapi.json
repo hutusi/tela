@@ -106,6 +106,24 @@
               }
             }
           },
+          "403": {
+            "description": "`app_suspended`: the operator cut this app off for now; keep the tokens, they work again once it is restored",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "An RFC 6750 challenge naming the error, and the scope needed",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "429": {
             "description": "`rate_limited` (this app’s or the member’s rate), `feed_limit` or `post_limit` (a daily limit, with `limit` and `resetsAt`)",
             "headers": {
@@ -177,6 +195,24 @@
           },
           "401": {
             "description": "`invalid_token`: none, unknown, expired or ended. Refresh it, or connect again",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "An RFC 6750 challenge naming the error, and the scope needed",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`app_suspended`: the operator cut this app off for now; keep the tokens, they work again once it is restored",
             "headers": {
               "WWW-Authenticate": {
                 "description": "An RFC 6750 challenge naming the error, and the scope needed",
@@ -322,6 +358,24 @@
               }
             }
           },
+          "403": {
+            "description": "`app_suspended`: the operator cut this app off for now; keep the tokens, they work again once it is restored",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "An RFC 6750 challenge naming the error, and the scope needed",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "429": {
             "description": "`rate_limited` (this app’s or the member’s rate), `feed_limit` or `post_limit` (a daily limit, with `limit` and `resetsAt`)",
             "headers": {
@@ -430,7 +484,7 @@
             }
           },
           "403": {
-            "description": "`insufficient_scope`: the token’s scope does not cover this route",
+            "description": "`insufficient_scope`: the token’s scope does not cover this route (`write`); or `app_suspended`: the operator cut this app off for now, keep the tokens",
             "headers": {
               "WWW-Authenticate": {
                 "description": "An RFC 6750 challenge naming the error, and the scope needed",
@@ -564,6 +618,24 @@
               }
             }
           },
+          "403": {
+            "description": "`app_suspended`: the operator cut this app off for now; keep the tokens, they work again once it is restored",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "An RFC 6750 challenge naming the error, and the scope needed",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "429": {
             "description": "`rate_limited` (this app’s or the member’s rate), `feed_limit` or `post_limit` (a daily limit, with `limit` and `resetsAt`)",
             "headers": {
@@ -655,6 +727,24 @@
           },
           "401": {
             "description": "`invalid_token`: none, unknown, expired or ended. Refresh it, or connect again",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "An RFC 6750 challenge naming the error, and the scope needed",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`app_suspended`: the operator cut this app off for now; keep the tokens, they work again once it is restored",
             "headers": {
               "WWW-Authenticate": {
                 "description": "An RFC 6750 challenge naming the error, and the scope needed",
@@ -790,6 +880,24 @@
           },
           "401": {
             "description": "`invalid_token`: none, unknown, expired or ended. Refresh it, or connect again",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "An RFC 6750 challenge naming the error, and the scope needed",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`app_suspended`: the operator cut this app off for now; keep the tokens, they work again once it is restored",
             "headers": {
               "WWW-Authenticate": {
                 "description": "An RFC 6750 challenge naming the error, and the scope needed",
@@ -950,6 +1058,24 @@
               }
             }
           },
+          "403": {
+            "description": "`app_suspended`: the operator cut this app off for now; keep the tokens, they work again once it is restored",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "An RFC 6750 challenge naming the error, and the scope needed",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "404": {
             "description": "`not_found`",
             "content": {
@@ -1048,6 +1174,24 @@
           },
           "401": {
             "description": "`invalid_token`: none, unknown, expired or ended. Refresh it, or connect again",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "An RFC 6750 challenge naming the error, and the scope needed",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`app_suspended`: the operator cut this app off for now; keep the tokens, they work again once it is restored",
             "headers": {
               "WWW-Authenticate": {
                 "description": "An RFC 6750 challenge naming the error, and the scope needed",
@@ -1182,7 +1326,7 @@
             }
           },
           "403": {
-            "description": "`insufficient_scope`: the token’s scope does not cover this route",
+            "description": "`insufficient_scope`: the token’s scope does not cover this route (`write`); or `app_suspended`: the operator cut this app off for now, keep the tokens",
             "headers": {
               "WWW-Authenticate": {
                 "description": "An RFC 6750 challenge naming the error, and the scope needed",
@@ -1327,6 +1471,24 @@
               }
             }
           },
+          "403": {
+            "description": "`app_suspended`: the operator cut this app off for now; keep the tokens, they work again once it is restored",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "An RFC 6750 challenge naming the error, and the scope needed",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "429": {
             "description": "`rate_limited` (this app’s or the member’s rate), `feed_limit` or `post_limit` (a daily limit, with `limit` and `resetsAt`)",
             "headers": {
@@ -1435,7 +1597,7 @@
             }
           },
           "403": {
-            "description": "`insufficient_scope`: the token’s scope does not cover this route",
+            "description": "`insufficient_scope`: the token’s scope does not cover this route (`write`); or `app_suspended`: the operator cut this app off for now, keep the tokens",
             "headers": {
               "WWW-Authenticate": {
                 "description": "An RFC 6750 challenge naming the error, and the scope needed",
@@ -1570,7 +1732,7 @@
             }
           },
           "403": {
-            "description": "`insufficient_scope`: the token’s scope does not cover this route",
+            "description": "`insufficient_scope`: the token’s scope does not cover this route (`write`); or `app_suspended`: the operator cut this app off for now, keep the tokens",
             "headers": {
               "WWW-Authenticate": {
                 "description": "An RFC 6750 challenge naming the error, and the scope needed",
@@ -1715,7 +1877,7 @@
             }
           },
           "403": {
-            "description": "`insufficient_scope`: the token’s scope does not cover this route",
+            "description": "`insufficient_scope`: the token’s scope does not cover this route (`write`); or `app_suspended`: the operator cut this app off for now, keep the tokens",
             "headers": {
               "WWW-Authenticate": {
                 "description": "An RFC 6750 challenge naming the error, and the scope needed",
@@ -1853,8 +2015,36 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_request`, `invalid_url`, `opml_invalid`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "401": {
             "description": "`invalid_token`: none, unknown, expired or ended. Refresh it, or connect again",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "An RFC 6750 challenge naming the error, and the scope needed",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`app_suspended`: the operator cut this app off for now; keep the tokens, they work again once it is restored",
             "headers": {
               "WWW-Authenticate": {
                 "description": "An RFC 6750 challenge naming the error, and the scope needed",
@@ -1982,8 +2172,36 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_request`, `invalid_url`, `opml_invalid`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "401": {
             "description": "`invalid_token`: none, unknown, expired or ended. Refresh it, or connect again",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "An RFC 6750 challenge naming the error, and the scope needed",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`app_suspended`: the operator cut this app off for now; keep the tokens, they work again once it is restored",
             "headers": {
               "WWW-Authenticate": {
                 "description": "An RFC 6750 challenge naming the error, and the scope needed",
@@ -2111,8 +2329,36 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_request`, `invalid_url`, `opml_invalid`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "401": {
             "description": "`invalid_token`: none, unknown, expired or ended. Refresh it, or connect again",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "An RFC 6750 challenge naming the error, and the scope needed",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`app_suspended`: the operator cut this app off for now; keep the tokens, they work again once it is restored",
             "headers": {
               "WWW-Authenticate": {
                 "description": "An RFC 6750 challenge naming the error, and the scope needed",
@@ -2240,8 +2486,36 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_request`, `invalid_url`, `opml_invalid`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "401": {
             "description": "`invalid_token`: none, unknown, expired or ended. Refresh it, or connect again",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "An RFC 6750 challenge naming the error, and the scope needed",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`app_suspended`: the operator cut this app off for now; keep the tokens, they work again once it is restored",
             "headers": {
               "WWW-Authenticate": {
                 "description": "An RFC 6750 challenge naming the error, and the scope needed",
@@ -2369,8 +2643,36 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_request`, `invalid_url`, `opml_invalid`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "401": {
             "description": "`invalid_token`: none, unknown, expired or ended. Refresh it, or connect again",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "An RFC 6750 challenge naming the error, and the scope needed",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`app_suspended`: the operator cut this app off for now; keep the tokens, they work again once it is restored",
             "headers": {
               "WWW-Authenticate": {
                 "description": "An RFC 6750 challenge naming the error, and the scope needed",
@@ -2501,8 +2803,36 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_request`, `invalid_url`, `opml_invalid`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "401": {
             "description": "`invalid_token`: none, unknown, expired or ended. Refresh it, or connect again",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "An RFC 6750 challenge naming the error, and the scope needed",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`app_suspended`: the operator cut this app off for now; keep the tokens, they work again once it is restored",
             "headers": {
               "WWW-Authenticate": {
                 "description": "An RFC 6750 challenge naming the error, and the scope needed",
@@ -2641,8 +2971,36 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_request`, `invalid_url`, `opml_invalid`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "401": {
             "description": "`invalid_token`: none, unknown, expired or ended. Refresh it, or connect again",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "An RFC 6750 challenge naming the error, and the scope needed",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`app_suspended`: the operator cut this app off for now; keep the tokens, they work again once it is restored",
             "headers": {
               "WWW-Authenticate": {
                 "description": "An RFC 6750 challenge naming the error, and the scope needed",
@@ -2771,8 +3129,36 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_request`, `invalid_url`, `opml_invalid`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "401": {
             "description": "`invalid_token`: none, unknown, expired or ended. Refresh it, or connect again",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "An RFC 6750 challenge naming the error, and the scope needed",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`app_suspended`: the operator cut this app off for now; keep the tokens, they work again once it is restored",
             "headers": {
               "WWW-Authenticate": {
                 "description": "An RFC 6750 challenge naming the error, and the scope needed",
@@ -2940,6 +3326,24 @@
               }
             }
           },
+          "403": {
+            "description": "`app_suspended`: the operator cut this app off for now; keep the tokens, they work again once it is restored",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "An RFC 6750 challenge naming the error, and the scope needed",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "429": {
             "description": "`rate_limited` (this app’s or the member’s rate), `feed_limit` or `post_limit` (a daily limit, with `limit` and `resetsAt`)",
             "headers": {
@@ -3030,8 +3434,36 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_request`, `invalid_url`, `opml_invalid`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "401": {
             "description": "`invalid_token`: none, unknown, expired or ended. Refresh it, or connect again",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "An RFC 6750 challenge naming the error, and the scope needed",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`app_suspended`: the operator cut this app off for now; keep the tokens, they work again once it is restored",
             "headers": {
               "WWW-Authenticate": {
                 "description": "An RFC 6750 challenge naming the error, and the scope needed",

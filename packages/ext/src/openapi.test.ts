@@ -39,6 +39,37 @@ describe('the OpenAPI document', () => {
     }
   })
 
+  test('lists every refusal a route can give: the token’s, the limits’, and bad input', () => {
+    type Op = {
+      security: { tela?: string[] }[]
+      parameters?: { in: string }[]
+      requestBody?: object
+      responses: Record<string, { description?: string; headers?: object }>
+    }
+    const doc = openapiDocument() as { paths: Record<string, Record<string, Op>> }
+    for (const [path, methods] of Object.entries(doc.paths)) {
+      for (const [method, op] of Object.entries(methods)) {
+        const name = `${method} ${path}`
+        if (op.security.length > 0) {
+          // Any token can be refused, its app cut off (403 `app_suspended`), limited or paused.
+          expect(Object.keys(op.responses), name).toEqual(
+            expect.arrayContaining(['401', '403', '429', '503']),
+          )
+          const forbidden = op.responses['403']
+          expect(forbidden?.description, name).toContain('app_suspended')
+          expect(forbidden?.description?.includes('insufficient_scope'), name).toBe(
+            op.security[0]?.tela?.[0] === 'write',
+          )
+          expect(Object.keys(forbidden?.headers ?? {}), name).toContain('WWW-Authenticate')
+        }
+        // A route that reads a query or a body refuses one it cannot take.
+        if (op.requestBody || op.parameters?.some((p) => p.in === 'query')) {
+          expect(Object.keys(op.responses), name).toContain('400')
+        }
+      }
+    }
+  })
+
   test('says every 429 and 503 carries Retry-After', () => {
     const doc = openapiDocument() as {
       paths: Record<string, Record<string, { responses: Record<string, { headers?: object }> }>>
