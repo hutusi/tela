@@ -339,6 +339,27 @@ describe('Connected apps', () => {
       )
     ).connections
 
+  test("the member's own export lists the apps they hold, and never a token", async () => {
+    const tokens = await connect(api, ann, app)
+    const res = await api.request('/api/v1/export', { as: ann })
+    expect(res.status).toBe(200)
+    const text = await res.text()
+    expect(text).not.toContain(tokens.access_token)
+    expect(text).not.toContain(tokens.refresh_token)
+    const { connectedApps } = JSON.parse(text) as { connectedApps: unknown[] }
+    expect(connectedApps).toEqual([
+      {
+        app: expect.stringMatching(/^App/),
+        developer: 'Dev Ltd',
+        homepage: 'https://app.example',
+        scope: 'write',
+        seesEmail: false,
+        connectedAt: api.clock.now(),
+        lastUsedAt: null,
+      },
+    ])
+  })
+
   test('lists what each app may do, when it was last used, and on how many devices', async () => {
     const created = api.clock.now()
     const one = await connect(api, ann, app)

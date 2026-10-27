@@ -292,6 +292,7 @@ export function memberRoutes(deps: ApiDeps) {
       codes,
       joinedBy,
       reads,
+      apps,
     ] = (await db.batch([
       db.all(sql`
         select p.handle, p.display_name as "displayName", p.bio, p.reading_lang as "readingLang",
@@ -387,6 +388,14 @@ export function memberRoutes(deps: ApiDeps) {
         where st.user_id = ${id} and (st.read_at is not null or st.read_updated_at is not null)
         order by coalesce(st.read_at, st.read_updated_at) desc, st.article_id
       `),
+      // The apps they connected and still hold (ADR 0064): what each may do and when it last
+      // acted for them. Never a token, which Tela keeps only as a hash.
+      db.all(sql`
+        select a.name as "app", a.developer, a.homepage_url as "homepage", g.scope,
+          g.email as "seesEmail", g.created_at as "connectedAt", g.last_used_at as "lastUsedAt"
+        from app_grants g join apps a on a.id = g.app_id
+        where g.user_id = ${id} and g.ended_at is null order by g.created_at, g.id
+      `),
     ] as never)) as unknown as Record<string, unknown>[][]
     const profile = profiles?.[0]
     const body = {
@@ -427,6 +436,10 @@ export function memberRoutes(deps: ApiDeps) {
       reads: (reads ?? []).map(({ markedUnread, ...read }) => ({
         ...read,
         markedUnread: markedUnread === 1,
+      })),
+      connectedApps: (apps ?? []).map(({ seesEmail, ...app }) => ({
+        ...app,
+        seesEmail: seesEmail === 1,
       })),
     }
     return new Response(JSON.stringify(body, null, 2), {
