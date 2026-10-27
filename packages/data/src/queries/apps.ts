@@ -489,6 +489,8 @@ type Found = {
   token_scope: AppScope
   token_email: number
   grant_id: number
+  grant_scope: AppScope
+  grant_email: number
   user_id: string
   app_id: number
   client_id: string
@@ -542,7 +544,7 @@ export async function resolveToken(
   const [found, memberCount, totalCount] = (await db.batch([
     db.all<Found>(sql`
       select t.id as token_id, t.scope as token_scope, t.email as token_email, g.id as grant_id,
-        g.user_id, a.id as app_id, a.client_id, a.max_scope, a.allow_email, a.per_member_per_min,
+        g.scope as grant_scope, g.email as grant_email, g.user_id, a.id as app_id, a.client_id, a.max_scope, a.allow_email, a.per_member_per_min,
         a.per_app_per_min, ${usable} as usable, ${appsOn()} as enabled
       from ${held} where ${current}
     `),
@@ -590,8 +592,10 @@ export async function resolveToken(
       clientId: row.client_id,
       grantId: row.grant_id,
       tokenId: row.token_id,
-      scope: lowerScope(row.token_scope, row.max_scope),
-      email: row.token_email === 1 && row.allow_email === 1,
+      // The lowest of what this device was given, what the connection holds now (a member who
+      // connects again at Read only lowers every device), and the app's ceiling.
+      scope: lowerScope(lowerScope(row.token_scope, row.grant_scope), row.max_scope),
+      email: row.token_email === 1 && row.grant_email === 1 && row.allow_email === 1,
     },
   }
 }

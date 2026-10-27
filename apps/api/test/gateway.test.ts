@@ -485,6 +485,18 @@ describe('a bearer token', () => {
     })
   })
 
+  test('connecting again at Read only lowers every device, and Settings says the same', async () => {
+    const laptop = await connect(api, ann, app)
+    const call = probe()
+    expect((await call('POST', laptop.access_token)).status).toBe(200)
+    // The member connects the app again from another computer, granting less.
+    await connect(api, ann, app, { scope: 'write', granted: 'read' })
+    expect((await call('POST', laptop.access_token)).status).toBe(403)
+    expect(await body(await gateway(api, '/v1/me', { token: laptop.access_token }))).toMatchObject({
+      scope: 'read',
+    })
+  })
+
   test('acts for the member and app, never as an admin, and sees the address only when both allow', async () => {
     await api.db.run(sql`update profiles set is_admin = 1 where user_id = ${ann.userId}`)
     const mailer = await registerApp(api, { allowEmail: true })
