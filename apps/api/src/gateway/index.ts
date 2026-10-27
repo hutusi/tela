@@ -5,6 +5,8 @@
  * browser signed in to Tela reaches nothing through it, and no internal route takes a token.
  *
  * - `/.well-known/oauth-authorization-server`, `/oauth/token`, `/oauth/revoke`: `oauth.ts`.
+ * - `/meta` and `/v1/openapi.json`, with no token, and `/opens`, tela-gateway's question before
+ *   it serves content: `meta.ts`.
  * - `/v1/*`: the API, each route behind the token (`auth.ts`).
  *
  * Every answer says which API version answered it (`tela-api-version`), and none is stored by a
@@ -15,6 +17,7 @@ import { Hono, type MiddlewareHandler } from 'hono'
 import type { Auth } from '../auth'
 import type { ApiDeps } from '../deps'
 import { bearer, type GatewayEnv } from './auth'
+import { metaRoutes } from './meta'
 import { oauthRoutes } from './oauth'
 import { v1Routes } from './v1'
 
@@ -33,6 +36,8 @@ export function gatewayHeaders(): MiddlewareHandler {
 export function createGateway(deps: ApiDeps, auth: Auth) {
   const gateway = new Hono<GatewayEnv>()
   gateway.route('/', oauthRoutes(deps, auth))
+  // Before the token's check, which `/v1/openapi.json` does not take.
+  gateway.route('/', metaRoutes(deps))
   gateway.use('/v1/*', bearer(deps))
   gateway.route('/v1', v1Routes(deps))
   return gateway

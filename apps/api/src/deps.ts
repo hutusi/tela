@@ -29,6 +29,12 @@ export type ApiConfig = {
   /** Where Gravatar serves pictures (ADR 0032); tests point it at a fixture. */
   gravatarUrl?: string
   /**
+   * tela-assets' public base, where a blog's favicon is (`<base>/<faviconKey>`), as the reader's
+   * build names it (`VITE_ASSETS_URL`): the API gives apps absolute URLs (ADR 0065). Unset is
+   * `https://assets.telaread.com`.
+   */
+  assetsUrl?: string
+  /**
    * Tela's apps at Google and GitHub (ADR 0036). A provider is offered, and its sign-in served,
    * only while its app is here.
    */

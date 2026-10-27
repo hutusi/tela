@@ -63,6 +63,7 @@ function appFor(env: Env) {
       mailFrom: env.MAIL_FROM,
       testMode: env.ENV === 'test',
       ...(env.GRAVATAR_URL ? { gravatarUrl: env.GRAVATAR_URL } : {}),
+      ...(env.ASSETS_URL ? { assetsUrl: env.ASSETS_URL } : {}),
       oauth: { ...(google ? { google } : {}), ...(github ? { github } : {}) },
     },
   })

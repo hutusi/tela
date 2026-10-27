@@ -30,6 +30,8 @@ export type Env = {
   ENV?: string
   /** Where Gravatar serves pictures; unset is gravatar.com. The e2e points it at its fixtures. */
   GRAVATAR_URL?: string
+  /** tela-assets' public base, for the favicon URLs the API gives apps; unset is assets.telaread.com. */
+  ASSETS_URL?: string
   /** Secrets: Tela's Google app (ADR 0036). Google sign-in is offered only when both are set. */
   GOOGLE_CLIENT_ID?: string
   GOOGLE_CLIENT_SECRET?: string

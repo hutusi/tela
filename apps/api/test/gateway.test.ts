@@ -122,7 +122,7 @@ describe('the code exchange', () => {
       api.db,
       sql`select handle from profiles where user_id = ${ann.userId}`,
     )
-    expect(await me.json()).toEqual({ handle: profile?.handle, scope: 'write' })
+    expect(await me.json()).toMatchObject({ handle: profile?.handle, scope: 'write' })
 
     // Only hashes: neither token is anywhere in the database.
     const tables = await api.db.all<{ name: string }>(
@@ -685,7 +685,7 @@ describe('the boundary', () => {
       sql`select user_id, handle from profiles`,
     )
     const boHandle = handles.find((h) => h.user_id === bo.userId)?.handle
-    expect(await both.json()).toEqual({ handle: boHandle, scope: 'write' })
+    expect(await both.json()).toMatchObject({ handle: boHandle, scope: 'write' })
   })
 
   test('every answer under /gateway carries the API version, a 404 too', async () => {

@@ -58,6 +58,7 @@ directory.
 | `DEADMAN_URL` | tela-jobs (secret) | The healthchecks.io ping URL; see *Knowing it runs* |
 | `DIGEST_TO` | tela-jobs (secret) | Who gets the Monday digest and the operator's alerts (the owner). Unset, the digest is built but not sent, and no alert is checked |
 | `VITE_ASSETS_URL` | tela-web build | Public base of `tela-assets`; defaults to `https://assets.telaread.com` |
+| `ASSETS_URL` | tela-api | The same base, for the absolute favicon URLs the API gives apps (`faviconUrl`, ADR 0065); defaults to `https://assets.telaread.com`. Keep it equal to `VITE_ASSETS_URL` |
 | `TELA_URL` | the admin script | Where `bun run admin` talks to; defaults to `https://telaread.com` |
 
 ## Provisioning, once per account

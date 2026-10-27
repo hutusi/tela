@@ -28,6 +28,7 @@ import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { HTTPException } from 'hono/http-exception'
 import { type Auth, createAuth } from './auth'
+import { BODY_MAX_BYTES, PUSH_MAX_BYTES } from './body-limits'
 import { readArticle } from './core/public'
 import type { ApiDeps } from './deps'
 import { createGateway, gatewayHeaders } from './gateway'
@@ -142,13 +143,7 @@ export const guarded = (method: string, path: string) =>
 /** A client older than the protocol is told to reload, not left misreading rows. */
 const tooOld = (header: string | undefined) => protocolOf(header) < MIN_CLIENT
 
-/** The most any request body may hold unless its route says otherwise: every JSON call is small. */
-export const BODY_MAX_BYTES = 64 * 1024
-/**
- * A push: fifty changes, and a highlight's quote and note are 2,000 characters each, which in
- * Chinese or emoji is up to 16 KB a change.
- */
-export const PUSH_MAX_BYTES = 1024 * 1024
+export { BODY_MAX_BYTES, PUSH_MAX_BYTES }
 
 /**
  * The most a request's body may hold: `null` for the routes that read their own body no further
@@ -160,8 +155,10 @@ export function bodyCap(method: string, path: string): number | null {
   if (method === 'PUT' && path === '/api/v1/avatar') return null
   if (method === 'POST' && path.startsWith('/api/websub/')) return null
   if (method === 'POST' && path === '/api/v1/feeds/opml') return null
+  if (method === 'POST' && path === '/gateway/v1/feeds/opml') return null
   if (method === 'POST' && path === '/api/client-errors') return null
   if (method === 'POST' && path === '/api/v1/mutations') return PUSH_MAX_BYTES
+  if (method === 'POST' && path === '/gateway/v1/mutations') return PUSH_MAX_BYTES
   return BODY_MAX_BYTES
 }
 
