@@ -31,18 +31,16 @@ import {
   consumeLimit,
   first,
   type LimitedAction,
-  memberAllowances,
   newGroupId,
-  nextUtcDay,
   writeClosure,
 } from '@tela/data'
-import type { AccountUsage } from '@tela/shared'
 import { isAPIError } from 'better-auth/api'
 import { sql } from 'drizzle-orm'
 import { type Context, Hono } from 'hono'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import type { ApiEnv, Member } from '../app'
 import { type Auth, endOtherSessions, FRESH_SECONDS, notifyMember, PASSWORD_LENGTH } from '../auth'
+import { readUsage } from '../core/usage'
 import type { ApiDeps } from '../deps'
 import { type AccountChange, deleteAccountMail } from '../mail'
 import { mailLocale } from '../mail-locale'
@@ -141,25 +139,7 @@ export function accountRoutes(deps: ApiDeps, auth: Auth) {
    * none (`exempt` says why).
    */
   routes.get('/usage', async (c) => {
-    const now = deps.clock.now()
-    const { exempt } = await webActor(c, db)
-    const used = await memberAllowances(db, c.get('member').id, now, exempt)
-    const none = (limit: number | null) => (used.exempt ? null : limit)
-    const answer: AccountUsage = {
-      translations: {
-        perDay: none(used.translations.perDay),
-        usedToday: used.translations.usedToday,
-        waiting: used.translations.waiting,
-        resetsAt: nextUtcDay(now),
-      },
-      feeds: {
-        perDay: none(used.feeds.perDay),
-        addedToday: used.feeds.addedToday,
-        pending: used.feeds.pending,
-      },
-      subscriptions: { max: none(used.subscriptions.max), count: used.subscriptions.count },
-      exempt: used.exempt,
-    }
+    const answer = await readUsage(deps, await webActor(c, db))
     return c.json(answer, 200, { 'cache-control': 'no-store' })
   })
 

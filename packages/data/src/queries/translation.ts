@@ -297,29 +297,60 @@ export type BodyTranslationRow = {
   seq: number
 }
 
+type RawBodyTranslation = {
+  content_key: string
+  lang: string
+  state: string
+  request_id: string | null
+  requested_by: string | null
+  reserved_tokens: number
+  reserved_spend: number
+  reserved_day: string | null
+  due_at: number | null
+  used_tokens: number
+  chunk_keys: string
+  object_key: string | null
+  failed_leaves: string
+  seq: number
+}
+
 export async function loadBodyTranslation(
   db: TelaDb,
   contentKey: string,
   lang: string,
 ): Promise<BodyTranslationRow | null> {
-  const rows = await db.all<{
-    content_key: string
-    lang: string
-    state: string
-    request_id: string | null
-    requested_by: string | null
-    reserved_tokens: number
-    reserved_spend: number
-    reserved_day: string | null
-    due_at: number | null
-    used_tokens: number
-    chunk_keys: string
-    object_key: string | null
-    failed_leaves: string
-    seq: number
-  }>(sql`select * from body_translations where content_key = ${contentKey} and lang = ${lang}`)
+  const rows = await db.all<RawBodyTranslation>(
+    sql`select * from body_translations where content_key = ${contentKey} and lang = ${lang}`,
+  )
   const r = rows[0]
-  if (!r) return null
+  return r ? bodyTranslationOf(r) : null
+}
+
+/**
+ * A body translation as `loadBodyTranslation` reads it, and whether its writers turned
+ * translation off (ADR 0065): a post with that content is on a blog that opted out, and none is
+ * on one that allows it. The web's device hides such a translation itself; an app is not trusted
+ * to, so the API refuses it.
+ */
+export async function loadBodyTranslationShown(
+  db: TelaDb,
+  contentKey: string,
+  lang: string,
+): Promise<{ translation: BodyTranslationRow | null; optedOut: boolean }> {
+  const on = (optOut: 0 | 1) => sql`exists (select 1 from articles a
+    join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
+    where a.content_key = b.content_key and s.translation_opt_out = ${sql.raw(String(optOut))})`
+  const rows = await db.all<RawBodyTranslation & { opted_out: number }>(sql`
+    select b.*, (${on(1)} and not ${on(0)}) as opted_out
+    from body_translations b where b.content_key = ${contentKey} and b.lang = ${lang}
+  `)
+  const r = rows[0]
+  return r
+    ? { translation: bodyTranslationOf(r), optedOut: r.opted_out === 1 }
+    : { translation: null, optedOut: false }
+}
+
+function bodyTranslationOf(r: RawBodyTranslation): BodyTranslationRow {
   return {
     contentKey: r.content_key,
     lang: r.lang,
