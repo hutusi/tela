@@ -11,7 +11,7 @@ import { sql } from 'drizzle-orm'
 import { FixtureServer, rss } from '../../../packages/ingest/test/fixture-server'
 import { connect, gateway, registerApp } from './apps-helpers'
 import { operatorSets } from './helpers'
-import { buildWorld, call, keyOf, type World, webPush } from './v1-world'
+import { addPost, buildWorld, call, keyOf, type World, webPush, write } from './v1-world'
 
 let server: FixtureServer
 let world: World
@@ -445,6 +445,32 @@ describe('caches', () => {
     const page = await json(await call(world, '/v1/sites/1'))
     const pixels = (page.posts as Json[]).find((p) => p.id === 101)
     expect(pixels?.translatedTitle).toBe('用像素作画')
+  })
+})
+
+describe('a post by id', () => {
+  test('of a blog a member added privately is not found, unless the member follows it', async () => {
+    const { db } = world.api
+    await write(
+      world.api,
+      db.run(sql`insert into sites (id, home_url, title, listing, created_at, updated_at, seq)
+        values (6, 'https://private6.example', 'Private', 'private', 0, 0, ${currentSeq})`),
+      db.run(sql`insert into feeds (id, site_id, feed_url, host, next_fetch_at, created_at,
+          updated_at, seq)
+        values (6, 6, 'https://private6.example/feed?token=s3cret', 'private6.example', 0, 0, 0,
+          ${currentSeq})`),
+    )
+    await addPost(world.api, { id: 601, feedId: 6, title: 'Not for everyone', at: world.now })
+    const hidden = await call(world, '/v1/articles/601')
+    expect(hidden.status).toBe(404)
+    expect(await hidden.json()).toEqual({ error: 'not_found' })
+    await push([{ type: 'subscribe', feedId: 6 }])
+    const held = await call(world, '/v1/articles/601')
+    expect(held.status).toBe(200)
+    expect(((await held.json()) as { article: Json }).article).toMatchObject({
+      id: 601,
+      contentKey: keyOf(601),
+    })
   })
 })
 

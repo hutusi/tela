@@ -1113,11 +1113,25 @@ export type HeldArticle = { article: ArticleRow; feed: FeedRow; site: SiteRow }
 
 /**
  * A post by id, for `actor` to hold and open as if their device had synced it (ADR 0066): the
- * article row with its content key, its feed and its blog, or null when Tela holds no such post.
- * Any member may open any post Tela holds, the web's rule, which apps follow: what bounds it is
- * the day's limit on bodies from blogs the member does not follow, counted when the body is
- * fetched, not here. Whoever calls this has checked the actor's standing (tela-api's member
- * check for the web, the token's resolution for an app).
+ * article row with its content key, its feed and its blog, or null when Tela holds no such post
+ * or none the member may see. Ids are sequential, so what this gives for one id it gives for
+ * every id: a post is the member's to open only where Tela already shows it to them.
+ *
+ * - On a listed or featured blog (ADR 0041), or one a public blogroll of a member in good
+ *   standing names, or recommended by a member in good standing, or liked by one who shows their
+ *   likes (ADR 0031): what public pages, profiles and the Following feed show anyone.
+ * - In a feed the member subscribes to, or a post they keep (liked, recommended or highlighted):
+ *   what their own sync sends them.
+ *
+ * Any other post is null: a blog another member added privately stays theirs, with its feed's
+ * address, which may carry a token of the writer's. Within that, what bounds reading is the day's
+ * limit on bodies from blogs the member does not follow, counted when the body is fetched, not
+ * here.
+ *
+ * The rows are the member's sync's: whole when they follow the feed or keep the post, as the pull
+ * sends exactly those; otherwise without what only a follower is told, the feed's last error and
+ * where the post's extraction stands. Whoever calls this has checked the actor's standing
+ * (tela-api's member check for the web, the token's resolution for an app).
  */
 export async function readArticle(
   deps: Pick<ApiDeps, 'db'>,
@@ -1126,20 +1140,47 @@ export async function readArticle(
 ): Promise<HeldArticle | null> {
   const { db } = deps
   if (!Number.isSafeInteger(articleId) || articleId <= 0) return null
+  const { userId } = actor
   const feedOf = sql`(select feed_id from articles where id = ${articleId})`
-  const [articles, feeds, sites] = (await db.batch([
+  const [articles, feeds, sites, access] = (await db.batch([
     db.all(sql`select ${ARTICLE_COLUMNS} from articles a where a.id = ${articleId}`),
     db.all(sql`select ${FEED_COLUMNS} from feeds f where f.id = ${feedOf}`),
-    db.all(sql`select ${siteColumns(actor.userId)} from sites s
+    db.all(sql`select ${siteColumns(userId)} from sites s
       where s.id = (select site_id from feeds where id = ${feedOf})`),
-  ] as never)) as unknown as [ArticleRow[], FeedRow[], Row[]]
+    db.all(sql`
+      select
+        exists (select 1 from subscriptions where user_id = ${userId} and feed_id = a.feed_id
+          and deleted_at is null) as follows,
+        (exists (select 1 from user_article_states where user_id = ${userId}
+            and article_id = a.id and liked_at is not null)
+          or exists (select 1 from recommendations where user_id = ${userId}
+            and article_id = a.id and deleted_at is null)
+          or exists (select 1 from highlights where user_id = ${userId}
+            and article_id = a.id and deleted_at is null)) as keeps,
+        (s.listing in ${PUBLIC_LISTING} or (s.listing <> 'rejected' and exists (
+          select 1 from blogroll_blogs bb join blogrolls r on r.id = bb.blogroll_id
+            join profiles p on p.user_id = r.user_id
+          where bb.feed_id = a.feed_id and bb.removed_at is null and ${isShown('r')}
+            and ${standingOk('p')}))
+          or exists (select 1 from recommendations r join profiles p on p.user_id = r.user_id
+            where r.article_id = a.id and r.deleted_at is null and ${standingOk('p')})
+          or exists (select 1 from profiles p join user_article_states st
+              on st.user_id = p.user_id and st.article_id = a.id
+            where p.public_likes = 1 and st.liked_at is not null and ${standingOk('p')})) as shown
+      from articles a join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
+      where a.id = ${articleId}
+    `),
+  ] as never)) as unknown as [ArticleRow[], FeedRow[], Row[], Row[]]
   const article = articles[0]
   const feed = feeds[0]
   const site = sites[0]
-  if (!article || !feed || !site) return null
+  const may = access[0]
+  if (!article || !feed || !site || !may) return null
+  const held = may.follows === 1 || may.keeps === 1
+  if (!held && may.shown !== 1) return null
   return {
-    article,
-    feed,
+    article: held ? article : { ...article, extractState: 'none' },
+    feed: held ? feed : { ...feed, lastError: null },
     site: {
       ...(site as unknown as SiteRow),
       owned: site.owned === 1,
