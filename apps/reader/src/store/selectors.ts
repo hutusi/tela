@@ -382,6 +382,25 @@ export function articlesFor(
 
 export type PrefetchPlan = { bodies: string[]; translations: string[] }
 
+/** Whether the member subscribes to `feedId`, as the view has it (pending changes included). */
+export function isSubscribed(t: Pick<Tables, 'subscriptions'>, feedId: number): boolean {
+  return t.subscriptions.get(feedId)?.deletedAt === null
+}
+
+/**
+ * The member's subscriptions as one string that changes whenever any of them does, the moment a
+ * pull confirms one included (its `seq`): what the object store forgets its refusals by
+ * (`Objects.noteSubscriptions`, ADR 0066), since a subscription tela-api holds frees that blog's
+ * posts from the day's limit.
+ */
+export function subscriptionsSignature(t: Pick<Tables, 'subscriptions'>): string {
+  const parts: string[] = []
+  for (const s of t.subscriptions.values()) {
+    if (s.deletedAt === null) parts.push(`${s.feedId}:${s.seq}`)
+  }
+  return parts.sort().join(',')
+}
+
 /**
  * What the idle prefetch would fetch (ADR 0025): the unread bodies, the list on screen first, then
  * every other feed's; and, when translations open on their own, the finished ones of unread posts
@@ -390,6 +409,10 @@ export type PrefetchPlan = { bodies: string[]; translations: string[] }
  * what the prefetch downloaded. The reading page keys its timer on this, so a render that changes
  * none of it (an empty pull, the minute's tick) neither puts a prefetch off nor cancels one under
  * way.
+ *
+ * Only posts from blogs the member subscribes to: any other's body counts against the day's limit
+ * on them (ADR 0066), and Liked keeps posts from blogs the member has left. A prefetch would spend
+ * the day's count on posts nobody opened.
  */
 export function prefetchPlan(
   t: Tables,
@@ -401,7 +424,7 @@ export function prefetchPlan(
   const everything = articlesFor(t, { filter: 'all', feedId: null }, now)
   const bodies = new Set<string>()
   for (const a of [...list, ...everything]) {
-    if (a.contentKey && !isRead(t, a, now)) bodies.add(a.contentKey)
+    if (a.contentKey && !isRead(t, a, now) && isSubscribed(t, a.feedId)) bodies.add(a.contentKey)
   }
   const translations: string[] = []
   if (prefs.autoTranslate) {

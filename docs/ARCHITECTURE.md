@@ -400,7 +400,13 @@ A Vite + React SPA that renders from the device.
   (a full disk) is still shown. It prefetches unread bodies while idle, and ten seconds after
   boot evicts bodies not opened for seven days (found by key on the `lastOpened` index, never
   read), then the oldest past 50 MB, and the translation and chunk objects of every body no
-  longer held, by key range.
+  longer held, by key range. A post refused for the day's limit on blogs the member does not
+  subscribe to (ADR 0066: a 429 for one object, or a key a bundle lists under `refused`) rejects
+  with `PostRefused`, and is remembered in memory, for the account that asked, until `resetsAt`
+  (a minute at least): nothing asks for it, or its translations, again before then, and it is
+  not `missing`, so the reading page's ask-again loop leaves it alone. A change to the
+  subscriptions forgets every refusal (`noteSubscriptions`). The prefetch, and the Up next body,
+  take only posts from blogs the member subscribes to, which count against nothing.
 - `store/selectors.ts` answers the reading view: unread, lists, counts, the title to show.
 - The URL alone says which article is open (ADR 0017's rule, kept): a click, a filter change or
   Back is a render, not a request.

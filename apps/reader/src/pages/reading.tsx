@@ -30,18 +30,21 @@ import { PREF_KEYS, readingPrefsOf, useReadingPrefs } from '../lib/prefs'
 import { useTitle } from '../lib/title'
 import { useQuickPull } from '../lib/use-quick-pull'
 import { useNow, useReadingLang, useStore, useTables } from '../store/hooks'
+import { PostRefused } from '../store/objects'
 import {
   articlesFor,
   feedTitle,
   folderTree,
   isLiked,
   isRead,
+  isSubscribed,
   type PrefetchPlan,
   prefetchCovers,
   prefetchPlan,
   shownRead,
   shownTitle,
   subscriptionItems,
+  subscriptionsSignature,
   totals,
   withoutRead,
 } from '../store/selectors'
@@ -330,10 +333,20 @@ export function ReadingPage() {
   // The post after the open one, which `j` and the card at the article's end open: fetched as this
   // one opens, not when the idle prefetch reaches it (an open restarts that timer), so stepping
   // through a list never waits on the network. Read or not: the list may show read posts.
-  const upNext = article ? (after?.contentKey ?? null) : null
+  // Only from a blog the member subscribes to, as the idle prefetch (`prefetchPlan`): any other's
+  // would count against the day's limit on them (ADR 0066) before anyone opened it.
+  const upNext =
+    article && after && isSubscribed(tables, after.feedId) ? (after.contentKey ?? null) : null
   useEffect(() => {
     if (upNext) void objects.body(upNext).catch(() => undefined)
   }, [upNext, objects])
+  // A change to the subscriptions may free posts refused for the day: asked for again.
+  const subscriptionRows = tables.subscriptions
+  const subscriptions = useMemo(
+    () => subscriptionsSignature({ subscriptions: subscriptionRows }),
+    [subscriptionRows],
+  )
+  useEffect(() => objects.noteSubscriptions(subscriptions), [subscriptions, objects])
 
   // Prefetch unread bodies and finished translations while idle: the list on screen first. Keyed on
   // what it would fetch, not on the tables: every pull that brings anything makes new ones, and a
@@ -398,7 +411,11 @@ export function ReadingPage() {
         await objects.prefetch(bodies, controller.signal)
         for (const key of translations) {
           if (controller.signal.aborted) return
-          const object = await objects.object(key, controller.signal, true).catch(() => null)
+          // A post refused for the day (ADR 0066) did not fall short either: asking again before
+          // the day turns is refused again, so it is not worth a run.
+          const object = await objects
+            .object(key, controller.signal, true)
+            .catch((err: unknown) => (err instanceof PostRefused ? undefined : null))
           // A run cancelled for a newer plan did not fall short: the newer one is on its way.
           if (object === null && !controller.signal.aborted) fellShort.current = true
         }

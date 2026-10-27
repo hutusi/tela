@@ -16,6 +16,7 @@ import {
   folderTree,
   isMarkedUnread,
   isRead,
+  isSubscribed,
   markAllReadCovers,
   markAllReadPlan,
   prefetchCovers,
@@ -23,6 +24,7 @@ import {
   shownRead,
   shownTitle,
   subscriptionItems,
+  subscriptionsSignature,
   totals,
   withoutRead,
 } from '../src/store/selectors'
@@ -446,6 +448,42 @@ describe('what the idle prefetch would fetch', () => {
       prefetchCovers(running, { ...next, translations: [...next.translations, 't/c6/en/c.json'] }),
     ).toBe(false)
     expect(prefetchCovers(running, { ...next, bodies: [...next.bodies, 'c9'] })).toBe(false)
+  })
+
+  test('only posts from blogs the member subscribes to: any other counts against the day (ADR 0066)', () => {
+    const liked = (articleId: number) => ({
+      articleId,
+      readAt: null,
+      likedAt: 1,
+      likedUpdatedAt: 1,
+      seq: 1,
+    })
+    const t = tables({
+      subscriptions: [sub(1), sub(4, { deletedAt: 1 })],
+      articles: [
+        article(1, { contentKey: 'c1' }),
+        // Kept in Liked from a blog left since, and from one never followed.
+        article(2, { contentKey: 'c2', feedId: 4 }),
+        article(3, { contentKey: 'c3', feedId: 9 }),
+      ],
+      states: [liked(1), liked(2), liked(3)],
+    })
+    const list = articlesFor(t, { filter: 'liked', feedId: null }, NOW)
+    expect(list.map((a) => a.id).sort()).toEqual([1, 2, 3])
+    expect(prefetchPlan(t, list, NOW, 'en', prefs).bodies).toEqual(['c1'])
+    expect([1, 4, 9].map((feedId) => isSubscribed(t, feedId))).toEqual([true, false, false])
+  })
+
+  test('the subscriptions signature moves with a subscription made, confirmed or left', () => {
+    const t = tables({ subscriptions: [sub(1), sub(2, { seq: 3 }), sub(4, { deletedAt: 1 })] })
+    expect(subscriptionsSignature(t)).toBe('1:1,2:3')
+    // Predicted (seq 0), then confirmed by a pull (its seq): each is a change.
+    const predicted = { subscriptions: new Map(t.subscriptions).set(5, sub(5, { seq: 0 })) }
+    const confirmed = { subscriptions: new Map(t.subscriptions).set(5, sub(5, { seq: 9 })) }
+    expect(subscriptionsSignature(predicted)).toBe('1:1,2:3,5:0')
+    expect(subscriptionsSignature(confirmed)).toBe('1:1,2:3,5:9')
+    const left = { subscriptions: new Map(t.subscriptions).set(2, sub(2, { deletedAt: 5 })) }
+    expect(subscriptionsSignature(left)).toBe('1:1')
   })
 
   test("another list's plan starts over, even when the run holds every post of it", () => {
