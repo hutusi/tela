@@ -165,5 +165,106 @@
     "entries": "举报",
     "gonePerson": "账户已不存在的成员",
     "from": "来自 {url}"
+  },
+  "apps": {
+    "filters": {
+      "approved": "已批准",
+      "draft": "草稿",
+      "suspended": "已停用"
+    },
+    "search": "按名称、开发者、客户端 ID 或邮箱搜索",
+    "name": "应用",
+    "columns": {
+      "developer": "开发者",
+      "connected": "已连接",
+      "lastUsed": "最近使用"
+    },
+    "status": {
+      "approved": "已批准",
+      "draft": "草稿",
+      "suspended": "已停用"
+    },
+    "connected": "{n, plural, =0 {无人} other {# 位成员}}",
+    "never": "从未",
+    "noOwner": "无",
+    "scope": {
+      "read": "仅读取",
+      "write": "读取和修改"
+    },
+    "email": {
+      "allowed": "可以请求查看",
+      "never": "从不请求"
+    },
+    "limit": {
+      "default": "每分钟 {n} 次（默认）",
+      "perMinute": "{n, plural, =0 {不允许} other {每分钟 # 次}}",
+      "noCap": "不限"
+    },
+    "kv": {
+      "clientId": "客户端 ID",
+      "developer": "开发者",
+      "contact": "联系邮箱",
+      "homepage": "主页",
+      "privacy": "隐私政策",
+      "scope": "最多",
+      "email": "邮箱地址",
+      "owner": "所属账号",
+      "perMember": "每位成员",
+      "perApp": "合计",
+      "maxConnections": "连接上限",
+      "connections": "当前连接",
+      "lastUsed": "最近使用",
+      "registered": "登记于",
+      "approved": "批准于",
+      "suspended": "停用于"
+    },
+    "redirects": "重定向地址",
+    "notes": {
+      "draft": "草稿：只有所属账号能连接，供开发者测试。批准后所有成员都能连接。",
+      "approved": "所有成员都能连接。降低它的权限或收回邮箱权限，会立即作用于它现有的令牌。",
+      "suspended": "已停用：它持有的所有令牌都会被拒绝。连接会保留，恢复后已连接的成员可以继续使用。",
+      "private": "后台只统计有多少人连接了应用，不会显示是谁。"
+    },
+    "history": {
+      "created": "已登记",
+      "ended": "断开了 {n, plural, other {# 个连接}}"
+    },
+    "form": {
+      "name": "名称",
+      "developer": "开发者",
+      "contactEmail": "联系邮箱",
+      "contactHint": "用于沟通批准、变更和停用事宜。成员看不到。",
+      "homepageUrl": "主页",
+      "privacyUrl": "隐私政策",
+      "urlHint": "都必须是 https 地址，会显示在成员连接应用的页面上。",
+      "redirectUris": "重定向地址",
+      "redirectHint": "每行一个，最多 {n} 个：http://127.0.0.1/… 或 http://[::1]/…（任意端口均可），或应用自己的协议，例如 com.example.app:/callback。不能用 localhost。",
+      "maxScope": "最多可以请求的权限",
+      "allowEmail": "可以请求查看成员的邮箱地址",
+      "owner": "所属账号的用户名",
+      "ownerHint": "草稿可以连接的账号，供开发者测试。可不填。",
+      "perMemberPerMin": "每位成员每分钟的请求数",
+      "perAppPerMin": "每分钟的请求总数",
+      "maxConnections": "同时连接的成员上限",
+      "limitHint": "留空为默认值 {n}；填 0 表示不允许。",
+      "connectionsHint": "留空为不限。",
+      "register": "登记",
+      "save": "保存",
+      "cancel": "取消",
+      "errors": {
+        "name": "请填写名称，最多 {name} 个字符。",
+        "developer": "请填写开发者，最多 {text} 个字符。",
+        "contactEmail": "需要一个能收信的联系邮箱。",
+        "homepageUrl": "主页必须是 https 地址。",
+        "privacyUrl": "隐私政策必须是 https 地址。",
+        "redirectUris": "需要 1 到 {n} 个互不相同的重定向地址：使用 http 的本机回环地址，或应用自己的反向域名协议。不能用 localhost，也不能用 https。",
+        "maxScope": "请选择它最多可以请求的权限。",
+        "allowEmail": "请选择它能否请求查看邮箱地址。",
+        "owner": "这不是有效的用户名。不设所属账号请留空。",
+        "perMemberPerMin": "请填写 0 或更大的整数，留空为默认值。",
+        "perAppPerMin": "请填写 0 或更大的整数，留空为默认值。",
+        "maxConnections": "请填写 0 或更大的整数，留空为不限。"
+      }
+    }
   }
 }

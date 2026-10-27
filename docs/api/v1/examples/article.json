@@ -1,0 +1,49 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/v1/articles/401"
+  },
+  "status": 200,
+  "headers": {
+    "cache-control": "private, no-store"
+  },
+  "body": {
+    "article": {
+      "id": 401,
+      "feedId": 4,
+      "url": "https://blog4.example/posts/401",
+      "title": "Weather on the ridge",
+      "author": "A. Writer",
+      "publishedAt": 1790424000000,
+      "fetchedAt": 1790424000000,
+      "sortAt": 1790424000000,
+      "sourceLang": "en",
+      "excerpt": "The opening of “Weather on the ridge”.",
+      "contentKey": "c0ffee00000000000000000000000401",
+      "wordCount": 1200,
+      "readingMinutes": 6,
+      "likeCount": 0,
+      "recommendCount": 1
+    },
+    "feed": {
+      "id": 4,
+      "siteId": 4,
+      "feedUrl": "https://blog4.example/feed.xml",
+      "title": null,
+      "status": "active",
+      "lastFetchedAt": 1790593200000,
+      "lastItemAt": 1790589600000
+    },
+    "site": {
+      "id": 4,
+      "homeUrl": "https://blog4.example",
+      "title": "Field Log",
+      "description": "Walks, maps and weather.",
+      "faviconUrl": null,
+      "primaryLang": "en",
+      "readerCount": 0,
+      "translationAllowed": true,
+      "claimed": false
+    }
+  }
+}

@@ -297,29 +297,70 @@ export type BodyTranslationRow = {
   seq: number
 }
 
+type RawBodyTranslation = {
+  content_key: string
+  lang: string
+  state: string
+  request_id: string | null
+  requested_by: string | null
+  reserved_tokens: number
+  reserved_spend: number
+  reserved_day: string | null
+  due_at: number | null
+  used_tokens: number
+  chunk_keys: string
+  object_key: string | null
+  failed_leaves: string
+  seq: number
+}
+
 export async function loadBodyTranslation(
   db: TelaDb,
   contentKey: string,
   lang: string,
 ): Promise<BodyTranslationRow | null> {
-  const rows = await db.all<{
-    content_key: string
-    lang: string
-    state: string
-    request_id: string | null
-    requested_by: string | null
-    reserved_tokens: number
-    reserved_spend: number
-    reserved_day: string | null
-    due_at: number | null
-    used_tokens: number
-    chunk_keys: string
-    object_key: string | null
-    failed_leaves: string
-    seq: number
-  }>(sql`select * from body_translations where content_key = ${contentKey} and lang = ${lang}`)
+  const rows = await db.all<RawBodyTranslation>(
+    sql`select * from body_translations where content_key = ${contentKey} and lang = ${lang}`,
+  )
   const r = rows[0]
-  if (!r) return null
+  return r ? bodyTranslationOf(r) : null
+}
+
+/**
+ * A body translation as `loadBodyTranslation` reads it, and whether its writers turned
+ * translation off (ADR 0065): a post that has held that content, now or in an earlier version, is
+ * on a blog that opted out, and none is on one that allows it. The web's device hides such a translation itself; an app is not trusted
+ * to, so the API refuses it.
+ */
+export async function loadBodyTranslationShown(
+  db: TelaDb,
+  contentKey: string,
+  lang: string,
+): Promise<{ translation: BodyTranslationRow | null; optedOut: boolean }> {
+  // Every post that has held this content, its current version or an earlier one: a key an
+  // opted-out post moved on from is still that writer's (Codex's review). Two lookups, each
+  // through its own content-key index: one OR inside a single join scanned every article, and a
+  // status poll grew with the catalogue (Codex's second review).
+  const on = (optOut: 0 | 1) => {
+    const opt = sql.raw(String(optOut))
+    return sql`(exists (select 1 from articles a
+        join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
+        where a.content_key = b.content_key and s.translation_opt_out = ${opt})
+      or exists (select 1 from article_versions v join articles a on a.id = v.article_id
+        join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
+        where v.content_key = b.content_key and s.translation_opt_out = ${opt}))`
+  }
+  const rows = await db.all<RawBodyTranslation & { opted_out: number }>(sql`
+    select b.*, (${on(1)} and not ${on(0)}) as opted_out
+    from body_translations b where b.content_key = ${contentKey} and b.lang = ${lang}
+  `)
+  const r = rows[0]
+  return r
+    ? { translation: bodyTranslationOf(r), optedOut: r.opted_out === 1 }
+    : { translation: null, optedOut: false }
+}
+
+function bodyTranslationOf(r: RawBodyTranslation): BodyTranslationRow {
   return {
     contentKey: r.content_key,
     lang: r.lang,
@@ -350,6 +391,11 @@ export type BodyAsk = {
   contentKey: string
   lang: string
   userId: string
+  /**
+   * Whether the asker is free of the member's count and the site's day (ADR 0065): the actor's,
+   * which the web takes from `is_admin` and an app never has.
+   */
+  exempt: boolean
   /** This attempt's id: the statements after the first act only if it is the one written. */
   requestId: string
   reserve: number
@@ -369,14 +415,14 @@ function askHeader(ask: BodyAsk): SQL {
     ),
     k(lim, bud, adm) as (
       select ${settingSql('member.translationsPerDay')}, ${settingSql('translation.siteDailyTokens')},
-        exists (select 1 from profiles p, a where p.user_id = a.me and p.is_admin = 1)
+        ${ask.exempt ? 1 : 0}
     )`
 }
 
 /**
  * Whether the asking member has room on `day`, a column of the header (true as SQL): a conversion
- * always has; so has an operator (is_admin), whose translations count toward the site's day but
- * are never put off by it; anyone else needs their count of paid requests under
+ * always has; so has an exempt asker (an operator on the web), whose translations count toward the
+ * site's day but are never put off by it; anyone else needs their count of paid requests under
  * `member.translationsPerDay`, and the site's tokens, this reservation added, within
  * `translation.siteDailyTokens`. A limit of null is none, and 0 leaves no room.
  */
@@ -476,7 +522,7 @@ export function takeOverBodyTranslation(db: TelaDb, ask: BodyAsk, old: WaitingRe
 }
 
 export type BodyAllowance = {
-  /** `member.translationsPerDay` as it holds for this member: null for none, or an operator. */
+  /** `member.translationsPerDay` as it holds for this member: null for none, or when exempt. */
   perDay: number | null
   usedToday: number
   usedTomorrow: number
@@ -484,7 +530,7 @@ export type BodyAllowance = {
   siteBudget: number | null
   siteToday: number
   siteTomorrow: number
-  /** An operator (is_admin): no count, and never put off by the site's day. */
+  /** An exempt asker (an operator on the web): no count, and never put off by the site's day. */
   exempt: boolean
   /** The next UTC midnight: when today's count starts again. */
   resetsAt: number
@@ -492,14 +538,14 @@ export type BodyAllowance = {
 
 /**
  * Where a member's day and the site's stand, as a statement for the batch that asked, so it reads
- * what that batch wrote. `bodyAllowance` shapes its rows.
+ * what that batch wrote. `exempt` is the actor's. `bodyAllowance` shapes its rows.
  */
-export function readBodyAllowance(db: TelaDb, userId: string, now: number) {
+export function readBodyAllowance(db: TelaDb, userId: string, now: number, exempt: boolean) {
   return db.all(sql`
     with a(me, d0, d1) as (select ${userId}, ${utcDay(now)}, ${utcDay(nextUtcMidnight(now))})
     select ${settingSql('member.translationsPerDay')} as lim,
       ${settingSql('translation.siteDailyTokens')} as bud,
-      exists (select 1 from profiles p where p.user_id = a.me and p.is_admin = 1) as adm,
+      ${exempt ? 1 : 0} as adm,
       coalesce((select requests from usage_daily where subject = a.me and day = a.d0), 0) as today,
       coalesce((select requests from usage_daily where subject = a.me and day = a.d1), 0)
         as tomorrow,
@@ -511,7 +557,7 @@ export function readBodyAllowance(db: TelaDb, userId: string, now: number) {
 
 /**
  * Whether a request reserving `reserve` would find room today, as `roomOn` judges it in SQL: a
- * conversion always does, and so does an operator; anyone else needs their count under the day's
+ * conversion always does, and so does an exempt asker; anyone else needs their count under the day's
  * and the site's tokens within its budget. A guess read before the batch, which judges again:
  * it tells tela-api whether a take-over is worth asking for at all.
  */

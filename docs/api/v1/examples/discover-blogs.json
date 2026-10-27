@@ -1,0 +1,73 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/v1/discover/blogs?lang=fr"
+  },
+  "status": 200,
+  "headers": {
+    "cache-control": "public, max-age=300"
+  },
+  "body": {
+    "blogs": [
+      {
+        "id": 1,
+        "title": "Ink & Pixels",
+        "homeUrl": "https://blog1.example",
+        "description": "Notes on type and the screen.",
+        "faviconUrl": "https://assets.telaread.com/favicons/1.png",
+        "primaryLang": "en",
+        "readerCount": 0,
+        "topics": [
+          "design",
+          "tech"
+        ]
+      },
+      {
+        "id": 2,
+        "title": "Quiet Notes",
+        "homeUrl": "https://blog2.example",
+        "description": "A writer who asked not to be translated.",
+        "faviconUrl": null,
+        "primaryLang": "en",
+        "readerCount": 0,
+        "topics": []
+      },
+      {
+        "id": 3,
+        "title": "慢读",
+        "homeUrl": "https://blog3.example",
+        "description": "读得慢一点。",
+        "faviconUrl": null,
+        "primaryLang": "zh-Hans",
+        "readerCount": 0,
+        "topics": [
+          "culture"
+        ]
+      },
+      {
+        "id": 4,
+        "title": "Field Log",
+        "homeUrl": "https://blog4.example",
+        "description": "Walks, maps and weather.",
+        "faviconUrl": null,
+        "primaryLang": "en",
+        "readerCount": 0,
+        "topics": [
+          "science"
+        ]
+      },
+      {
+        "id": 5,
+        "title": "Nuit blanche",
+        "homeUrl": "https://blog5.example",
+        "description": "Carnets de nuit.",
+        "faviconUrl": null,
+        "primaryLang": "fr",
+        "readerCount": 0,
+        "topics": []
+      }
+    ],
+    "page": 1,
+    "more": false
+  }
+}

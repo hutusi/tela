@@ -26,22 +26,25 @@ import {
   readingHref,
 } from '../lib/href'
 import { effectiveSidebar, gridColumns, toggleFocus, useLayout, useWide } from '../lib/layout'
+import { openMarker } from '../lib/open-post'
 import { PREF_KEYS, readingPrefsOf, useReadingPrefs } from '../lib/prefs'
 import { useTitle } from '../lib/title'
 import { useQuickPull } from '../lib/use-quick-pull'
 import { useNow, useReadingLang, useStore, useTables } from '../store/hooks'
+import { PostRefused } from '../store/objects'
 import {
   articlesFor,
   feedTitle,
   folderTree,
   isLiked,
-  isRead,
+  isSubscribed,
   type PrefetchPlan,
   prefetchCovers,
   prefetchPlan,
   shownRead,
   shownTitle,
   subscriptionItems,
+  subscriptionsSignature,
   totals,
   withoutRead,
 } from '../store/selectors'
@@ -185,12 +188,16 @@ export function ReadingPage() {
 
   // Opening an article reads it, unless the member marks posts read themselves (a pref). Once per
   // open, so a post the member marks unread while it is open stays unread until the next open; one
-  // marked unread before is read by opening it, like any unread post.
+  // marked unread before is read by opening it, like any unread post. A post from a blog the member
+  // does not subscribe to is read once its body is there (the Reader's `onReadable`): one refused
+  // for the day's limit (ADR 0066) has nothing read, and stays unread.
   const articleId = article?.id ?? null
+  const marker = useMemo(() => openMarker(store), [store])
   // biome-ignore lint/correctness/useExhaustiveDependencies: once per article opened
   useEffect(() => {
-    if (!article || !prefs.markOnOpen || isRead(tables, article, Date.now())) return
-    store.mutate({ type: 'markRead', articleId: article.id })
+    if (article) marker.opened(article)
+    // Run before the next article's effects, the Reader's among them, in the same commit.
+    return () => marker.left()
   }, [articleId])
 
   // A new article opens at its top (the Reader moves focus into it once its body is there).
@@ -330,10 +337,20 @@ export function ReadingPage() {
   // The post after the open one, which `j` and the card at the article's end open: fetched as this
   // one opens, not when the idle prefetch reaches it (an open restarts that timer), so stepping
   // through a list never waits on the network. Read or not: the list may show read posts.
-  const upNext = article ? (after?.contentKey ?? null) : null
+  // Only from a blog the member subscribes to, as the idle prefetch (`prefetchPlan`): any other's
+  // would count against the day's limit on them (ADR 0066) before anyone opened it.
+  const upNext =
+    article && after && isSubscribed(tables, after.feedId) ? (after.contentKey ?? null) : null
   useEffect(() => {
     if (upNext) void objects.body(upNext).catch(() => undefined)
   }, [upNext, objects])
+  // A change to the subscriptions may free posts refused for the day: asked for again.
+  const subscriptionRows = tables.subscriptions
+  const subscriptions = useMemo(
+    () => subscriptionsSignature({ subscriptions: subscriptionRows }),
+    [subscriptionRows],
+  )
+  useEffect(() => objects.noteSubscriptions(subscriptions), [subscriptions, objects])
 
   // Prefetch unread bodies and finished translations while idle: the list on screen first. Keyed on
   // what it would fetch, not on the tables: every pull that brings anything makes new ones, and a
@@ -398,7 +415,11 @@ export function ReadingPage() {
         await objects.prefetch(bodies, controller.signal)
         for (const key of translations) {
           if (controller.signal.aborted) return
-          const object = await objects.object(key, controller.signal, true).catch(() => null)
+          // A post refused for the day (ADR 0066) did not fall short either: asking again before
+          // the day turns is refused again, so it is not worth a run.
+          const object = await objects
+            .object(key, controller.signal, true)
+            .catch((err: unknown) => (err instanceof PostRefused ? undefined : null))
           // A run cancelled for a newer plan did not fall short: the newer one is on its way.
           if (object === null && !controller.signal.aborted) fellShort.current = true
         }
@@ -484,10 +505,12 @@ export function ReadingPage() {
             onClose={close}
             next={next}
             listName={listName}
+            onReadable={marker.readable}
           />
         </ErrorBoundary>
-      ) : open && !synced ? (
-        // The first sync has not landed yet: the article is on its way, not gone.
+      ) : open && (!synced || store.isFetching(params.articleId ?? 0)) ? (
+        // The first sync has not landed yet, or a public page's post is being fetched by id (ADR
+        // 0066): the article is on its way, not gone.
         <ReaderPaneSkeleton />
       ) : open ? (
         <main

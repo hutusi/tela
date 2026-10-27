@@ -12,7 +12,7 @@
     "node": ">=24"
   },
   "scripts": {
-    "dev": "bun run --filter @tela/reader dev",
+    "dev": "bun run --filter @tela/reader --filter @tela/gateway dev",
     "dev:seed": "bun apps/api/scripts/dev-seed.ts",
     "build": "bun run --filter '@tela/*' build",
     "lint": "biome check .",
@@ -24,7 +24,8 @@
     "db:generate": "bun run --filter @tela/data generate",
     "admin": "bun apps/api/scripts/admin.ts",
     "restore-drill": "bun apps/api/scripts/restore-drill.ts",
-    "i18n:hant": "bun apps/reader/scripts/hant.ts"
+    "i18n:hant": "bun apps/reader/scripts/hant.ts",
+    "api:openapi": "bun packages/ext/scripts/openapi.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.12",

@@ -72,6 +72,11 @@ export type AreaSpec<A extends LedgerArea, R extends AdminRowBase, D> = {
   Header?: () => ReactNode
   /** Actions on several checked rows. */
   bulk: readonly AdminActionName[]
+  /**
+   * What an action that asks for words starts from on this row, where it edits what is there
+   * (an app's settings, for Edit); nothing for one that starts empty.
+   */
+  initial?: (row: R, action: AdminActionName) => AdminActArgs | undefined
   /** Actions that make something new, offered beside the search (New code, Invite). */
   create?: readonly AdminActionName[]
   /** Words for an action on a row, where the shell's own would mislead (Unfeature, not Restore). */

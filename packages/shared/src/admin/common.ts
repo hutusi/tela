@@ -15,6 +15,7 @@ export const ADMIN_AREAS = [
   'discover',
   'people',
   'invites',
+  'apps',
   'translation',
   'system',
   'settings',
@@ -35,6 +36,8 @@ export const ADMIN_FILTERS = {
   // `suspended`: members an operator suspended (ADR 0059), who are in neither of the others.
   people: ['admins', 'members', 'suspended'],
   invites: ['codes', 'waiting', 'revoked'],
+  // Approved apps (ADR 0064): what members may connect, what only an owner tests, what is cut off.
+  apps: ['approved', 'draft', 'suspended'],
   translation: ['blogs', 'jobs', 'models'],
   system: ['dead', 'retrying', 'resolved'],
   // Every runtime setting (ADR 0056), and those a stored row overrides.
@@ -106,6 +109,12 @@ export const ADMIN_ACTIONS = [
   'code.restore',
   'hold.cancel',
   'invite.address',
+  'app.create',
+  'app.edit',
+  'app.approve',
+  'app.suspend',
+  'app.restore',
+  'app.endConnections',
 ] as const
 export type AdminActionName = (typeof ADMIN_ACTIONS)[number]
 
@@ -144,6 +153,10 @@ export const UNDOABLE_ACTIONS = [
   'setting.set',
   'code.revoke',
   'code.restore',
+  'app.edit',
+  'app.approve',
+  'app.suspend',
+  'app.restore',
 ] as const satisfies readonly AdminActionName[]
 
 /**
@@ -199,6 +212,14 @@ export const ACTION_WRITES = {
   'code.restore': 'revoked',
   'hold.cancel': 'hold',
   'invite.address': null,
+  // An app's registration (ADR 0064): its settings, and where it stands. Ending its connections
+  // ends members' grants, which nothing gives back.
+  'app.create': 'app',
+  'app.edit': 'appSettings',
+  'app.approve': 'appStatus',
+  'app.suspend': 'appStatus',
+  'app.restore': 'appStatus',
+  'app.endConnections': null,
 } as const satisfies Record<AdminActionName, string | readonly string[] | null>
 
 /** What an action writes that an undo would restore, as a list (empty for none). */
@@ -231,6 +252,8 @@ export const ACTION_INPUT = {
   'code.addUses': 'uses',
   'code.create': 'code',
   'invite.address': 'email',
+  'app.create': 'app',
+  'app.edit': 'app',
 } as const satisfies Partial<Record<AdminActionName, string>>
 
 /** Actions the console confirms before sending: hard to take back, or felt by someone else. */
@@ -242,6 +265,8 @@ export const ACTION_CONFIRM = [
   'member.delete',
   'code.revoke',
   'hold.cancel',
+  'app.suspend',
+  'app.endConnections',
 ] as const satisfies readonly AdminActionName[]
 
 /**
@@ -267,11 +292,16 @@ export type AdminActArgs = {
   email?: string
   /** `setting.set`: the new value, checked by `parseSetting` for the key the request names. */
   value?: unknown
+  /** `app.create`, `app.edit`: the app's settings, checked by `parseAppSettings`. */
+  app?: unknown
 }
 
 export type AdminActRequest = {
   action: AdminActionName
-  /** What it acts on; empty for `code.create` and `invite.address`. A bulk action names several. */
+  /**
+   * What it acts on; empty for `code.create`, `invite.address` and `app.create`. A bulk action
+   * names several.
+   */
   ids: string[]
   args?: AdminActArgs
 }

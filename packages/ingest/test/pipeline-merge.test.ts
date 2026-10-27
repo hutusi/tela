@@ -91,7 +91,7 @@ describe('a feed that is another address for the blog it belongs to', () => {
     await fetchNow(mirror)
 
     await addTestUser(db, 'u1')
-    await subscribe(db, 'u1', mirror, clock.now())
+    await subscribe(db, 'u1', mirror, clock.now(), false)
     const read = await first<{ id: number }>(
       db,
       sql`select id from articles where feed_id = ${mirror} and url = ${server.url('/posts/2')}`,

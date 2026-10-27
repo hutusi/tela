@@ -1,0 +1,42 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/v1/search?q=pixel"
+  },
+  "status": 200,
+  "headers": {
+    "cache-control": "private, no-store"
+  },
+  "body": {
+    "posts": [
+      {
+        "id": 101,
+        "siteId": 1,
+        "title": "Drawing with pixels",
+        "translatedTitle": "用像素作画",
+        "excerpt": "The opening of “Drawing with pixels”.",
+        "url": "https://blog1.example/posts/101",
+        "author": "A. Writer",
+        "publishedAt": 1790589600000,
+        "likeCount": 1
+      }
+    ],
+    "blogs": [
+      {
+        "id": 1,
+        "title": "Ink & Pixels",
+        "homeUrl": "https://blog1.example",
+        "description": "Notes on type and the screen.",
+        "faviconUrl": "https://assets.telaread.com/favicons/1.png",
+        "primaryLang": "en",
+        "readerCount": 0,
+        "topics": [
+          "design",
+          "tech"
+        ]
+      }
+    ],
+    "page": 1,
+    "more": false
+  }
+}

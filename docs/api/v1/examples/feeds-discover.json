@@ -1,0 +1,22 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/v1/feeds/discover",
+    "body": {
+      "url": "https://fixture.example/"
+    }
+  },
+  "status": 200,
+  "headers": {
+    "cache-control": "private, no-store"
+  },
+  "body": {
+    "feeds": [
+      {
+        "feedUrl": "https://fixture.example/feed.xml",
+        "title": "Fixture Blog",
+        "feedId": null
+      }
+    ]
+  }
+}

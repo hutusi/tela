@@ -1,0 +1,13 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/v1/sync"
+  },
+  "status": 400,
+  "headers": {
+    "cache-control": "no-store"
+  },
+  "body": {
+    "error": "invalid_request"
+  }
+}

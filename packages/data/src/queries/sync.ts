@@ -82,8 +82,9 @@ const BLOGROLL = sql.raw(`id, name, description, is_public as "isPublic",
 const BLOGROLL_BLOG = sql.raw(`blogroll_id as "blogrollId", feed_id as "feedId", note,
   note_at as "noteAt", added_at as "addedAt", updated_at as "updatedAt",
   removed_at as "removedAt", seq`)
-const FEED = sql.raw(`f.id, f.site_id as "siteId", f.feed_url as "feedUrl", f.title, f.status,
-  f.last_fetched_at as "lastFetchedAt", f.last_error as "lastError",
+/** A feed as the reader holds one (`FeedRow`), from a table aliased `f`. */
+export const FEED_COLUMNS = sql.raw(`f.id, f.site_id as "siteId", f.feed_url as "feedUrl",
+  f.title, f.status, f.last_fetched_at as "lastFetchedAt", f.last_error as "lastError",
   f.last_item_at as "lastItemAt", f.seq`)
 /** An article as the reader holds one (`ArticleRow`), from a table aliased `a`. */
 export const ARTICLE_COLUMNS = sql.raw(`a.id, a.feed_id as "feedId", a.url, a.title, a.author,
@@ -92,6 +93,18 @@ export const ARTICLE_COLUMNS = sql.raw(`a.id, a.feed_id as "feedId", a.url, a.ti
   a.word_count as "wordCount", a.reading_minutes as "readingMinutes",
   a.extract_state as "extractState", a.like_count as "likeCount",
   a.recommend_count as "recommendCount", a.seq`)
+/**
+ * An article as a public answer, or one about other members, shows it: `ARTICLE_COLUMNS` without
+ * its content key (ADR 0066). The key is what fetches the full post, so it goes only to the
+ * member's own sync and to `GET /api/v1/articles/:id`, where the day's limit on posts from blogs
+ * they do not follow is counted when the body is fetched; a public page cached for everyone, or
+ * walked by a script, hands out none.
+ */
+export const PUBLIC_ARTICLE_COLUMNS = sql.raw(`a.id, a.feed_id as "feedId", a.url, a.title,
+  a.author, a.published_at as "publishedAt", a.fetched_at as "fetchedAt", a.sort_at as "sortAt",
+  a.source_lang as "sourceLang", a.excerpt, a.word_count as "wordCount",
+  a.reading_minutes as "readingMinutes", a.extract_state as "extractState",
+  a.like_count as "likeCount", a.recommend_count as "recommendCount", a.seq`)
 const TITLE = sql.raw(`t.article_id as "articleId", t.lang, t.title, t.excerpt, t.status, t.seq`)
 const STATE = sql.raw(`article_id as "articleId", read_at as "readAt",
   read_updated_at as "readUpdatedAt", liked_at as "likedAt", liked_updated_at as "likedUpdatedAt",
@@ -126,7 +139,12 @@ const TRANSLATION = sql.raw(`b.content_key as "contentKey", b.lang, b.state,
   b.chunk_keys as "chunkKeys", b.object_key as "objectKey", b.failed_leaves as "failedLeaves",
   b.due_at as "dueAt", b.seq`)
 
-function siteColumns(userId: string): SQL {
+/**
+ * A blog as `userId`'s reader holds one (`SiteRow`), from a table aliased `s`: whether it is theirs,
+ * and its reader count as a device may show it. SQLite's 0/1 for `owned`, `claimed` and
+ * `translationOptOut`; the API makes them booleans.
+ */
+export function siteColumns(userId: string): SQL {
   return sql`s.id, s.home_url as "homeUrl", s.title, s.description, s.favicon_key as "faviconKey",
     s.primary_lang as "primaryLang", s.listing, (s.claimed_by = ${userId}) as "owned",
     (s.claimed_by is not null) as "claimed", ${deviceReaderCount('s')} as "readerCount",
@@ -196,6 +214,12 @@ function scope(userId: string, horizon: number, cursor: number) {
  * `titlesLang` limits the title rows, fresh and changed, to that one language (ADR 0052); left
  * out, every language comes, as a shell from before it expects. The caller checks it is a reading
  * language. Each title query gains one bound parameter, nothing else.
+ *
+ * `shownOnly` leaves out the title and body translation rows of blogs whose writers turned
+ * translation off (ADR 0065): the web's device hides those itself, and an app is not trusted to.
+ * A body translation is shown while some post holding its content is on a blog that allows it, as
+ * `loadBodyTranslationShown` decides. Turning translation back on stamps the rows again
+ * (`restampTranslations`), so a delta brings what was left out. No bound parameter.
  */
 export async function readPull(
   db: TelaDb,
@@ -205,9 +229,10 @@ export async function readPull(
     horizon: number
     limit: number
     titlesLang?: string | undefined
+    shownOnly?: boolean | undefined
   },
 ): Promise<PullRead> {
-  const { userId, cursor, horizon, limit, titlesLang } = options
+  const { userId, cursor, horizon, limit, titlesLang, shownOnly } = options
   const { activeFeeds, newFeeds, kept, newlyKept, horizonOf, rolledFeeds, newlyRolled } = scope(
     userId,
     horizon,
@@ -232,6 +257,15 @@ export async function readPull(
     ? sql`select id from articles where id in (${horizonOf(activeFeeds)}) or id in (${kept})`
     : sql`select id from articles where id in (${horizonOf(newFeeds)}) or id in (${newlyKept})`
   const inTitlesLang = titlesLang === undefined ? sql`` : sql`and t.lang = ${titlesLang}`
+  const titleShown = shownOnly
+    ? sql`and exists (select 1 from feeds sf join sites ss on ss.id = sf.site_id
+        where sf.id = t.feed_id and ss.translation_opt_out = 0)`
+    : sql``
+  const translationShown = shownOnly
+    ? sql`and exists (select 1 from articles sa join feeds sf on sf.id = sa.feed_id
+        join sites ss on ss.id = sf.site_id
+        where sa.content_key = b.content_key and ss.translation_opt_out = 0)`
+    : sql``
 
   const queries = {
     head: sql`select coalesce((select v from counters where k = 'seq'), 0) as head`,
@@ -292,10 +326,10 @@ export async function readPull(
 
     // Shared rows: the fresh part is unbounded (a horizon is bounded by itself); the changed part
     // is cut at `limit` like every other delta table.
-    freshFeeds: sql`select ${FEED} from feeds f where f.id in (${fresh})`,
+    freshFeeds: sql`select ${FEED_COLUMNS} from feeds f where f.id in (${fresh})`,
     feeds: snapshot
       ? sql`select 1 where false`
-      : sql`select ${FEED} from feeds f where f.id in (${heldFeeds}) and f.seq > ${cursor}
+      : sql`select ${FEED_COLUMNS} from feeds f where f.id in (${heldFeeds}) and f.seq > ${cursor}
           order by f.seq limit ${over}`,
     freshArticles: sql`select ${ARTICLE_COLUMNS} from articles a where a.id in (${freshArticles})`,
     articles: snapshot
@@ -308,7 +342,7 @@ export async function readPull(
       ? sql`select 1 where false`
       : sql`select article_id as id from (${newlyKept})`,
     freshTitles: sql`select ${TITLE} from article_titles t where t.article_id in (${freshArticles})
-      ${inTitlesLang}`,
+      ${inTitlesLang} ${titleShown}`,
     // The member's own states for a fresh feed's articles, whatever their seq: a device drops a
     // feed's articles and their states when it unsubscribes, and a resubscription must bring
     // back what was read, not only what was written since.
@@ -321,13 +355,16 @@ export async function readPull(
     titles: snapshot
       ? sql`select 1 where false`
       : sql`select ${TITLE} from article_titles t where t.seq > ${cursor} ${inTitlesLang}
+          ${titleShown}
           and (t.feed_id in (${activeFeeds}) or t.article_id in (${kept}))
           order by t.seq limit ${over}`,
     freshTranslations: sql`select ${TRANSLATION} from body_translations b
-      where b.content_key in (select content_key from articles where id in (${freshArticles}))`,
+      where b.content_key in (select content_key from articles where id in (${freshArticles}))
+      ${translationShown}`,
     translations: snapshot
       ? sql`select 1 where false`
       : sql`select ${TRANSLATION} from body_translations b where b.seq > ${cursor}
+          ${translationShown}
           and b.content_key in (select content_key from articles
             where feed_id in (${activeFeeds}) or id in (${kept}))
           order by b.seq limit ${over}`,

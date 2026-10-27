@@ -61,6 +61,7 @@ import {
   waitsOnFullCode,
 } from './queries/invites'
 import { closeAccount, releaseClaim } from './queries/leaving'
+import { admitOpens } from './queries/opens'
 import { avatarOf, dueGravatarChecks } from './queries/people'
 import { compactReadStates, fileImportedFeeds, writeImportFiling } from './queries/reader'
 import {
@@ -468,6 +469,62 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
       expect(titles(second)).toEqual(['2:fr', '3:fr'])
       expect(second.pageEnd).toBe(null)
       expect(second.head).toBe(afterArticles + 3)
+    })
+
+    it('leaves out the titles and body translations of a blog whose writer said no, when asked (ADR 0065)', async () => {
+      const db = await makeDb()
+      n = 0
+      const start = await setup(db)
+      // Blog 2 said no, and its feed is followed too. Post 3 on it holds the same body as post 1
+      // on blog 1, which allows it: that body's translation is still shown, its title is not.
+      await db.batch([
+        bumpSeq(db),
+        db.run(sql`insert into sites (id, home_url, translation_opt_out, created_at, updated_at,
+            seq)
+          values (2, 'https://said-no.example', 1, 0, 0, ${currentSeq})`),
+        db.run(sql`insert into feeds (id, site_id, feed_url, host, next_fetch_at, created_at,
+            updated_at, seq)
+          values (2, 2, 'https://said-no.example/feed.xml', 'said-no.example', 0, 0, 0,
+            ${currentSeq})`),
+        db.run(sql`insert into subscriptions (user_id, feed_id, created_at, updated_at, seq)
+          values (${member}, 2, 0, 0, ${currentSeq})`),
+        db.run(sql`insert into articles (id, feed_id, dedup_key, content_key, fetched_at, sort_at,
+            seq)
+          values (1, 1, 'k1', 'body-a', ${T0}, ${T0}, ${currentSeq}),
+            (2, 2, 'k2', 'body-b', ${T0}, ${T0}, ${currentSeq}),
+            (3, 2, 'k3', 'body-a', ${T0}, ${T0}, ${currentSeq})`),
+        db.run(sql`insert into article_titles (article_id, lang, feed_id, title, status,
+            source_hash, updated_at, seq)
+          select a.id, 'en', a.feed_id, 'en ' || a.id, 'done', 'h', 0, ${currentSeq}
+          from articles a where true`),
+        db.run(sql`insert into body_translations (content_key, lang, state, updated_at, seq)
+          values ('body-a', 'en', 'done', 0, ${currentSeq}), ('body-b', 'en', 'done', 0,
+            ${currentSeq})`),
+      ] as never)
+      const read = async (cursor: number, shownOnly?: boolean) => {
+        const pulled = await readPull(db, {
+          userId: member,
+          cursor,
+          horizon: T0 - 1,
+          limit: 100,
+          titlesLang: 'en',
+          shownOnly,
+        })
+        return {
+          titles: pulled.rows.titles.map((t) => Number(t.articleId)).sort(),
+          translations: pulled.rows.translations.map((t) => t.contentKey).sort(),
+        }
+      }
+
+      // A snapshot, and a delta that brings the new feed's posts fresh and blog 1's by seq.
+      for (const cursor of [0, start]) {
+        expect(await read(cursor, true)).toEqual({ titles: [1], translations: ['body-a'] })
+        // The web's device hides them itself, and is sent them all.
+        expect(await read(cursor)).toEqual({
+          titles: [1, 2, 3],
+          translations: ['body-a', 'body-b'],
+        })
+      }
     })
 
     it('reads the titles of named posts in one language, of those the member holds (ADR 0052)', async () => {
@@ -1484,6 +1541,7 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
       })
       const result = await importFeeds(db, {
         userId: 'u1',
+        exempt: false,
         feeds: brought(['known', 'n1', 'n1', 'n2', 'n3', 'n4', 'n5']),
         now: T0,
       })
@@ -1520,7 +1578,7 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         addedBy: 'u1',
         now: T0,
       })
-      const within = sql`${feedRoom('u1', T0)} > 0`
+      const within = sql`${feedRoom('u1', T0, false)} > 0`
       expect(await ensureFeed(db, { ...feed('new'), within })).toBe(null)
       expect(await first(db, sql`select 1 as x from feeds`)).toBe(undefined)
       expect(await first(db, sql`select 1 as x from sites`)).toBe(undefined)
@@ -1530,15 +1588,56 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         siteId: 1,
         created: false,
       })
-      // An admin's room is never spent.
+      // An admin is held to the day when the caller says so (an app, ADR 0064)…
       await db.run(sql`update profiles set is_admin = 1 where user_id = 'u1'`)
-      expect((await ensureFeed(db, { ...feed('new'), within }))?.created).toBe(true)
+      expect(await ensureFeed(db, { ...feed('new'), within })).toBe(null)
+      // …and `is_admin` frees them where it decides (a tela-api from before the actor).
+      const asAdmin = sql`${feedRoom('u1', T0, 'is_admin')} > 0`
+      expect((await ensureFeed(db, { ...feed('new'), within: asAdmin }))?.created).toBe(true)
+      // An exempt actor's room is never spent.
+      const exempt = sql`${feedRoom('u1', T0, true)} > 0`
+      expect((await ensureFeed(db, { ...feed('newer'), within: exempt }))?.created).toBe(true)
+    })
+
+    it("an admin's import through an app is counted like anyone's", async () => {
+      const db = await makeDb()
+      await seedMember(db, { 'member.feedsPerDay': 1, 'member.maxSubscriptions': 2 })
+      await db.run(sql`update profiles set is_admin = 1 where user_id = 'u1'`)
+      const asApp = await importFeeds(db, {
+        userId: 'u1',
+        exempt: false,
+        feeds: brought(['a', 'b', 'c']),
+        now: T0,
+      })
+      expect([asApp.added, asApp.waiting, asApp.over, asApp.exempt, asApp.perDay]).toEqual([
+        1,
+        1,
+        1,
+        false,
+        1,
+      ])
+      // Nor does the wait free them later: what waits is counted as the import was.
+      const due = (now: number) => db.all(duePendingFeeds(now))
+      expect(await due(T0)).toEqual([])
+      // On the web the operator is exempt: everything is added at once.
+      const asWeb = await importFeeds(db, {
+        userId: 'u1',
+        exempt: true,
+        feeds: brought(['d', 'e']),
+        now: T0,
+      })
+      expect([asWeb.added, asWeb.over, asWeb.exempt]).toEqual([2, 0, true])
     })
 
     it('the waiting member is due when a run would move something', async () => {
       const db = await makeDb()
       await seedMember(db, { 'member.feedsPerDay': 1 })
-      await importFeeds(db, { userId: 'u1', feeds: brought(['a', 'b', 'c']), now: T0 })
+      await importFeeds(db, {
+        userId: 'u1',
+        exempt: false,
+        feeds: brought(['a', 'b', 'c']),
+        now: T0,
+      })
       const due = async (now: number) =>
         ((await db.all(duePendingFeeds(now))) as { key: string }[]).map((r) => r.key)
       expect(await due(T0)).toEqual([])
@@ -1552,12 +1651,21 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
     it('the usage answer counts the day, what waits and what is held', async () => {
       const db = await makeDb()
       await seedMember(db, { 'member.feedsPerDay': 1 })
-      await importFeeds(db, { userId: 'u1', feeds: brought(['a', 'b', 'c']), now: T0 })
-      expect(await memberAllowances(db, 'u1', T0)).toEqual({
+      await importFeeds(db, {
+        userId: 'u1',
+        exempt: false,
+        feeds: brought(['a', 'b', 'c']),
+        now: T0,
+      })
+      // One post opened today from a blog they do not follow, and one yesterday.
+      await db.run(sql`insert into post_opens (user_id, day, content_key, opened_at)
+        values ('u1', ${utcDay(T0)}, 'c1', ${T0}), ('u1', ${utcDay(T0 - 86_400_000)}, 'c0', 0)`)
+      expect(await memberAllowances(db, 'u1', T0, false)).toEqual({
         exempt: false,
         feeds: { perDay: 1, addedToday: 1, pending: 2 },
         subscriptions: { max: 300, count: 1 },
         translations: { perDay: 20, usedToday: 0, waiting: 0 },
+        posts: { perDay: 100, openedToday: 1 },
       })
     })
   })
@@ -2212,10 +2320,18 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
       db.run(sql`insert into settings (key, value, updated_at)
         values (${key}, ${JSON.stringify(value)}, 0)
         on conflict (key) do update set value = excluded.value`)
-    const ask = (userId: string, contentKey: string, reserve = 500, requestId = contentKey) => ({
+    // `exempt` is the caller's (ADR 0065): the web passes an operator's `is_admin`, an app false.
+    const ask = (
+      userId: string,
+      contentKey: string,
+      reserve = 500,
+      requestId = contentKey,
+      exempt = false,
+    ) => ({
       contentKey,
       lang: 'fr',
       userId,
+      exempt,
       requestId: `${requestId}-${userId}`,
       reserve,
       now: T0,
@@ -2224,7 +2340,7 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
       const results = (await db.batch([
         bumpSeq(db),
         ...admitBodyTranslation(db, a),
-        readBodyAllowance(db, a.userId, T0),
+        readBodyAllowance(db, a.userId, T0, a.exempt),
       ] as never)) as unknown as unknown[]
       return bodyAllowance(results.at(-1), T0)
     }
@@ -2274,12 +2390,18 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         values ('*', ${D0}, 0, 900)`)
       await admit(db, ask('u1', 'c1', 200))
       expect((await row(db, 'c1'))?.due_at).toBe(MIDNIGHT)
-      // The operator: today, past the member count and the site's tokens, and counted in both.
-      const op = await admit(db, ask('op', 'c2', 200))
-      await admit(db, ask('op', 'c3', 200))
+      // The operator on the web: today, past the member count and the site's tokens, and counted
+      // in both.
+      const op = await admit(db, ask('op', 'c2', 200, 'c2', true))
+      await admit(db, ask('op', 'c3', 200, 'c3', true))
       expect((await row(db, 'c2'))?.reserved_day).toBe(D0)
       expect((await row(db, 'c3'))?.due_at).toBe(null)
       expect([op.exempt, op.perDay]).toEqual([true, null])
+      // The same operator through an app is never exempt (ADR 0064): put off like anyone, though
+      // `is_admin` is set.
+      const app = await admit(db, ask('op', 'c6', 200, 'c6', false))
+      expect((await row(db, 'c6'))?.due_at).toBe(MIDNIGHT)
+      expect([app.exempt, app.perDay]).toEqual([false, 1])
       // A budget of 0 leaves room for nothing paid; null is no limit at all.
       await setting(db, 'translation.siteDailyTokens', 0)
       await admit(db, ask('u1', 'c4', 200))
@@ -3406,6 +3528,122 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         // A second release finds no verified claim and moves no blog.
         expect((await release())[1]).toEqual([])
       }
+    })
+  })
+
+  describe('posts from blogs a member does not follow (ADR 0066)', () => {
+    const MIDNIGHT = nextUtcMidnight(T0)
+    const key = (c: string) => c.repeat(32)
+    /** Feed 1 is followed, feed 2 is not; feed 1's post was reprocessed from `o…` to `s…`. */
+    async function seed(db: TelaDb) {
+      for (const id of ['u1', 'u2']) {
+        await db.run(sql`insert into user (id, name, email, email_verified, created_at, updated_at)
+          values (${id}, ${id}, ${`${id}@x.y`}, 1, 0, 0)`)
+        await db.run(sql`insert into profiles (user_id, handle, created_at, updated_at)
+          values (${id}, ${`h_${id}`}, 0, 0)`)
+      }
+      await db.run(sql`insert into sites (id, home_url, created_at, updated_at)
+        values (1, 'https://b.example', 0, 0)`)
+      await db.run(sql`insert into feeds (id, site_id, feed_url, host, next_fetch_at, created_at, updated_at)
+        values (1, 1, 'https://b.example/a', 'b.example', 0, 0, 0),
+          (2, 1, 'https://b.example/b', 'b.example', 0, 0, 0)`)
+      const posts: [number, number, string][] = [
+        [1, 1, 's'],
+        [2, 2, '1'],
+        [3, 2, '2'],
+        [4, 2, '3'],
+        [5, 2, '4'],
+      ]
+      for (const [id, feed, c] of posts) {
+        await db.run(sql`insert into articles (id, feed_id, dedup_key, fetched_at, sort_at,
+            current_version, content_key)
+          values (${id}, ${feed}, ${`g:${id}`}, 0, 0, ${id === 1 ? 2 : 1}, ${key(c)})`)
+        await db.run(sql`insert into article_versions (article_id, version, provenance,
+            content_key, norm_version, body_chars, created_at)
+          values (${id}, ${id === 1 ? 2 : 1}, 'feed', ${key(c)}, 1, 10, 0)`)
+      }
+      await db.run(sql`insert into article_versions (article_id, version, provenance,
+          content_key, norm_version, body_chars, created_at)
+        values (1, 1, 'feed', ${key('o')}, 1, 10, 0)`)
+      await db.run(sql`insert into subscriptions (user_id, feed_id, watermark_id, created_at, updated_at)
+        values ('u1', 1, 0, 0, 0)`)
+    }
+    const setting = (db: TelaDb, value: unknown) =>
+      db.run(sql`insert into settings (key, value, updated_at)
+        values ('member.unsubscribedPostsPerDay', ${JSON.stringify(value)}, 0)
+        on conflict (key) do update set value = excluded.value`)
+    const admit = (db: TelaDb, keys: string[], now = T0, userId = 'u1', exempt = false) =>
+      admitOpens(db, { userId, exempt, keys: keys.map(key), now })
+    const opened = async (db: TelaDb) =>
+      (
+        await db.all<{ user_id: string; day: string; content_key: string }>(
+          sql`select user_id, day, content_key from post_opens order by user_id, day, content_key`,
+        )
+      ).map((r) => `${r.user_id} ${r.day} ${r.content_key.slice(0, 1)}`)
+
+    it('follows are free, others count once a day up to the limit, in the order asked', async () => {
+      const db = await makeDb()
+      await seed(db)
+      await setting(db, 2)
+      const day = utcDay(T0)
+      expect(await admit(db, ['s', '1'])).toEqual({ allowed: [key('s'), key('1')], refused: {} })
+      // The post opened already is free again; the second place goes, and the third is refused.
+      expect(await admit(db, ['1', '2', '3'])).toEqual({
+        allowed: [key('1'), key('2')],
+        refused: { [key('3')]: { error: 'post_limit', limit: 2, resetsAt: MIDNIGHT } },
+      })
+      // A followed post's earlier version, and a key no post holds: free, and nothing written.
+      expect((await admit(db, ['o', 'f'])).allowed).toEqual([key('o'), key('f')])
+      expect(await opened(db)).toEqual([`u1 ${day} 1`, `u1 ${day} 2`])
+      // Another member counts apart; the next UTC day starts again.
+      expect((await admit(db, ['3'], T0, 'u2')).allowed).toEqual([key('3')])
+      expect((await admit(db, ['3'], MIDNIGHT)).allowed).toEqual([key('3')])
+      // An admin on the web is never counted.
+      expect((await admit(db, ['4'], T0, 'u1', true)).allowed).toEqual([key('4')])
+      expect(await opened(db)).toHaveLength(4)
+      // 0 is nothing at all, and null no limit.
+      await setting(db, 0)
+      expect(Object.keys((await admit(db, ['4'], MIDNIGHT)).refused)).toEqual([key('4')])
+      expect((await admit(db, ['1'])).allowed).toEqual([key('1')])
+      await setting(db, null)
+      expect((await admit(db, ['3', '4'])).allowed).toEqual([key('3'), key('4')])
+    })
+
+    it('a post kept from a blog the member left is counted', async () => {
+      const db = await makeDb()
+      await seed(db)
+      await setting(db, 1)
+      await db.run(sql`update subscriptions set deleted_at = 5 where user_id = 'u1'`)
+      await db.run(sql`insert into user_article_states (user_id, article_id, liked_at, liked_updated_at)
+        values ('u1', 1, 5, 5)`)
+      expect((await admit(db, ['s'])).allowed).toEqual([key('s')])
+      expect(Object.keys((await admit(db, ['1'])).refused)).toEqual([key('1')])
+      expect(await opened(db)).toEqual([`u1 ${utcDay(T0)} s`])
+    })
+
+    it('two decisions racing never take more places than the limit', async () => {
+      const db = await makeDb()
+      await seed(db)
+      await setting(db, 3)
+      const [a, b] = await Promise.all([admit(db, ['1', '2']), admit(db, ['3', '4'])])
+      expect((a?.allowed.length ?? 0) + (b?.allowed.length ?? 0)).toBe(3)
+      expect(await opened(db)).toHaveLength(3)
+    })
+
+    it('closing an account takes its record, and only its own', async () => {
+      const db = await makeDb()
+      await seed(db)
+      await admit(db, ['1'])
+      await admit(db, ['2'], T0, 'u2')
+      const closed = await closeAccount(db, {
+        userId: 'u1',
+        actor: 'u1',
+        action: 'account.delete',
+        group: 'g',
+        now: T0,
+      })
+      expect(closed).toBe('closed')
+      expect(await opened(db)).toEqual([`u2 ${utcDay(T0)} 2`])
     })
   })
 

@@ -33,6 +33,7 @@ import {
   type Provider,
   providerError,
   type SignInError,
+  STAY_PAGES,
   takeInvite,
   useSignIn,
   withoutDoor,
@@ -64,7 +65,8 @@ export type DoorRequest = (
   onClose?: () => void
 }
 
-type Opened = DoorRequest & { at: string; key: number }
+/** A request as the sheet holds it: the page it opened on, that page's query then, and its turn. */
+type Opened = DoorRequest & { at: string; search: string; key: number }
 
 const DoorContext = createContext<((request: DoorRequest) => void) | null>(null)
 /** Whether the open sheet is carrying a sign-in through, and so says where a member goes. */
@@ -608,6 +610,7 @@ function Sheet({
     mode,
     request.mode === 'login' ? (request.next ?? null) : null,
     card ? claimPath(card.url) : null,
+    { pathname: request.at, search: request.search },
   )
   const close = () => {
     if (busy.current) return
@@ -644,7 +647,8 @@ function Sheet({
         errorReturn={(p) => errorReturn(window.location.pathname, window.location.search, mode, p)}
         invite={mode === 'join' && request.mode !== 'login' ? request.code : undefined}
         error={mode === first ? request.error : null}
-        replace={request.at === '/join'}
+        // Staying on the page it opened on is no new entry in the history.
+        replace={request.at === '/join' || STAY_PAGES.has(request.at)}
         onDone={onDone}
         onSwitch={setMode}
         busyRef={busy}
@@ -690,7 +694,7 @@ export function FrontDoorProvider({ children }: { children: React.ReactNode }) {
   // Whether the open sheet's form is carrying a sign-in through (`DoorForm`'s `onCarrying`).
   const [carrying, setCarrying] = useState(false)
   const open = useCallback((next: DoorRequest) => {
-    setRequest({ ...next, at: here.current, key: ++opened.current })
+    setRequest({ ...next, at: here.current, search: window.location.search, key: ++opened.current })
   }, [])
 
   useEffect(() => {

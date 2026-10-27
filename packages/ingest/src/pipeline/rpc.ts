@@ -7,7 +7,7 @@
  */
 import { asUrl, normalizeOrigin } from '@tela/content'
 import { feedsFromOpml } from '@tela/content/opml'
-import { feedRoom, type TelaDb } from '@tela/data'
+import { type Exempt, feedRoom, type TelaDb } from '@tela/data'
 import { FEED_FORMATS, type FeedFormat } from '@tela/shared'
 import { sql } from 'drizzle-orm'
 import { type DiscoveredFeed, discoverFeeds } from '../discover'
@@ -50,21 +50,26 @@ export interface Ingest {
    * Register a feed a member chose. A URL Tela already follows is taken as is; a new one is
    * fetched and parsed first, so nothing that is not a feed becomes a feed row. With `withinDay`,
    * a feed new to Tela counts against the member's day and is refused past it; a tela-api from
-   * before ADR 0063 sends none, and nothing is counted.
+   * before ADR 0063 sends none, and nothing is counted. `exempt` is the actor's (ADR 0065): an
+   * admin on the web, never an app. A tela-api from before it sends none, and the member's
+   * `is_admin` decides, as it always did.
    */
   addFeed(input: {
     feedUrl: string
     actorId: string | null
     withinDay?: boolean
+    exempt?: boolean
   }): Promise<AddFeedResult>
   /**
    * Find the blog behind a URL a member says is theirs, and file its feed under that home. A feed
-   * new to Tela counts against the member's day with `withinDay`, as `addFeed`'s does.
+   * new to Tela counts against the member's day with `withinDay`, and `exempt` frees it, as
+   * `addFeed`'s do.
    */
   startClaim(input: {
     url: string
     actorId: string
     withinDay?: boolean
+    exempt?: boolean
   }): Promise<StartClaimResult>
   /**
    * The feed URLs of an OPML document, and the folders it lists them in. Parsing only: the feed
@@ -128,7 +133,9 @@ export async function feedOnlyFeeds(db: TelaDb, url: string): Promise<Discovered
 
 export function createIngest(deps: { db: TelaDb; http: HttpClient; now: () => number }): Ingest {
   const { db, http, now } = deps
-  const room = (actorId: string) => sql`${feedRoom(actorId, now())} > 0`
+  // No `exempt` is a tela-api from before the actor (ADR 0065): `is_admin` decides, as it did.
+  const room = (actorId: string, exempt: boolean | undefined) =>
+    sql`${feedRoom(actorId, now(), exempt ?? ('is_admin' satisfies Exempt))} > 0`
   const find = async (url: string, maxCandidates: number): Promise<DiscoverResult> => {
     // A feed-only blog's own feeds, without a request to it; none left is no feed to offer.
     const kept = await feedOnlyFeeds(db, url)
@@ -150,7 +157,7 @@ export function createIngest(deps: { db: TelaDb; http: HttpClient; now: () => nu
       return find(parsed.toString(), 5)
     },
 
-    async addFeed({ feedUrl, actorId, withinDay }) {
+    async addFeed({ feedUrl, actorId, withinDay, exempt }) {
       const parsed = asUrl(feedUrl)
       if (!parsed) return { error: 'invalid_url' }
       // A merged feed's URL is still its URL; it subscribes to the feed it merged into (ADR 0028).
@@ -170,11 +177,11 @@ export function createIngest(deps: { db: TelaDb; http: HttpClient; now: () => nu
       const input = { feedUrl: feed.url, homeUrl: feed.homeUrl, actorId, now: now() }
       if (!withinDay || actorId === null) return registerFeed(db, input)
       // Counted in the statements that write it: a redirect to a feed Tela has is still free.
-      const added = await registerFeed(db, { ...input, within: room(actorId) })
+      const added = await registerFeed(db, { ...input, within: room(actorId, exempt) })
       return added ?? { error: 'feed_limit' }
     },
 
-    async startClaim({ url, actorId, withinDay }) {
+    async startClaim({ url, actorId, withinDay, exempt }) {
       const typed = asUrl(url)
       if (!typed) return { error: 'invalid_url' }
       const found = await find(typed.toString(), 3)
@@ -188,7 +195,7 @@ export function createIngest(deps: { db: TelaDb; http: HttpClient; now: () => nu
         typedOrigin && typedOrigin !== normalizeOrigin(feed.url) ? typedOrigin : feed.homeUrl
       const input = { feedUrl: feed.url, homeUrl, actorId, now: now() }
       const registered = withinDay
-        ? await registerFeed(db, { ...input, within: room(actorId) })
+        ? await registerFeed(db, { ...input, within: room(actorId, exempt) })
         : await registerFeed(db, input)
       if (!registered) return { error: 'feed_limit' }
       return { siteId: registered.siteId, feedId: registered.feedId }

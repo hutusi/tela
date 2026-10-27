@@ -31,3 +31,21 @@ export async function isBarred(db: TelaDb, userId: string): Promise<boolean> {
   )
   return row !== undefined
 }
+
+/**
+ * The member's standing and whether they are an admin, in one read: what tela-api's member check
+ * reads before a call that matters (ADRs 0058, 0059), and what the web's actor takes its `exempt`
+ * from (ADR 0065), so neither costs a round trip of its own. No profile is neither barred nor an
+ * admin.
+ */
+export async function memberStanding(
+  db: TelaDb,
+  userId: string,
+): Promise<{ barred: boolean; admin: boolean }> {
+  const row = await first<{ barred: number; admin: number }>(
+    db,
+    sql`select not ${standingOk('p')} as barred, p.is_admin = 1 as admin
+      from profiles p where p.user_id = ${userId}`,
+  )
+  return { barred: row?.barred === 1, admin: row?.admin === 1 }
+}

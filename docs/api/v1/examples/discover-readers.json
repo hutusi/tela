@@ -1,0 +1,22 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/v1/discover/readers?lang=fr"
+  },
+  "status": 200,
+  "headers": {
+    "cache-control": "public, max-age=300"
+  },
+  "body": {
+    "readers": [
+      {
+        "userId": "Bo7rTz2xKq9mVn4cWp6sLy8dFh3gJk5a",
+        "handle": "bo_reads",
+        "displayName": "Bo",
+        "avatar": "https://telaread.com/avatar/Bo7rTz2xKq9mVn4cWp6sLy8dFh3gJk5a?v=0"
+      }
+    ],
+    "page": 1,
+    "more": false
+  }
+}

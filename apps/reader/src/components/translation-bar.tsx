@@ -30,19 +30,29 @@ const localDay = (at: number) => {
 }
 
 /**
- * "Tela will translate this after 08:00", in the member's own time, and "tomorrow" when that is
- * not today where they are: the next UTC midnight is 08:00 in Beijing and 01:00 in Paris.
+ * A moment as the member's own clock reads it, and whether that is tomorrow where they are: the
+ * next UTC midnight is 08:00 in Beijing and 01:00 in Paris.
  */
+export function localTime(
+  at: number,
+  locale: string,
+  now: number = Date.now(),
+): { time: string; tomorrow: boolean } {
+  const time = new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit' }).format(
+    new Date(at),
+  )
+  return { time, tomorrow: localDay(at) > localDay(now) }
+}
+
+/** "Tela will translate this after 08:00", in the member's own time, and "tomorrow" when so. */
 export function waitingLine(
   t: (key: 'waitingToday' | 'waitingTomorrow', values: { time: string }) => string,
   dueAt: number,
   locale: string,
   now: number = Date.now(),
 ): string {
-  const time = new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit' }).format(
-    new Date(dueAt),
-  )
-  return t(localDay(dueAt) > localDay(now) ? 'waitingTomorrow' : 'waitingToday', { time })
+  const { time, tomorrow } = localTime(dueAt, locale, now)
+  return t(tomorrow ? 'waitingTomorrow' : 'waitingToday', { time })
 }
 
 const MODES: ReadingMode[] = ['side', 'trans', 'orig']

@@ -9,7 +9,8 @@
  * - `POST /link {provider}` starts linking Google or GitHub, on a fresh session: it answers where
  *   to send the browser, and sets the cookie that ties the provider's return to it.
  * - `POST /unlink {accountId}` removes a linked provider, on a fresh session.
- * - `POST /sign-out-everywhere` ends every session the member has but this one.
+ * - `POST /sign-out-everywhere` ends every session the member has but this one, and every app
+ *   connected to the account (ADR 0064).
  * - `POST /delete/code` mails a code to delete the account, and `POST /delete {code}` deletes it
  *   with that code (ADR 0058), then clears this browser's cookies.
  *
@@ -17,11 +18,12 @@
  * copy would be out of date exactly when it matters. Every call reads the session from D1, not the
  * five-minute signed copy the other routes trust, so a session that a reset or "sign out
  * everywhere" ended can do nothing here while its copy lives on. Setting or changing the password
- * ends the member's other sessions, and every change mails them a notice; a link does both at the
- * provider's return (`auth.ts`), and is written there only while the browser that comes back still
- * holds one of the member's sessions, read from D1 as here. tela-api's own calls to better-auth
- * pass none of its limits, so each change is counted per member, once it is known to be one: a
- * refusal for a stale session or an account that is not the member's spends nothing.
+ * ends the member's other sessions and connected apps, and every change mails them a notice; a
+ * link does both at the provider's return (`auth.ts`), and is written there only while the browser
+ * that comes back still holds one of the member's sessions, read from D1 as here. tela-api's own
+ * calls to better-auth pass none of its limits, so each change is counted per member, once it is
+ * known to be one: a refusal for a stale session or an account that is not the member's spends
+ * nothing.
  */
 import {
   closeAccount,
@@ -29,21 +31,20 @@ import {
   consumeLimit,
   first,
   type LimitedAction,
-  memberAllowances,
   newGroupId,
-  nextUtcDay,
   writeClosure,
 } from '@tela/data'
-import type { AccountUsage } from '@tela/shared'
 import { isAPIError } from 'better-auth/api'
 import { sql } from 'drizzle-orm'
 import { type Context, Hono } from 'hono'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import type { ApiEnv, Member } from '../app'
 import { type Auth, endOtherSessions, FRESH_SECONDS, notifyMember, PASSWORD_LENGTH } from '../auth'
+import { readUsage } from '../core/usage'
 import type { ApiDeps } from '../deps'
 import { type AccountChange, deleteAccountMail } from '../mail'
 import { mailLocale } from '../mail-locale'
+import { webActor } from '../web-actor'
 
 /** The session a call came with, as D1 has it now: its token, and when it was made (ms). */
 type Session = { token: string; createdAt: number }
@@ -138,24 +139,7 @@ export function accountRoutes(deps: ApiDeps, auth: Auth) {
    * none (`exempt` says why).
    */
   routes.get('/usage', async (c) => {
-    const now = deps.clock.now()
-    const used = await memberAllowances(db, c.get('member').id, now)
-    const none = (limit: number | null) => (used.exempt ? null : limit)
-    const answer: AccountUsage = {
-      translations: {
-        perDay: none(used.translations.perDay),
-        usedToday: used.translations.usedToday,
-        waiting: used.translations.waiting,
-        resetsAt: nextUtcDay(now),
-      },
-      feeds: {
-        perDay: none(used.feeds.perDay),
-        addedToday: used.feeds.addedToday,
-        pending: used.feeds.pending,
-      },
-      subscriptions: { max: none(used.subscriptions.max), count: used.subscriptions.count },
-      exempt: used.exempt,
-    }
+    const answer = await readUsage(deps, await webActor(c, db))
     return c.json(answer, 200, { 'cache-control': 'no-store' })
   })
 
@@ -215,9 +199,13 @@ export function accountRoutes(deps: ApiDeps, auth: Auth) {
     }
     // The password is changed by now, and neither failure below undoes it: each is logged, as at
     // a link's return, and the member is told whether or not the other sessions ended.
-    await endOtherSessions(db, member.id, c.get('session').token).catch((err) =>
-      console.error('sessions not ended', member.id, err),
-    )
+    await endOtherSessions(
+      db,
+      member.id,
+      c.get('session').token,
+      'password',
+      deps.clock.now(),
+    ).catch((err) => console.error('sessions not ended', member.id, err))
     await notify(member, { kind: hasPassword ? 'password-changed' : 'password-set' })
     return c.json({ ok: true })
   })
@@ -282,7 +270,13 @@ export function accountRoutes(deps: ApiDeps, auth: Auth) {
    * ending that very session.
    */
   routes.post('/sign-out-everywhere', async (c) => {
-    const ended = await endOtherSessions(db, c.get('member').id, c.get('session').token)
+    const ended = await endOtherSessions(
+      db,
+      c.get('member').id,
+      c.get('session').token,
+      'signOutEverywhere',
+      deps.clock.now(),
+    )
     return c.json({ ended })
   })
 

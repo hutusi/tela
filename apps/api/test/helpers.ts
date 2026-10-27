@@ -9,6 +9,8 @@ import { createApp } from '../src/app'
 import type { ApiConfig } from '../src/deps'
 
 export const ORIGIN = 'http://tela.test'
+/** The API's origin for apps, and the OAuth issuer (ADRs 0064, 0065). */
+export const API_ORIGIN = 'http://api.tela.test'
 export const ADMIN_TOKEN = 'admin-token-for-tests'
 
 /** Overrides; an explicit `undefined` removes a setting (no admin token, say). */
@@ -20,6 +22,7 @@ export async function createTestApi(
 ) {
   const config: Record<string, unknown> = {
     publicUrl: ORIGIN,
+    apiUrl: API_ORIGIN,
     authSecret: 'a-test-secret-that-is-long-enough-for-hmac',
     adminToken: ADMIN_TOKEN,
     mailFrom: 'Tela <noreply@tela.test>',

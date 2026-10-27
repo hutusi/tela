@@ -34,6 +34,8 @@
   },
   "vars": {
     "PUBLIC_URL": "https://telaread.com",
+    // The OAuth issuer and the API's origin for apps (ADRs 0064, 0065).
+    "API_URL": "https://api.telaread.com",
     "MAIL_FROM": "Tela <noreply@telaread.com>"
   }
   // Secrets (wrangler secret put): AUTH_SECRET (shared with tela-web), ADMIN_TOKEN, RESEND_API_KEY;

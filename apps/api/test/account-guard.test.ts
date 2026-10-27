@@ -104,6 +104,13 @@ beforeEach(async () => {
     // a's report of blog 2, for the Reports area's record (ADR 0059).
     db.run(sql`insert into reports (reporter_id, target_kind, target_key, reason, state, created_at)
       values (${a.userId}, 'site', '2', 'spam', 'open', 0)`),
+    // An approved app, and b's connection to it, for b to approve again and disconnect (ADR 0064).
+    db.run(sql`insert into apps (id, client_id, name, developer, contact_email, redirect_uris,
+        status, created_at, updated_at)
+      values (1, ${CONSENT.client_id}, 'Guard', 'Guard Ltd', 'dev@guard.example',
+        '["http://127.0.0.1/callback"]', 'approved', 0, 0)`),
+    db.run(sql`insert into app_grants (id, app_id, user_id, scope, created_at, updated_at)
+      values (1, 1, ${b.userId}, 'read', 0, 0)`),
   ] as never)
 })
 
@@ -227,6 +234,16 @@ const SQUARE_PNG = new Uint8Array([
 ])
 const OPML = `<?xml version="1.0"?><opml version="2.0"><head><title>s</title></head><body>
   <outline text="x" xmlUrl="https://imported.example/feed"/></body></opml>`
+/** An app's authorization request, as the consent page passes it through (ADR 0064). */
+const CONSENT = {
+  client_id: 'tela_app_guard',
+  redirect_uri: 'http://127.0.0.1:4711/callback',
+  response_type: 'code',
+  scope: 'read',
+  state: 'guard-state',
+  code_challenge: 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM',
+  code_challenge_method: 'S256',
+}
 
 /** Every authenticated /api/v1 route but /me, each as a request that does something for b. */
 const MEMBER_ROUTES: MemberRoute[] = [
@@ -238,6 +255,8 @@ const MEMBER_ROUTES: MemberRoute[] = [
     body: () => ({ lang: 'fr', ids: [1] }),
     effect: 'reads',
   },
+  // A post by id, as a member opens one from a public page (ADR 0066).
+  { route: 'GET /api/v1/articles/:id', path: '/api/v1/articles/1', effect: 'reads' },
   // The admin console (ADR 0039): b is an admin.
   {
     route: 'POST /api/v1/admin/act',
@@ -319,6 +338,15 @@ const MEMBER_ROUTES: MemberRoute[] = [
   {
     route: 'GET /api/v1/admin/invites/:id',
     path: `/api/v1/admin/invites/code:${B_CODE}`,
+    effect: 'reads',
+  },
+  // Apps (ADR 0064): app 1 is the one the setup registers for the consent routes.
+  { route: 'GET /api/v1/admin/apps', path: '/api/v1/admin/apps?f=approved', effect: 'reads' },
+  { route: 'GET /api/v1/admin/apps/:id', path: '/api/v1/admin/apps/1', effect: 'reads' },
+  {
+    route: 'POST /api/v1/admin/apps',
+    path: '/api/v1/admin/apps',
+    body: () => ({ f: 'draft', q: 'loom' }),
     effect: 'reads',
   },
   {
@@ -473,6 +501,25 @@ const MEMBER_ROUTES: MemberRoute[] = [
     route: 'POST /api/v1/claims/:siteId/release',
     path: '/api/v1/claims/1/release',
     body: () => ({}),
+    effect: 'writes',
+  },
+  // Connecting an app (ADR 0064): the consent page's questions, and Settings → Connected apps.
+  {
+    route: 'GET /api/v1/connect/request',
+    path: `/api/v1/connect/request?${new URLSearchParams(CONSENT)}`,
+    effect: 'reads',
+  },
+  {
+    route: 'POST /api/v1/connect/decide',
+    path: '/api/v1/connect/decide',
+    body: () => ({ ...CONSENT, decision: 'approve', scope_granted: 'read', email_granted: false }),
+    effect: 'writes',
+  },
+  { route: 'GET /api/v1/connections', path: '/api/v1/connections', effect: 'reads' },
+  {
+    route: 'DELETE /api/v1/connections/:id{[0-9]+}',
+    path: '/api/v1/connections/1',
+    method: 'DELETE',
     effect: 'writes',
   },
 ]

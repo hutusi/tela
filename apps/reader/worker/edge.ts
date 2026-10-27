@@ -6,9 +6,13 @@
  *   pages rendered here read tela-api's public JSON through a copy per colo instead (`pageJson`),
  *   so a page's four languages cost one D1 read.
  * - `/o/*` serves immutable content, translation and chunk objects from R2 to members, cached per
- *   colo after the session check; `/o/bundle` serves up to 25 content objects in one response.
+ *   colo; `/o/bundle` serves up to 25 content objects in one response, and lists those refused.
  * - `/img/<contentKey>/<index>` proxies the image a content object names (ADR 0007's rules),
  *   replacing the HMAC-signed `/img?u=` of the Postgres app: the object is the allowlist.
+ * - Both are `@tela/edge`'s, shared with tela-gateway, and each is decided before it is served
+ *   (ADR 0066): after the session check, tela-api says whether the member may open the post today
+ *   (`/api/edge/opens`), and the colo keeps each post it allowed for that member until the UTC
+ *   day ends, so its translations and images ask nothing more.
  * - `/avatar/<userId>?v=` is a member's picture (ADR 0032), from tela-api, cached per colo.
  * - Sessions are read from better-auth's signed five-minute cookie cache with the shared secret.
  *   Only when that has lapsed does it ask tela-api, and passes on the refreshed cookie.
@@ -30,12 +34,23 @@
  *
  * Portable: built from interfaces, so the bun suite runs it with memory blobs and a fake cache.
  */
-import { isBlockedHost } from '@tela/ingest/net'
+import {
+  type Authorization,
+  CACHE_ORIGIN,
+  createContent,
+  createMarks,
+  type EdgeCache,
+  nextUtcMidnight,
+  readAtMost,
+  safeDecode,
+  sha256Hex,
+  utcDay,
+  type Waiter,
+} from '@tela/edge'
 import type { Blobs } from '@tela/platform'
-import { hlLocale } from '@tela/shared'
+import { hlLocale, type OpensDecision } from '@tela/shared'
 import { getCookieCache } from 'better-auth/cookies'
 import { type FeedRoute, feedRoute } from '../src/lib/feed-href'
-import { safeDecode } from '../src/lib/safe-decode'
 import { renderFeed } from './feeds'
 import { llmsTxt } from './llms'
 import { robotsTxt } from './robots'
@@ -51,10 +66,7 @@ import {
   urlset,
 } from './sitemap'
 
-export type EdgeCache = {
-  match(key: Request): Promise<Response | undefined>
-  put(key: Request, response: Response): Promise<void>
-}
+export type { EdgeCache } from '@tela/edge'
 
 export type EdgeDeps = {
   blobs: Blobs
@@ -79,8 +91,6 @@ export type EdgeDeps = {
     pageDeadlineMs?: number
   }
 }
-
-type Waiter = { waitUntil(promise: Promise<unknown>): void }
 
 /**
  * A public page: the tela-api endpoint its data comes from (null: it needs none, as About,
@@ -110,25 +120,10 @@ export type PublicPages<R extends PublicPageRoute = PublicPageRoute> = {
   render(input: { route: R; url: URL; data: unknown; locale: string; template: string }): string
 }
 
-const OBJECT_KEY =
-  /^(?:c\/[0-9a-f]{32}\.json|t\/[0-9a-f]{32}\/[A-Za-z-]{2,16}\/[0-9a-f]{8,64}\.json|tc\/[0-9a-f]{32}\/[A-Za-z-]{2,16}\/[A-Za-z0-9-]{1,64}\/\d{1,4}\.json)$/
-const CONTENT_KEY = /^[0-9a-f]{32}$/
-const BUNDLE_MAX = 25
-const IMAGE_MAX_BYTES = 10 * 1024 * 1024
-const IMAGE_TIMEOUT_MS = 10_000
-const IMAGE_UA = 'Tela/0.1 (+https://telaread.com; image proxy)'
 /** `/avatar/<userId>?v=<n>` (ADR 0032): an account id as profiles name them, and a version. */
 const MEMBER_ID = /^[A-Za-z0-9_-]{8,64}$/
 const AVATAR_VERSION = /^\d{1,16}$/
 const AVATAR_MAX_BYTES = 512 * 1024
-const OBJECT_CACHE = 'private, max-age=31536000, immutable'
-const IMAGE_CACHE = 'private, max-age=604800, immutable'
-const IMAGE_EDGE_CACHE = 'public, max-age=604800, immutable'
-/** An image that could not be had, asked for again after ten minutes. */
-const IMAGE_FAILURE_CACHE = 'private, max-age=600'
-const IMAGE_FAILURE_EDGE_CACHE = 'public, max-age=600'
-/** The cache's own namespace: keys are never a URL a reader can request directly. */
-const CACHE_ORIGIN = 'https://tela-edge.cache'
 /** A page that moved (an address from before Discover's tabs): kept a day, by whoever keeps it. */
 const MOVED_CACHE = 'public, max-age=86400'
 /** A rendered public page, at the edge. The browser always asks again: the page is the shell too. */
@@ -169,6 +164,22 @@ function keepsAtTheColo(res: Response): boolean {
 }
 /** Called by hubs and by the admin script, with their own authorization and no browser. */
 const CROSS_ORIGIN_WRITERS = /^\/api\/(websub|admin)\//
+/** tela-api's routes for this Worker alone (ADR 0066): never forwarded from a browser. */
+const EDGE_ONLY = '/api/edge/'
+
+/**
+ * Whether a path is one of tela-api's routes for this Worker alone, however a browser spelled it.
+ * tela-api's router decodes each run of escapes in a path before it matches (Hono's
+ * `tryDecodeURI`), so `/api/%65dge/opens` is `/api/edge/opens` there: the path is read here as it
+ * will be read there, each run decoded where it decodes and left as it is where it does not, and
+ * `%2F` decoded too, which only refuses more.
+ */
+function edgeOnly(path: string): boolean {
+  const decoded = path.replace(/(?:%[0-9A-Fa-f]{2})+/g, (run) => safeDecode(run) ?? run)
+  return decoded.startsWith(EDGE_ONLY)
+}
+/** How soon to ask again when tela-api could not decide what a member may open. */
+const DECISION_RETRY_SECONDS = 30
 
 const text = (body: string, status: number, headers: Record<string, string> = {}) =>
   new Response(body, {
@@ -182,15 +193,20 @@ export function createEdge(deps: EdgeDeps) {
   /** `/llms.txt`, made once per origin: it changes only with a deploy. */
   const llms = new Map<string, string>()
 
-  /** A member's session: from the signed cookie cache, else from tela-api (one D1 read). */
-  async function session(request: Request): Promise<{ setCookies: string[] } | null> {
+  /**
+   * A member's session: from the signed cookie cache, else from tela-api (one D1 read), whose
+   * renewed cookies the answer passes on.
+   */
+  async function session(
+    request: Request,
+  ): Promise<{ userId: string; setCookies: string[] } | null> {
     const secure = new URL(request.url).protocol === 'https:'
     const cached = await getCookieCache(request, {
       secret: config.authSecret,
       cookiePrefix: 'tela',
       isSecure: secure,
     }).catch(() => null)
-    if (cached) return { setCookies: [] }
+    if (cached?.user?.id) return { userId: cached.user.id, setCookies: [] }
     const cookie = request.headers.get('cookie') ?? ''
     if (!cookie.includes('tela.session_token')) return null
     const res = await api.fetch(
@@ -199,174 +215,85 @@ export function createEdge(deps: EdgeDeps) {
       }),
     )
     if (!res.ok) return null
-    const body = (await res.json().catch(() => null)) as { session?: unknown } | null
-    return body?.session ? { setCookies: res.headers.getSetCookie() } : null
+    const body = (await res.json().catch(() => null)) as {
+      session?: unknown
+      user?: { id?: unknown }
+    } | null
+    const userId = body?.user?.id
+    return body?.session && typeof userId === 'string'
+      ? { userId, setCookies: res.headers.getSetCookie() }
+      : null
   }
 
-  /** An R2 object, through the colo's cache. Objects never change, so a hit is always right. */
-  async function object(key: string, waiter?: Waiter): Promise<string | null> {
-    const cacheKey = new Request(`${CACHE_ORIGIN}/o/${key}`)
-    const hit = await cache.match(cacheKey)
-    if (hit) return hit.text()
-    const stored = await blobs.get(key)
-    if (!stored) return null
-    const body = await stored.text()
-    const put = cache.put(
-      cacheKey,
-      new Response(body, {
-        headers: {
-          'content-type': 'application/json',
-          'cache-control': 'public, max-age=31536000',
-        },
-      }),
-    )
-    if (waiter) waiter.waitUntil(put)
-    else await put
-    return body
-  }
-
-  function withCookies(response: Response, setCookies: string[]) {
-    for (const c of setCookies) response.headers.append('set-cookie', c)
-    return response
-  }
-
-  async function serveObject(request: Request, key: string, waiter?: Waiter) {
-    if (!OBJECT_KEY.test(key)) return text('not found', 404)
-    const member = await session(request)
-    if (!member) return text('sign in first', 401)
-    const body = await object(key, waiter)
-    if (body === null) return text('not found', 404)
-    return withCookies(
-      new Response(body, {
-        headers: {
-          'content-type': 'application/json',
-          'cache-control': OBJECT_CACHE,
-          'x-robots-tag': 'noindex',
-        },
-      }),
-      member.setCookies,
-    )
-  }
-
-  async function serveBundle(request: Request, waiter?: Waiter) {
-    const keys = [
-      ...new Set(
-        (new URL(request.url).searchParams.get('k') ?? '')
-          .split(',')
-          .filter((k) => CONTENT_KEY.test(k)),
-      ),
-    ].slice(0, BUNDLE_MAX)
-    const member = await session(request)
-    if (!member) return text('sign in first', 401)
-    const parts = await Promise.all(
-      keys.map(async (k) => {
-        const body = await object(`c/${k}.json`, waiter)
-        return body === null ? null : `${JSON.stringify(k)}:${body}`
-      }),
-    )
-    return withCookies(
-      new Response(`{${parts.filter((p) => p !== null).join(',')}}`, {
-        headers: {
-          'content-type': 'application/json',
-          // The same keys always give the same bundle.
-          'cache-control': OBJECT_CACHE,
-          'x-robots-tag': 'noindex',
-        },
-      }),
-      member.setCookies,
-    )
-  }
-
-  /** The image an object names, fetched and checked; or why not, as the status and text to say. */
-  async function fetchImage(
-    contentKey: string,
-    index: number,
-    waiter?: Waiter,
-  ): Promise<{ bytes: Uint8Array<ArrayBuffer>; type: string } | { status: number; why: string }> {
-    const stored = await object(`c/${contentKey}.json`, waiter)
-    if (stored === null) return { status: 404, why: 'not found' }
-    const source = (JSON.parse(stored) as { images?: string[] }).images?.[index]
-    if (!source) return { status: 404, why: 'not found' }
-    let url: URL
-    try {
-      url = new URL(source)
-    } catch {
-      return { status: 404, why: 'not found' }
-    }
-    if ((url.protocol !== 'http:' && url.protocol !== 'https:') || isBlockedHost(url.hostname)) {
-      return { status: 403, why: 'forbidden' }
-    }
-    const failed = { status: 502, why: 'upstream failed' }
-    let upstream: Response
-    try {
-      upstream = await deps.fetchImage(url.toString(), {
-        headers: { 'user-agent': IMAGE_UA, accept: 'image/*' },
-        signal: AbortSignal.timeout(IMAGE_TIMEOUT_MS),
-        redirect: 'follow',
-      })
-    } catch {
-      return failed
-    }
-    if (!upstream.ok || !upstream.body) return failed
-    const type =
-      (upstream.headers.get('content-type') ?? '').split(';')[0]?.trim().toLowerCase() ?? ''
-    // SVG can carry script; only raster types a browser renders in an <img>.
-    if (!type.startsWith('image/') || type === 'image/svg+xml') {
-      return { status: 415, why: 'not an image' }
-    }
-    const declared = Number(upstream.headers.get('content-length') ?? '0')
-    if (declared > IMAGE_MAX_BYTES) return { status: 413, why: 'too large' }
-    // The headers can arrive and the body still break off: a failure, never kept as an image.
-    let bytes: Uint8Array<ArrayBuffer> | null
-    try {
-      bytes = await readAtMost(upstream.body, IMAGE_MAX_BYTES)
-    } catch {
-      return failed
-    }
-    if (!bytes) return { status: 413, why: 'too large' }
-    return { bytes, type }
-  }
+  /** Posts a member may open today, kept per colo by their hashed id until the UTC day ends. */
+  const opens = createMarks(cache, now)
 
   /**
-   * An image through the colo's cache, failures included: a broken image on a post is asked for
-   * on every view of it, by every reader, and each ask could wait out the ten-second upstream
-   * timeout and press a host that is already failing. A failure is kept ten minutes, at the colo
-   * and in the browser, and then asked again.
+   * Whether the session's member may have these posts (ADR 0066): those this colo already saw
+   * allowed today ask nothing; the rest are decided by tela-api, with the member's cookie and
+   * nothing else, and each it allows is kept until the day ends. A refusal is never kept, so a
+   * post becomes readable the moment the member subscribes. A member's id never goes into a cache
+   * key as it is.
    */
-  async function serveImage(request: Request, contentKey: string, index: number, waiter?: Waiter) {
+  async function authorize(
+    request: Request,
+    keys: string[],
+    waiter?: Waiter,
+  ): Promise<Authorization> {
     const member = await session(request)
-    if (!member) return text('sign in first', 401)
-    const cacheKey = new Request(`${CACHE_ORIGIN}/img/${contentKey}/${index}`)
-    const hit = await cache.match(cacheKey)
-    if (hit) {
-      const response = new Response(hit.body, hit)
-      response.headers.set('cache-control', hit.ok ? IMAGE_CACHE : IMAGE_FAILURE_CACHE)
-      return withCookies(response, member.setCookies)
+    if (!member) return { ok: false, response: text('sign in first', 401) }
+    const { setCookies } = member
+    const at = now()
+    const subject = `opens/${await sha256Hex(member.userId)}/${utcDay(at)}`
+    const known = await Promise.all(keys.map((k) => opens.has(`${subject}/${k}`)))
+    const allowed = keys.filter((_, i) => known[i])
+    const unknown = keys.filter((_, i) => !known[i])
+    if (unknown.length === 0) return { ok: true, decision: { allowed, refused: {} }, setCookies }
+    const unavailable = (): Authorization => ({
+      ok: false,
+      response: new Response('{"error":"unavailable"}', {
+        status: 503,
+        headers: {
+          'content-type': 'application/json',
+          'cache-control': 'no-store',
+          'retry-after': String(DECISION_RETRY_SECONDS),
+        },
+      }),
+    })
+    let res: Response
+    try {
+      res = await api.fetch(
+        new Request(new URL('/api/edge/opens', request.url).toString(), {
+          method: 'POST',
+          headers: {
+            cookie: request.headers.get('cookie') ?? '',
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({ keys: unknown }),
+        }),
+      )
+    } catch (err) {
+      console.error('opens decision failed', err)
+      return unavailable()
     }
-    const image = await fetchImage(contentKey, index, waiter)
-    // The colo's copy says public: Cloudflare's cache does not keep a response marked private.
-    let kept: Response
-    let answer: Response
-    if ('bytes' in image) {
-      const headers = {
-        'content-type': image.type,
-        'x-content-type-options': 'nosniff',
-        'content-security-policy': "default-src 'none'; sandbox",
-        'x-robots-tag': 'noindex',
-      }
-      kept = new Response(image.bytes, {
-        headers: { ...headers, 'cache-control': IMAGE_EDGE_CACHE },
-      })
-      answer = new Response(image.bytes, { headers: { ...headers, 'cache-control': IMAGE_CACHE } })
-    } else {
-      kept = text(image.why, image.status, { 'cache-control': IMAGE_FAILURE_EDGE_CACHE })
-      answer = text(image.why, image.status, { 'cache-control': IMAGE_FAILURE_CACHE })
+    // The cookie cache outlived the session (a closing, a suspension): signed out, as the pull is.
+    if (res.status === 401) return { ok: false, response: text('sign in first', 401) }
+    const decision = res.ok ? decisionOf(await res.json().catch(() => null)) : null
+    if (!decision) {
+      console.error('opens decision unavailable', res.status)
+      return unavailable()
     }
-    const put = cache.put(cacheKey, kept)
-    if (waiter) waiter.waitUntil(put)
-    else await put
-    return withCookies(answer, member.setCookies)
+    const until = nextUtcMidnight(at)
+    const fresh = decision.allowed.filter((k) => unknown.includes(k))
+    await Promise.all(fresh.map((k) => opens.set(`${subject}/${k}`, until, waiter)))
+    return {
+      ok: true,
+      decision: { allowed: [...allowed, ...fresh], refused: decision.refused },
+      setCookies,
+    }
   }
+
+  const content = createContent({ blobs, cache, fetch: deps.fetchImage, authorize, now })
 
   /**
    * A member's picture (ADR 0032), from tela-api through this colo's cache. The address carries
@@ -705,6 +632,8 @@ export function createEdge(deps: EdgeDeps) {
           llms.set(url.origin, body)
         }
         response = text(body, 200, { 'cache-control': 'public, max-age=3600' })
+      } else if (edgeOnly(path)) {
+        response = text('not found', 404)
       } else if (path.startsWith('/api/')) {
         const foreign = request.headers.get('origin') !== url.origin
         response =
@@ -712,24 +641,16 @@ export function createEdge(deps: EdgeDeps) {
             ? text('cross-origin write refused', 403)
             : await api.fetch(request)
       } else if (path === '/o/bundle') {
-        response = await serveBundle(request, waiter)
-      } else if (path.startsWith('/o/')) {
-        // A key that does not decode (`/o/%`) is no object's.
-        const key = safeDecode(path.slice(3))
-        response = key === null ? text('not found', 404) : await serveObject(request, key, waiter)
+        const keys = (url.searchParams.get('k') ?? '').split(',')
+        response = await content.serveBundle(request, keys, waiter)
+      } else if (path.startsWith('/o/') || path.startsWith('/img/')) {
+        response = (await content.serve(request, waiter)) ?? text('not found', 404)
       } else if (path.startsWith('/avatar/')) {
         const userId = path.slice('/avatar/'.length)
         const version = url.searchParams.get('v') ?? ''
         response =
           request.method === 'GET' && MEMBER_ID.test(userId) && AVATAR_VERSION.test(version)
             ? await serveAvatar(request, userId, version, waiter)
-            : text('not found', 404)
-      } else if (path.startsWith('/img/')) {
-        const [, , key = '', index = ''] = path.split('/')
-        const i = Number(index)
-        response =
-          CONTENT_KEY.test(key) && Number.isInteger(i) && i >= 0 && i < 1000
-            ? await serveImage(request, key, i, waiter)
             : text('not found', 404)
       } else if (sitemap) {
         response = await serveSitemap(request, url, sitemap, waiter)
@@ -761,29 +682,11 @@ export function createEdge(deps: EdgeDeps) {
   }
 }
 
-/** Read a stream into memory, or null once it passes `max` bytes. */
-async function readAtMost(
-  body: ReadableStream<Uint8Array>,
-  max: number,
-): Promise<Uint8Array<ArrayBuffer> | null> {
-  const reader = body.getReader()
-  const chunks: Uint8Array[] = []
-  let total = 0
-  for (;;) {
-    const { done, value } = await reader.read()
-    if (done) break
-    total += value.byteLength
-    if (total > max) {
-      await reader.cancel()
-      return null
-    }
-    chunks.push(value)
+/** tela-api's decision as it answered it, or null when it is not one. */
+function decisionOf(body: unknown): OpensDecision | null {
+  const d = body as Partial<OpensDecision> | null
+  if (!d || !Array.isArray(d.allowed) || typeof d.refused !== 'object' || d.refused === null) {
+    return null
   }
-  const out = new Uint8Array(total)
-  let offset = 0
-  for (const c of chunks) {
-    out.set(c, offset)
-    offset += c.byteLength
-  }
-  return out
+  return { allowed: d.allowed.filter((k) => typeof k === 'string'), refused: d.refused }
 }

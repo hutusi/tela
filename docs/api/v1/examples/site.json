@@ -1,0 +1,69 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/v1/sites/1?lang=zh-Hans"
+  },
+  "status": 200,
+  "headers": {
+    "cache-control": "public, max-age=300"
+  },
+  "body": {
+    "blog": {
+      "id": 1,
+      "title": "Ink & Pixels",
+      "homeUrl": "https://blog1.example",
+      "description": "Notes on type and the screen.",
+      "faviconUrl": "https://assets.telaread.com/favicons/1.png",
+      "primaryLang": "en",
+      "readerCount": 0,
+      "topics": [
+        "design",
+        "tech"
+      ]
+    },
+    "feeds": [
+      {
+        "id": 1,
+        "title": null,
+        "feedUrl": "https://blog1.example/feed.xml"
+      }
+    ],
+    "posts": [
+      {
+        "id": 103,
+        "siteId": 1,
+        "title": "Kerning, slowly",
+        "translatedTitle": "慢慢调字距",
+        "excerpt": "The opening of “Kerning, slowly”.",
+        "url": "https://blog1.example/posts/103",
+        "author": "A. Writer",
+        "publishedAt": 1790596200000,
+        "likeCount": 0
+      },
+      {
+        "id": 101,
+        "siteId": 1,
+        "title": "Drawing with pixels",
+        "translatedTitle": "用像素作画",
+        "excerpt": "The opening of “Drawing with pixels”.",
+        "url": "https://blog1.example/posts/101",
+        "author": "A. Writer",
+        "publishedAt": 1790589600000,
+        "likeCount": 1
+      },
+      {
+        "id": 102,
+        "siteId": 1,
+        "title": "A grid for every page",
+        "translatedTitle": "每一页的网格",
+        "excerpt": "The opening of “A grid for every page”.",
+        "url": "https://blog1.example/posts/102",
+        "author": "A. Writer",
+        "publishedAt": 1790510400000,
+        "likeCount": 0
+      }
+    ],
+    "page": 1,
+    "more": false
+  }
+}

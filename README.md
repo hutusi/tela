@@ -18,11 +18,14 @@ join.
 |---|---|
 | `apps/reader` | The reader, deployed as `tela-web`: a Vite + React SPA that renders from the device and syncs behind, and the edge Worker that serves it (content objects, image proxy, public pages, the `/api` forward) |
 | `apps/api` | The `tela-api` Worker: sign-in, sync, mutations and reader RPCs, pinned beside D1 |
+| `apps/gateway` | The `tela-gateway` Worker at `api.telaread.com`: Tela's API for approved apps, bearer-only, content at the edge and the rest from tela-api |
 | `apps/jobs` | The `tela-jobs` Worker: cron sweeps claim due work under leases, queues fan it out, jobs run pinned beside D1; upkeep, backups, the health check and the weekly digest |
 | `apps/relay` | The China fetch relay: a signed fetch endpoint for an HK or mainland box, the one Node process Tela would run. Not provisioned until a feed needs it |
 | `packages/platform` | The seams (Db, Blobs, Jobs, Clock, Mail) with Cloudflare and portable adapters (ADRs 0020, 0021) |
 | `packages/data` | The SQLite data model for D1 and libSQL: schema, migrations, leases, the sync sequence, queries, the nightly export |
 | `packages/sync` | The sync protocol between the reader and tela-api, and the device's reducer |
+| `packages/ext` | The API for approved apps, v1: each route's documented format, its mappers and the OpenAPI document |
+| `packages/edge` | What both edge Workers serve: content objects, bundles and the image proxy |
 | `packages/content` | The content pipeline: feed parsing, sanitization, block ids and hashing, content objects |
 | `packages/ingest` | Fetching: HTTP client, feed discovery, the ingest pipeline, region routing, WebSub |
 | `packages/llm` | Translation provider adapter, prompts, validation |
@@ -41,8 +44,8 @@ bun run lint          # biome
 bun run typecheck     # tsc in every workspace
 bun run test          # bun test, on the portable adapters
 bun run test:workers  # the data contract and the API again, on D1 inside workerd
-bun run e2e           # Playwright against the three Workers in one wrangler dev
-bun run dev           # the reader with tela-api and tela-jobs beside it; see docs/OPERATIONS.md
+bun run e2e           # Playwright against tela-web, tela-api and tela-jobs in one wrangler dev, tela-gateway beside it
+bun run dev           # the reader with tela-api and tela-jobs beside it, and tela-gateway; see docs/OPERATIONS.md
 ```
 
 ## Features
@@ -73,6 +76,10 @@ bun run dev           # the reader with tela-api and tela-jobs beside it; see do
   subscriptions by original or translated title.
 - **Freshness**: adaptive polling with conditional requests, plus WebSub push where a feed
   advertises a hub.
+- **Apps**: approved third-party apps, a desktop app first, connect in the member's browser and
+  act for them through Tela's own API at `api.telaread.com`, offline-first like the web app and
+  never as an admin; members see and disconnect them in Settings. Developers start at
+  `docs/api/`.
 - **Your data**: export it as JSON and OPML, release a claimed blog, or delete your account from
   Settings; report what breaks the rules on any public page.
 - **Findable**: public pages in each of the four languages by address, with sitemaps,
@@ -89,6 +96,7 @@ bun run dev           # the reader with tela-api and tela-jobs beside it; see do
 ## Status
 
 The local-first stack (three Cloudflare Workers, D1, R2 and Queues) is built and tested, and
-replaces the Postgres app at the cutover in `docs/OPERATIONS.md`. See `docs/ARCHITECTURE.md` for
+replaces the Postgres app at the cutover in `docs/OPERATIONS.md`; another Worker, tela-gateway,
+serves the API for apps. See `docs/ARCHITECTURE.md` for
 the design, `docs/OPERATIONS.md` for how it is provisioned and run, and `CHANGELOG.md` for what
 has shipped.

@@ -1,4 +1,16 @@
 /**
+ * Full posts opened today from blogs the member does not subscribe to (ADR 0066), on the web and
+ * in every app together: `perDay` is `member.unsubscribedPostsPerDay`, and each post counts once a
+ * UTC day.
+ */
+export type AccountPosts = {
+  perDay: number | null
+  openedToday: number
+  /** When the next UTC day begins, and the day's count with it. */
+  resetsAt: number
+}
+
+/**
  * What a member has used of their limits (ADR 0063), as `GET /api/v1/account/usage` answers it:
  * a live answer, never synced, for Settings and for the subscription cap the reader checks before
  * it subscribes. A limit of `null` is none: so it reads for an admin, whom no member limit bounds
@@ -22,6 +34,8 @@ export type AccountUsage = {
     pending: number
   }
   subscriptions: { max: number | null; count: number }
+  /** Absent from a tela-api before ADR 0066, which a shell deployed first may still be asking. */
+  posts?: AccountPosts
   exempt: boolean
 }
 

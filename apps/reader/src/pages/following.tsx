@@ -7,7 +7,6 @@
  * public pool, matched on the device by the same rule.
  */
 import { languageBadge, recommendationKey } from '@tela/shared'
-import type { ArticleRow } from '@tela/sync'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { useTranslations } from 'use-intl'
@@ -31,7 +30,7 @@ import { useConfirmedFollowees, useNow, useStore, useTables } from '../store/hoo
 import { followedPeople } from '../store/selectors'
 import { useUi } from '../ui'
 import { PostLink } from '../views/post-link'
-import type { MemberControls, Person, ReadersData, Reading } from '../views/types'
+import type { MemberControls, Person, PublicArticle, ReadersData, Reading } from '../views/types'
 
 type Tab = 'all' | 'recs' | 'likes'
 const TABS: Tab[] = ['all', 'recs', 'likes']
@@ -43,7 +42,8 @@ type Post = {
   listed: boolean
   translatedTitle: string | null
   translatedExcerpt: string | null
-  article: ArticleRow
+  /** Other members' posts carry no content key (ADR 0066): opening one fetches its row. */
+  article: PublicArticle
 }
 type Site = {
   id: number

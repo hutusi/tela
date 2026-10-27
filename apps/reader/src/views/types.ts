@@ -3,9 +3,14 @@ import type { ArticleRow } from '@tela/sync'
 
 /**
  * A post on a public page: the row the reader holds, with its titles in the launch languages it
- * has one in, since the page is cached for everyone and each reader picks their own.
+ * has one in, since the page is cached for everyone and each reader picks their own. Without its
+ * content key since ADR 0066: a member opening it fetches its row by id (`MemberControls.hold`).
+ * A tela-api from before that still sends one, which a shell deployed first may meet.
  */
-export type PublicArticle = ArticleRow & { titles?: Partial<Record<string, string>> }
+export type PublicArticle = Omit<ArticleRow, 'contentKey'> & {
+  contentKey?: string | null
+  titles?: Partial<Record<string, string>>
+}
 
 /** Which language a public page's reader reads in, and which they read as written. */
 export type Reading = { lang: string; never: readonly string[] }
@@ -217,9 +222,12 @@ export type MemberControls = {
   isSubscribed(feedId: number): boolean
   toggle(feedId: number, subscribed: boolean): void
   /** Where the reader opens a post. */
-  readHref(article: ArticleRow): string
-  /** Hold a post for this visit, when the device does not sync its feed; `source` names its blog. */
-  hold(article: ArticleRow, source: string | null): void
+  readHref(article: Pick<ArticleRow, 'id' | 'feedId'>): string
+  /**
+   * Hold a post for this visit, when the device does not sync its feed; `source` names its blog.
+   * A public page's post has no content key (ADR 0066), so its row is fetched by id first.
+   */
+  hold(article: PublicArticle, source: string | null): void
   /** The member's handle: a blog claimed under it has settings that are theirs to change. */
   handle: string | null
   /** The member's account id: their own profile offers no Follow. */

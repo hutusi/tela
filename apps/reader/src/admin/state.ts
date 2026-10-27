@@ -100,6 +100,8 @@ export function auditedRow(
       return { area: 'invites', id: `code:${key}` }
     case 'hold':
       return { area: 'invites', id: `hold:${key}` }
+    case 'app':
+      return { area: 'apps', id: key }
     case 'dead':
       return { area: 'system', id: `dead:${key}` }
     case 'lease':

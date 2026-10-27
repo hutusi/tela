@@ -38,6 +38,13 @@ const TABLES = [
   'settings',
   'pending_feeds',
   'reports',
+  // Migration 0015's (ADRs 0064, 0066): a code names its tokens, tokens a grant, a grant an app.
+  'app_refresh_spent',
+  'app_codes',
+  'app_tokens',
+  'app_grants',
+  'apps',
+  'post_opens',
   'user',
   'leases',
   'lease_fence',

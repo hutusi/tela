@@ -5,7 +5,14 @@
  */
 import { afterAll, describe, expect, spyOn, test } from 'bun:test'
 import { memoryPersistence } from '../src/store/db'
-import { Objects, ObjectUnavailable, PREFETCH_HEADER } from '../src/store/objects'
+import {
+  Objects,
+  ObjectUnavailable,
+  PostRefused,
+  PREFETCH_HEADER,
+  REFUSAL_FLOOR_MS,
+  readRefusal,
+} from '../src/store/objects'
 
 const saved = globalThis.fetch
 afterAll(() => {
@@ -58,11 +65,11 @@ function network() {
       waiting.delete(url)
       reject(new TypeError('Failed to fetch'))
     },
-    answer(url: string, body: unknown, status = 200) {
+    answer(url: string, body: unknown, status = 200, headers: Record<string, string> = {}) {
       const resolve = waiting.get(url)
       if (!resolve) throw new Error(`nothing asked for ${url}; asked: ${sent.join(', ')}`)
       waiting.delete(url)
-      resolve(Response.json(body, { status }))
+      resolve(Response.json(body, { status, headers }))
     },
   }
 }
@@ -314,4 +321,196 @@ test('a body eviction drops is missing again, and its next open asks the network
   await until(() => net.sent.length === 2)
   net.answer('/o/c/k1.json', { blocks: [] })
   expect(await again).toEqual({ blocks: [] } as never)
+})
+
+describe('a post refused for the day’s limit on blogs the member does not follow (ADR 0066)', () => {
+  const DAY = 86_400_000
+  const START = 400 * DAY + 3_600_000
+  const RESETS = 401 * DAY
+  const refusal = { error: 'post_limit', limit: 100, resetsAt: RESETS }
+
+  /** An object store on a clock the test moves, holding `member`'s account. */
+  function store(member: { id: string | null } = { id: 'a' }) {
+    const clock = { now: START }
+    const objects = new Objects(
+      memoryPersistence(),
+      () => clock.now,
+      1000,
+      () => member.id,
+    )
+    return { objects, clock, member }
+  }
+
+  test('a bundle lists its refusals apart, and nothing asks for them again before the day turns', async () => {
+    const net = network()
+    const { objects, clock } = store()
+    const first = objects.prefetch(['k1', 'k2'])
+    await until(() => net.sent.length === 1)
+    net.answer('/o/bundle?k=k1,k2', { objects: { k1: { blocks: [1] } }, refused: { k2: refusal } })
+    expect(await first).toBe(1)
+    expect(objects.refusal('k2')).toEqual({ limit: 100, resetsAt: RESETS, retryAt: RESETS })
+    // Not missing, so the reading page's ask-again loop has nothing to ask for.
+    expect(await objects.missing(['k1', 'k2'])).toEqual([])
+    expect(await objects.prefetch(['k1', 'k2'])).toBe(0)
+    // Opening it is refused at once, with what the page says.
+    await expect(objects.body('k2')).rejects.toBeInstanceOf(PostRefused)
+    await expect(objects.body('k2')).rejects.toMatchObject({
+      status: 429,
+      refusal: { limit: 100, resetsAt: RESETS },
+    })
+    // So is its translation.
+    await expect(objects.object('t/k2/en/x.json')).rejects.toBeInstanceOf(PostRefused)
+    expect(net.sent).toEqual(['prefetch /o/bundle?k=k1,k2'])
+    // The day turns: it is missing again, and asked for alone.
+    clock.now = RESETS
+    expect(await objects.missing(['k1', 'k2'])).toEqual(['k2'])
+    const again = objects.prefetch(['k1', 'k2'])
+    await until(() => net.sent.length === 2)
+    net.answer('/o/bundle?k=k2', { objects: { k2: { blocks: [2] } }, refused: {} })
+    expect(await again).toBe(1)
+    expect(await objects.missing(['k1', 'k2'])).toEqual([])
+  })
+
+  test('one object refused with a 429 is remembered, the body and its translations alike', async () => {
+    const net = network()
+    const { objects, clock } = store()
+    const opened = objects.body('k1')
+    await until(() => net.sent.length === 1)
+    net.answer('/o/c/k1.json', refusal, 429, { 'retry-after': '3600' })
+    await expect(opened).rejects.toMatchObject({
+      name: 'PostRefused',
+      refusal: { limit: 100, resetsAt: RESETS },
+    })
+    await expect(objects.body('k1')).rejects.toBeInstanceOf(PostRefused)
+    expect(await objects.missing(['k1'])).toEqual([])
+    expect(net.sent).toEqual(['page /o/c/k1.json'])
+    // A translation refused for the day refuses its post's body too.
+    const translated = objects.object('tc/k3/en/r/0.json')
+    await until(() => net.sent.length === 2)
+    net.answer('/o/tc/k3/en/r/0.json', refusal, 429)
+    await expect(translated).rejects.toBeInstanceOf(PostRefused)
+    await expect(objects.body('k3')).rejects.toBeInstanceOf(PostRefused)
+    expect(net.sent).toHaveLength(2)
+    clock.now = RESETS + 1
+    const later = objects.body('k1')
+    await until(() => net.sent.length === 3)
+    net.answer('/o/c/k1.json', { blocks: [] })
+    expect(await later).toEqual({ blocks: [] } as never)
+  })
+
+  test('a 429 for any other reason is a failure to try again, and remembers nothing', async () => {
+    const net = network()
+    const { objects } = store()
+    const failed = objects.body('k1')
+    await until(() => net.sent.length === 1)
+    net.answer('/o/c/k1.json', { error: 'rate_limited' }, 429)
+    await expect(failed).rejects.toMatchObject({ name: 'ObjectUnavailable', status: 429 })
+    expect(objects.refusal('k1')).toBeNull()
+    const again = objects.body('k1')
+    await until(() => net.sent.length === 2)
+    net.answer('/o/c/k1.json', { blocks: [] })
+    expect(await again).toEqual({ blocks: [] } as never)
+  })
+
+  test('without resetsAt, Retry-After says when; and a reset already past waits a minute', () => {
+    expect(readRefusal({ error: 'post_limit' }, START, '120')).toEqual({
+      limit: null,
+      resetsAt: START + 120_000,
+      retryAt: START + 120_000,
+    })
+    // Neither: the next UTC midnight.
+    expect(readRefusal({ error: 'post_limit', limit: 5 }, START)).toMatchObject({
+      limit: 5,
+      resetsAt: RESETS,
+    })
+    // A device clock ahead of the edge's would otherwise ask again at once, and again.
+    expect(readRefusal({ ...refusal, resetsAt: START - 5000 }, START)).toEqual({
+      limit: 100,
+      resetsAt: START - 5000,
+      retryAt: START + REFUSAL_FLOOR_MS,
+    })
+    expect(readRefusal({ error: 'rate_limited' }, START)).toBeNull()
+    expect(readRefusal(null, START)).toBeNull()
+  })
+
+  test('a change to the subscriptions forgets every refusal; the first telling forgets none', async () => {
+    const net = network()
+    const { objects } = store()
+    objects.noteSubscriptions('1:5')
+    const opened = objects.body('k1')
+    await until(() => net.sent.length === 1)
+    net.answer('/o/c/k1.json', refusal, 429)
+    await expect(opened).rejects.toBeInstanceOf(PostRefused)
+    objects.noteSubscriptions('1:5')
+    expect(objects.refusal('k1')).not.toBeNull()
+    // Subscribed to the post's blog: asked for again, and given.
+    objects.noteSubscriptions('1:5,2:0')
+    expect(objects.refusal('k1')).toBeNull()
+    const again = objects.body('k1')
+    await until(() => net.sent.length === 2)
+    net.answer('/o/c/k1.json', { blocks: [] })
+    expect(await again).toEqual({ blocks: [] } as never)
+  })
+
+  test('subscribing from the refused post forgets the refusal it saw', async () => {
+    const net = network()
+    const { objects } = store()
+    const opened = objects.body('k1')
+    await until(() => net.sent.length === 1)
+    net.answer('/o/c/k1.json', refusal, 429)
+    await expect(opened).rejects.toBeInstanceOf(PostRefused)
+    objects.forgetRefusals()
+    const again = objects.body('k1')
+    await until(() => net.sent.length === 2)
+    net.answer('/o/c/k1.json', { blocks: [] })
+    expect(await again).toEqual({ blocks: [] } as never)
+  })
+
+  test('a refusal is the account’s that asked, never the next one’s the tab holds', async () => {
+    const net = network()
+    const { objects, member } = store()
+    const opened = objects.body('k1')
+    await until(() => net.sent.length === 1)
+    net.answer('/o/c/k1.json', refusal, 429)
+    await expect(opened).rejects.toBeInstanceOf(PostRefused)
+    member.id = 'b'
+    expect(objects.refusal('k1')).toBeNull()
+    // One that comes back after the tab moved on is not the new account's either.
+    member.id = 'a'
+    const asked = objects.body('k2')
+    await until(() => net.sent.length === 2)
+    member.id = 'b'
+    net.answer('/o/c/k2.json', refusal, 429)
+    await expect(asked).rejects.toBeInstanceOf(PostRefused)
+    expect(objects.refusal('k2')).toBeNull()
+  })
+
+  test('a body the device holds is given, and a refusal for a key not asked for is not kept', async () => {
+    const net = network()
+    const persistence = memoryPersistence()
+    await persistence.putBody({ key: 'k1', object: { blocks: [1] }, bytes: 10, lastOpened: 0 })
+    const objects = new Objects(
+      persistence,
+      () => START,
+      1000,
+      () => 'a',
+    )
+    const bundle = objects.prefetch(['k2'])
+    await until(() => net.sent.length === 1)
+    net.answer('/o/bundle?k=k2', { objects: {}, refused: { k1: refusal, k2: refusal } })
+    await bundle
+    expect(objects.refusal('k1')).toBeNull()
+    expect(await objects.body('k1')).toEqual({ blocks: [1] } as never)
+    expect(objects.refusal('k2')).not.toBeNull()
+  })
+
+  test('a bundle refused whole for the day leaves every post in it waiting', async () => {
+    const net = network()
+    const { objects } = store()
+    const bundle = objects.prefetch(['k1', 'k2'])
+    await until(() => net.sent.length === 1)
+    net.answer('/o/bundle?k=k1,k2', refusal, 429)
+    expect(await bundle).toBe(0)
+    expect(await objects.missing(['k1', 'k2'])).toEqual([])
+  })
 })

@@ -10,7 +10,7 @@
  * other, and activity of any age is on the first page when it is the newest there is. The offset
  * is the one the walk began under, so all its pages agree on where a day starts.
  */
-import { ARTICLE_COLUMNS, avatarOf, standingOk } from '@tela/data'
+import { avatarOf, PUBLIC_ARTICLE_COLUMNS, standingOk } from '@tela/data'
 import { isReadingLanguage } from '@tela/shared'
 import { type SQL, sql } from 'drizzle-orm'
 import { Hono } from 'hono'
@@ -108,7 +108,7 @@ export function socialRoutes(deps: ApiDeps) {
     const translated = (column: 'title' | 'excerpt') =>
       sql`(select t.${sql.raw(column)} from article_titles t where t.article_id = a.id and t.lang = ${lang})`
     const post = sql`s.id as "siteId", s.title as "siteTitle", s.home_url as "homeUrl",
-      (s.listing in ${PUBLIC_LISTING}) as listed, ${ARTICLE_COLUMNS},
+      (s.listing in ${PUBLIC_LISTING}) as listed, ${PUBLIC_ARTICLE_COLUMNS},
       ${translated('title')} as "translatedTitle", ${translated('excerpt')} as "translatedExcerpt"`
     const who = sql`p.user_id as "userId", p.handle, p.display_name as "displayName",
       ${avatarOf('p')} as avatar`

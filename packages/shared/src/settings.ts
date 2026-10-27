@@ -10,6 +10,10 @@
 export const SIGNUP_MODES = ['open', 'invite'] as const
 export type SignupMode = (typeof SIGNUP_MODES)[number]
 
+/** Whether approved apps may act at all (ADR 0064): off answers every API call 503. */
+export const APPS_SWITCH = ['on', 'off'] as const
+export type AppsSwitch = (typeof APPS_SWITCH)[number]
+
 type ChoiceSetting<T extends string> = {
   kind: 'choice'
   choices: readonly T[]
@@ -34,6 +38,14 @@ export const SETTINGS = {
   'member.feedsPerDay': { kind: 'limit', default: 20, max: 100_000 },
   /** Subscriptions one account holds. */
   'member.maxSubscriptions': { kind: 'limit', default: 300, max: 1_000_000 },
+  /**
+   * Posts a member opens in full per UTC day from blogs they do not subscribe to, on the web and
+   * in every app together (ADR 0066). Posts of blogs they subscribe to are never counted; a blog
+   * they claimed but do not subscribe to is counted like any other (`admitOpens`).
+   */
+  'member.unsubscribedPostsPerDay': { kind: 'limit', default: 100, max: 1_000_000 },
+  /** Whether approved apps may act for members (ADR 0064): `off` stops every app at once. */
+  'apps.enabled': { kind: 'choice', choices: APPS_SWITCH, default: 'on' },
   /** Model tokens per UTC day, titles and bodies, everyone's together. */
   'translation.siteDailyTokens': { kind: 'limit', default: 10_000_000, max: 10_000_000_000 },
   /**

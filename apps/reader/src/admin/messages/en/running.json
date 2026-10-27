@@ -181,6 +181,12 @@
           "about": "The most blogs one account follows.",
           "value": "{n, plural, =0 {None} one {# blog} other {# blogs}}",
           "none": "No limit"
+        },
+        "unsubscribedPostsPerDay": {
+          "name": "Posts from unfollowed blogs per member",
+          "about": "Posts a member opens in full in a UTC day from blogs they don’t subscribe to, on the web and in their apps together. Blogs they subscribe to are never counted. It slows anyone copying Tela wholesale.",
+          "value": "{n, plural, =0 {None} one {# post a day} other {# posts a day}}",
+          "none": "No limit"
         }
       },
       "translation": {
@@ -208,6 +214,16 @@
           "name": "Budget alerts",
           "about": "Mails you once a day as the site budget's spending passes each share.",
           "none": "Never"
+        }
+      },
+      "apps": {
+        "enabled": {
+          "name": "Approved apps",
+          "about": "Off stops every connected app at once: each request is answered “unavailable” until it is on again. Connections are kept.",
+          "choices": {
+            "on": "On",
+            "off": "Off"
+          }
         }
       }
     }

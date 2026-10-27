@@ -80,7 +80,8 @@ function shape(rows: Record<keyof SyncRows, RawRow[]>): SyncRows {
 /**
  * A pull for one member. `titlesLang`, a reading language the route has checked, limits the title
  * rows to it and is said back as `titlesLang` (ADR 0052); without it every language comes, and
- * the answer names none, as protocol-3 shells expect.
+ * the answer names none, as protocol-3 shells expect. `shownOnly` leaves out the translations of
+ * blogs whose writers said no (`readPull`), for a surface that cannot leave that to the device.
  */
 export async function answerPull(
   db: TelaDb,
@@ -88,9 +89,10 @@ export async function answerPull(
   cursor: number,
   now: number,
   titlesLang?: ReadingLanguage,
+  options: { shownOnly?: boolean } = {},
 ): Promise<PullResponse> {
   const horizon = now - HORIZON_DAYS * DAY
-  const asked = { userId, horizon, limit: PAGE_ROWS, titlesLang }
+  const asked = { userId, horizon, limit: PAGE_ROWS, titlesLang, shownOnly: options.shownOnly }
   let read = await readPull(db, { ...asked, cursor })
   let reset = cursor === 0
   if (cursor > read.head) {

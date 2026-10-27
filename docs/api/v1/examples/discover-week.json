@@ -1,0 +1,71 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/v1/discover/week?lang=fr"
+  },
+  "status": 200,
+  "headers": {
+    "cache-control": "public, max-age=300"
+  },
+  "body": {
+    "posts": [
+      {
+        "id": 101,
+        "siteId": 1,
+        "title": "Drawing with pixels",
+        "translatedTitle": "Dessiner avec des pixels",
+        "excerpt": "The opening of “Drawing with pixels”.",
+        "url": "https://blog1.example/posts/101",
+        "author": "A. Writer",
+        "publishedAt": 1790589600000,
+        "likeCount": 1
+      },
+      {
+        "id": 301,
+        "siteId": 3,
+        "title": "一个人的书店",
+        "translatedTitle": null,
+        "excerpt": "城里最小的书店。",
+        "url": "https://blog3.example/posts/301",
+        "author": "A. Writer",
+        "publishedAt": 1790578800000,
+        "likeCount": 1
+      },
+      {
+        "id": 401,
+        "siteId": 4,
+        "title": "Weather on the ridge",
+        "translatedTitle": null,
+        "excerpt": "The opening of “Weather on the ridge”.",
+        "url": "https://blog4.example/posts/401",
+        "author": "A. Writer",
+        "publishedAt": 1790424000000,
+        "likeCount": 0
+      },
+      {
+        "id": 103,
+        "siteId": 1,
+        "title": "Kerning, slowly",
+        "translatedTitle": null,
+        "excerpt": "The opening of “Kerning, slowly”.",
+        "url": "https://blog1.example/posts/103",
+        "author": "A. Writer",
+        "publishedAt": 1790596200000,
+        "likeCount": 0
+      },
+      {
+        "id": 201,
+        "siteId": 2,
+        "title": "Silence, kept",
+        "translatedTitle": null,
+        "excerpt": "The opening of “Silence, kept”.",
+        "url": "https://blog2.example/posts/201",
+        "author": "A. Writer",
+        "publishedAt": 1790586000000,
+        "likeCount": 0
+      }
+    ],
+    "page": 1,
+    "more": false
+  }
+}

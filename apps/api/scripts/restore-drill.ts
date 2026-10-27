@@ -111,6 +111,7 @@ try {
     ingest: {} as ApiDeps['ingest'],
     config: {
       publicUrl: 'https://telaread.com',
+      apiUrl: 'https://api.telaread.com',
       authSecret: `${crypto.randomUUID()}${crypto.randomUUID()}`,
       mailFrom: 'drill',
     },

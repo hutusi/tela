@@ -21,6 +21,7 @@ export const INFO_SECTIONS = {
     'use',
     'translation',
     'others',
+    'apps',
     'cookies',
     'keep',
     'delete',
@@ -73,7 +74,7 @@ export type InfoPage<P extends InfoPageId> = {
 export type InfoContent = { [P in InfoPageId]: InfoPage<P> }
 
 /** When the pages last changed, shown on each as "Last updated", formatted per locale. */
-export const INFO_UPDATED = '2026-10-25'
+export const INFO_UPDATED = '2026-10-27'
 
 export function isInfoPage(value: string): value is InfoPageId {
   return (INFO_PAGES as readonly string[]).includes(value)

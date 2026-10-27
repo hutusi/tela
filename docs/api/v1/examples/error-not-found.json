@@ -1,0 +1,13 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/v1/articles/999999"
+  },
+  "status": 404,
+  "headers": {
+    "cache-control": "no-store"
+  },
+  "body": {
+    "error": "not_found"
+  }
+}

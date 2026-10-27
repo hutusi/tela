@@ -401,7 +401,7 @@ describe('ingestFeed', () => {
     server.redirect('/old.xml', '/new.xml', 301)
     await addFeed('/new.xml')
     const alias = await addFeed('/old.xml')
-    await subscribe(db, 'u1', alias.feedId, clock.now())
+    await subscribe(db, 'u1', alias.feedId, clock.now(), false)
     expect(await fetchOnce(alias.feedId)).toMatchObject({ status: 'fetched' })
     const feed = await row<{ feed_url: string }>(
       sql`select feed_url from feeds where id = ${alias.feedId}`,
@@ -582,9 +582,9 @@ describe('sites', () => {
     const a = await addFeed('/a.xml')
     const b = await addFeed('/b.xml')
     expect(a.siteId).toBe(b.siteId)
-    await subscribe(db, 'a', a.feedId, NOW)
-    await subscribe(db, 'b', b.feedId, NOW)
-    await subscribe(db, 'b', a.feedId, NOW)
+    await subscribe(db, 'a', a.feedId, NOW, false)
+    await subscribe(db, 'b', b.feedId, NOW, false)
+    await subscribe(db, 'b', a.feedId, NOW, false)
     expect((await siteOf(a.feedId))?.reader_count).toBe(2)
 
     expect(await fetchOnce(a.feedId)).toMatchObject({ siteHome: 'split' })
@@ -623,6 +623,48 @@ describe('sites', () => {
       expect(site?.id).not.toBe(siteId)
     } finally {
       await attacker.stop()
+    }
+  })
+
+  test('a feed moved off a blog that said no to translation sends its translations again', async () => {
+    await addUser('owner')
+    for (const optedOut of [true, false]) {
+      server.reset()
+      const elsewhere = await FixtureServer.start()
+      try {
+        elsewhere.text('/feed.xml', threeItems({ link: elsewhere.url('/') }))
+        const path = `/moving-${optedOut}.xml`
+        server.redirect(path, elsewhere.url('/feed.xml'), 302)
+        const { feedId, siteId } = await addFeed(path)
+        // A post the feed already had, with a title and a body translation stamped long ago,
+        // which apps were never sent while its blog said no (ADR 0065).
+        const key = (optedOut ? 'a' : 'b').repeat(32)
+        await db.batch([
+          db.run(sql`insert into articles (feed_id, dedup_key, title, fetched_at, sort_at,
+              content_key, seq)
+            values (${feedId}, ${`old-${optedOut}`}, 'Old', 0, 0, ${key}, 1)`),
+          db.run(sql`insert into article_titles (article_id, lang, feed_id, title, status,
+              source_hash, updated_at, seq)
+            select id, 'zh-Hans', ${feedId}, '旧', 'done', 'h', 0, 1 from articles
+            where dedup_key = ${`old-${optedOut}`}`),
+          db.run(sql`insert into body_translations (content_key, lang, state, chunk_keys,
+              updated_at, seq)
+            values (${key}, 'zh-Hans', 'done', '[]', 0, 1)`),
+          db.run(sql`update sites set claimed_by = 'owner', translation_opt_out = ${optedOut ? 1 : 0}
+            where id = ${siteId}`),
+        ] as never)
+        expect(await fetchOnce(feedId)).toMatchObject({ siteHome: 'detached' })
+        const stamps = await row<{ title: number; translation: number }>(sql`
+          select (select seq from article_titles where feed_id = ${feedId}) as title,
+            (select seq from body_translations where content_key = ${key}) as translation`)
+        // Moved onto a blog that allows translation: stamped again, so a delta carries them.
+        // From one that allowed it already, apps had them: left as they were.
+        const again = optedOut ? expect.any(Number) : 1
+        expect(stamps).toEqual({ title: again, translation: again })
+        if (optedOut) expect(stamps?.title).toBeGreaterThan(1)
+      } finally {
+        await elsewhere.stop()
+      }
     }
   })
 

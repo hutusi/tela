@@ -4,7 +4,6 @@
  * search past what their device holds, and everything they have done, as one file.
  */
 import {
-  ARTICLE_COLUMNS,
   avatarOf,
   BLOG_NAME,
   bumpSeq,
@@ -12,22 +11,18 @@ import {
   currentSeq,
   first,
   gravatarOn,
-  publicReaderCount,
+  restampTranslations,
   standingOk,
 } from '@tela/data'
-import { isReadingLanguage, isTopic, isValidHandle } from '@tela/shared'
+import { isTopic, isValidHandle } from '@tela/shared'
 import { sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import type { ApiEnv } from '../app'
+import { search } from '../core/public'
 import type { ApiDeps } from '../deps'
 import { DAY } from './public-sql'
 
-/** A search query as SQL LIKE sees it: trimmed, whitespace collapsed, wildcards escaped. */
-export function likePattern(query: string): string | null {
-  const q = query.trim().replace(/\s+/g, ' ').slice(0, 100)
-  if (!q) return null
-  return `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`
-}
+export { likePattern } from '../core/public'
 
 export function memberRoutes(deps: ApiDeps) {
   const { db } = deps
@@ -116,14 +111,18 @@ export function memberRoutes(deps: ApiDeps) {
     }
     const body = (await c.req.json().catch(() => ({}))) as { optOut?: unknown }
     const optOut = body.optOut === true
-    await db.batch([
+    const [, before] = (await db.batch([
       bumpSeq(db),
+      db.all(sql`select translation_opt_out as was from sites where id = ${siteId}`),
       db.run(sql`
         update sites set translation_opt_out = ${optOut ? 1 : 0}, updated_at = ${deps.clock.now()},
           seq = ${currentSeq}
         where id = ${siteId}
       `),
-    ] as never)
+    ] as never)) as unknown as [unknown, { was: number }[]]
+    // Turned back on: apps were sent none of its translations while it said no (ADR 0065), so
+    // they are stamped again, now the switch has committed.
+    if (!optOut && before[0]?.was === 1) await restampTranslations(db, [siteId])
     return c.json({ optOut })
   })
 
@@ -298,6 +297,7 @@ export function memberRoutes(deps: ApiDeps) {
       codes,
       joinedBy,
       reads,
+      apps,
     ] = (await db.batch([
       db.all(sql`
         select p.handle, p.display_name as "displayName", p.bio, p.reading_lang as "readingLang",
@@ -393,6 +393,14 @@ export function memberRoutes(deps: ApiDeps) {
         where st.user_id = ${id} and (st.read_at is not null or st.read_updated_at is not null)
         order by coalesce(st.read_at, st.read_updated_at) desc, st.article_id
       `),
+      // The apps they connected and still hold (ADR 0064): what each may do and when it last
+      // acted for them. Never a token, which Tela keeps only as a hash.
+      db.all(sql`
+        select a.name as "app", a.developer, a.homepage_url as "homepage", g.scope,
+          g.email as "seesEmail", g.created_at as "connectedAt", g.last_used_at as "lastUsedAt"
+        from app_grants g join apps a on a.id = g.app_id
+        where g.user_id = ${id} and g.ended_at is null order by g.created_at, g.id
+      `),
     ] as never)) as unknown as Record<string, unknown>[][]
     const profile = profiles?.[0]
     const body = {
@@ -434,6 +442,10 @@ export function memberRoutes(deps: ApiDeps) {
         ...read,
         markedUnread: markedUnread === 1,
       })),
+      connectedApps: (apps ?? []).map(({ seesEmail, ...app }) => ({
+        ...app,
+        seesEmail: seesEmail === 1,
+      })),
     }
     return new Response(JSON.stringify(body, null, 2), {
       headers: {
@@ -446,58 +458,17 @@ export function memberRoutes(deps: ApiDeps) {
 
   /**
    * Search past the horizon the device holds: articles of the member's feeds by title in either
-   * language, and blogs anyone can find plus the member's own private ones. The device searches
-   * what it holds first; this fills in the rest.
+   * language, and blogs anyone can find plus the member's own private ones (`search`, which the
+   * API shares). The device searches what it holds first; this fills in the rest.
    */
   routes.get('/search', async (c) => {
-    const member = c.get('member')
-    const pattern = likePattern(c.req.query('q') ?? '')
-    if (!pattern) return c.json({ sites: [], articles: [] })
-    // A hit may match its translation, so it comes with the title the member reads it under
-    // (AGENTS.md: showing the original would render a hit with none of the words typed).
-    const asked = c.req.query('lang')
-    const lang = isReadingLanguage(asked) ? asked : null
-    const [sites, articles] = (await db.batch([
-      db.all(sql`
-        select s.id, s.title, s.home_url as "homeUrl", s.description, s.favicon_key as "faviconKey",
-          ${publicReaderCount('s')} as "readerCount",
-          (select min(id) from feeds where site_id = s.id and merged_into is null) as "feedId"
-        from sites s
-        where (s.listing in ('listed', 'featured') or s.id in (
-            select f.site_id from subscriptions sub join feeds f on f.id = sub.feed_id
-            where sub.user_id = ${member.id} and sub.deleted_at is null))
-          and (s.title like ${pattern} escape '\\' or s.home_url like ${pattern} escape '\\'
-            or s.description like ${pattern} escape '\\'
-            or exists (select 1 from feeds f where f.site_id = s.id and f.title like ${pattern} escape '\\'))
-        limit 50
-      `),
-      db.all(sql`
-        select ${ARTICLE_COLUMNS},
-          (select t.title from article_titles t where t.article_id = a.id and t.lang = ${lang})
-            as "translatedTitle"
-        from articles a
-        where a.feed_id in (select feed_id from subscriptions where user_id = ${member.id} and deleted_at is null)
-          and (a.title like ${pattern} escape '\\' or exists (
-            select 1 from article_titles t where t.article_id = a.id and t.title like ${pattern} escape '\\'))
-        order by a.sort_at desc, a.id desc limit 30
-      `),
-    ] as never)) as unknown as [Record<string, unknown>[], Record<string, unknown>[]]
-    const q = (c.req.query('q') ?? '').trim().toLowerCase()
-    // Ranked in the app, replacing pg_trgm: a prefix beats a substring, a title beats a host.
-    // A count kept back (below three readers) ranks as none, so the order tells no more than it.
-    const score = (s: Record<string, unknown>) => {
-      const title = String(s.title ?? '').toLowerCase()
-      const host = String(s.homeUrl ?? '')
-        .replace(/^https?:\/\//, '')
-        .toLowerCase()
-      if (title.startsWith(q)) return 0
-      if (title.includes(q)) return 1
-      if (host.startsWith(q)) return 2
-      if (host.includes(q)) return 3
-      return 4
-    }
-    sites.sort((a, b) => score(a) - score(b) || Number(b.readerCount) - Number(a.readerCount))
-    return c.json({ sites: sites.slice(0, 12), articles })
+    const { sites, articles } = await search(
+      deps,
+      { userId: c.get('member').id },
+      { q: c.req.query('q') ?? '', lang: c.req.query('lang') },
+    )
+    // The web's answer as it was: the hit's blog is the device's to find by its feed.
+    return c.json({ sites, articles: articles.map(({ siteId: _, ...article }) => article) })
   })
 
   return routes

@@ -25,6 +25,7 @@ import { sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import type { ApiEnv } from '../app'
 import type { ApiDeps } from '../deps'
+import { webActor } from '../web-actor'
 import { feedLimitAnswer } from './feeds'
 
 const CLAIM_TTL_MS = 4 * 60_000
@@ -128,6 +129,7 @@ export function claimRoutes(deps: ApiDeps) {
       url: body.url,
       actorId: member.id,
       withinDay: true,
+      exempt: (await webActor(c, db)).exempt,
     })
     if ('error' in started) {
       if (started.error === 'feed_limit') {

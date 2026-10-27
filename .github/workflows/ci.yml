@@ -31,9 +31,9 @@ jobs:
         run: bun run test:workers
 
   build-workers:
-    # The four Workers, bundled as a deploy would (no credentials needed): a Node-only import or
+    # The five Workers, bundled as a deploy would (no credentials needed): a Node-only import or
     # a missing entrypoint fails here, not on deploy day.
-    name: Build tela-web, tela-api, tela-jobs and tela-redirect (dry run), and the relay image
+    name: Build tela-web, tela-api, tela-jobs, tela-gateway and tela-redirect (dry run), and the relay image
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -43,9 +43,9 @@ jobs:
           bun-version: 1.4.2
       - name: Install
         run: bun install --frozen-lockfile
-      - name: Bundle tela-jobs and tela-api
+      - name: Bundle tela-jobs, tela-api and tela-gateway
         run: |
-          for app in jobs api; do
+          for app in jobs api gateway; do
             (cd "apps/$app" && ../jobs/node_modules/.bin/wrangler deploy --dry-run --outdir "$RUNNER_TEMP/$app")
           done
       # tela-web is built by Vite with the SPA; wrangler then deploys the config the build wrote.

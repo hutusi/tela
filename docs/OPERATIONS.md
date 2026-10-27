@@ -2,18 +2,20 @@
 
 How Tela is provisioned, deployed and kept running: three Cloudflare Workers, D1, R2 and Queues
 (ADRs 0020–0027), at https://telaread.com. The old address, tela.ainaive.com, redirects there
-through a fourth Worker (*The address*, ADR 0042).
+through a fourth Worker (*The address*, ADR 0042), and a fifth, tela-gateway, serves the API for
+approved apps at https://api.telaread.com (*tela-gateway*, *Approved apps*, ADRs 0064–0066).
 
 ## Environments
 
 | Component | Where | Notes |
 |---|---|---|
 | tela-web | Worker at the reader's edge, unpinned (`apps/reader`) | The only public Worker: static SPA, public pages, `/o/*`, `/img/*`, the `/api/*` forward. Custom domain `telaread.com` only; `workers.dev` stays off (blocked in mainland China) |
-| tela-api | Worker pinned to `aws:ap-southeast-1` (`apps/api`) | Sign-in, sync, mutations, every reader RPC. No public route: tela-web reaches it over a service binding |
+| tela-api | Worker pinned to `aws:ap-southeast-1` (`apps/api`) | Sign-in, sync, mutations, every reader RPC, the OAuth server and the API for apps (`/gateway/*`). No public route: tela-web and tela-gateway reach it over service bindings |
+| tela-gateway | Worker at the app's edge, unpinned (`apps/gateway`) | The API for approved apps (ADR 0065): bearer tokens only, `/o/*`, `/img/*` and `/v1/bodies` from R2, `/v1/*`, `/meta` and OAuth's endpoints to tela-api's `/gateway/*`, anything else 404. Custom domain `api.telaread.com` only; `workers.dev` off. No D1, no vars, no secrets |
 | tela-jobs | Worker pinned to `aws:ap-southeast-1` (`apps/jobs`) | Crons, queue consumers, the `Ingest` RPC. No public route |
 | tela-redirect | Worker, no bindings (`apps/reader/redirect`) | `tela.ainaive.com` and `www.telaread.com`: a redirect to the same path on telaread.com, and the shell's kill switch at `/sw.js` (*The address*) |
 | D1 `tela` | Primary in Singapore (`--location apac`) | 6–10 ms from the pinned Workers; Time Travel keeps 30 days |
-| R2 `tela-content` | Private | Content, translation and chunk objects (served by tela-web to members), raw item HTML, members' uploaded pictures (`avatars/`, served by tela-api at `/avatar/…`, ADR 0033), and the nightly `backup/`. The pictures are member data the D1 export does not hold: a move off Cloudflare copies `avatars/` too |
+| R2 `tela-content` | Private | Content, translation and chunk objects (served by tela-web to members and by tela-gateway to apps), raw item HTML, members' uploaded pictures (`avatars/`, served by tela-api at `/avatar/…`, ADR 0033), and the nightly `backup/`. The pictures are member data the D1 export does not hold: a move off Cloudflare copies `avatars/` too |
 | R2 `tela-assets` | Public at `assets.telaread.com`, and still at `assets.tela.ainaive.com` | Favicons |
 | Queues | `tela-fetch`, `tela-extract`, `tela-translate`, `tela-misc`, DLQ `tela-dlq` | Accelerators only: every job is also found from state by the minute sweep |
 | Relay | Not provisioned (`apps/relay`) | A Node box in HK, only once a feed times out from Cloudflare; see *The relay* |
@@ -33,6 +35,7 @@ directory.
 | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | tela-api (secret) | Tela's GitHub OAuth app (ADR 0036), its callback URL `PUBLIC_URL/api/auth/callback/github`. GitHub sign-in is offered only while both are set |
 | `MAIL_FROM` | tela-api, tela-jobs | Sender, `Tela <noreply@telaread.com>`, a domain Resend has verified (ainaive.com is verified too, and was the sender until 2026-10-08) |
 | `PUBLIC_URL` | tela-api, tela-jobs | The one public origin, `https://telaread.com`: better-auth's base URL and trusted origin, the profile links a claim looks for (with `www.` and the old `tela.ainaive.com`, ADR 0045), the WebSub callback |
+| `API_URL` | tela-api | The API's origin for apps, `https://api.telaread.com` (ADR 0065), with no trailing slash: the OAuth issuer, named in the metadata and in every `iss` a consent answer carries (RFC 9207), where the token and revocation endpoints are said to be, and where the authorization endpoint is not (that is `PUBLIC_URL/connect`, ADR 0064). Required: a wrong one puts a wrong `iss` in front of every app. Locally, `apps/api/.dev.vars` points it at the gateway's own port, `http://localhost:8788` (*Running locally*) |
 | `TELA_NOINDEX` | tela-web | `1`: robots.txt is `Disallow: /` and every answer the Worker serves carries `X-Robots-Tag: noindex, nofollow` (ADR 0060; it was `TELA_PRIVATE_BETA`, ADR 0015). Unset: each public page follows its own rule (its meta robots, mirrored as `X-Robots-Tag`), and robots.txt welcomes search engines and answer tools but not training crawlers. The SPA shell is a static asset the Worker never sees, so it is noindex by its own meta tag, always. Set until launch day, whatever `signup.mode` says |
 | `GRAVATAR_URL` | tela-api, tela-jobs | Where members' pictures are fetched from (tela-api, ADR 0032) and asked about (tela-jobs, ADR 0033), default `https://gravatar.com/avatar`. The e2e points it at its fixture server. A picture is cached for 30 days in each colo and browser under an address with its version, and turning the switch off cannot purge a colo: a copy already held stays, at an address nothing links to any more |
 | `GITHUB_TOKEN` | tela-jobs (secret, optional) | A fine-grained GitHub token with no repository access and no permissions, for a claim by GitHub (ADR 0045): it asks `api.github.com/user/<id>` for a member's login and website, which needs no permission. Unset, GitHub allows 60 requests an hour per egress IP, and Cloudflare's egress IPs are shared with other customers, so a check may find GitHub refusing (`github_unavailable`) for reasons of someone else's making. Set, 5,000 an hour. Make it under the owner's account, with the longest expiry GitHub allows, and diary its renewal: an expired token answers 401, which a claim also reads as `github_unavailable` |
@@ -55,6 +58,7 @@ directory.
 | `DEADMAN_URL` | tela-jobs (secret) | The healthchecks.io ping URL; see *Knowing it runs* |
 | `DIGEST_TO` | tela-jobs (secret) | Who gets the Monday digest and the operator's alerts (the owner). Unset, the digest is built but not sent, and no alert is checked |
 | `VITE_ASSETS_URL` | tela-web build | Public base of `tela-assets`; defaults to `https://assets.telaread.com` |
+| `ASSETS_URL` | tela-api | The same base, for the absolute favicon URLs the API gives apps (`faviconUrl`, ADR 0065); defaults to `https://assets.telaread.com`. Keep it equal to `VITE_ASSETS_URL` |
 | `TELA_URL` | the admin script | Where `bun run admin` talks to; defaults to `https://telaread.com` |
 
 ## Provisioning, once per account
@@ -95,11 +99,20 @@ The account is on Workers Paid. Run wrangler from a real terminal (`wrangler log
       together and writes the config wrangler deploys (`dist/tela_web/wrangler.json`). The
       custom domain is the `routes` entry in `apps/reader/wrangler.jsonc`, so the deploy claims
       telaread.com itself.
-   4. `cd apps/reader/redirect && wrangler deploy -c wrangler.jsonc`: tela-redirect, which holds
+   4. `cd apps/gateway && wrangler deploy`: tela-gateway, the API for approved apps (ADR 0065).
+      It forwards to tela-api's `/gateway/*`, so it goes after tela-api; after tela-web too, by
+      habit, since nothing it serves is new to a member. The custom domain is the `routes` entry
+      in `apps/gateway/wrangler.jsonc`: **the first deploy creates the DNS record for
+      `api.telaread.com`**, which is a change to the zone, so the owner runs or authorizes it.
+      Nothing may sit on `api` in the zone's DNS beforehand. Check it with `curl -s
+      https://api.telaread.com/.well-known/oauth-authorization-server` (the issuer
+      `https://api.telaread.com`) and `curl -sI https://api.telaread.com/v1/me` (401 with
+      `www-authenticate: Bearer` and `tela-api-version: 1`).
+   5. `cd apps/reader/redirect && wrangler deploy -c wrangler.jsonc`: tela-redirect, which holds
       the old address and `www` (*The address*). It changes rarely; deploy it only when it does.
 
-   **A release that bumps `MIN_CLIENT` reverses the last two:** tela-web first, then tela-api
-   within minutes. A shell on the new protocol still works against the old tela-api, but the new
+   **A release that bumps `MIN_CLIENT` reverses tela-api and tela-web:** tela-web first, then
+   tela-api within minutes. A shell on the new protocol still works against the old tela-api, but the new
    tela-api tells every older shell to upgrade, and one whose reload finds no newer shell to load
    stalls until it is navigated. So the newer shell must already be live.
 
@@ -335,6 +348,40 @@ The account is on Workers Paid. Run wrangler from a real terminal (`wrangler log
          shows how many of the day's 20 are used (an admin's shows none: admins are exempt);
        - the health check stays ok through the first 00:00 UTC (waiting bodies start then).
      - Run `bun run restore-drill` after the next nightly export, so the new tables are covered.
+   - Approved apps and the daily limit on posts from unfollowed blogs (ADRs 0064–0066, migration
+     0015) bump `MIN_CLIENT` to 5: public answers lose their content keys, and a body may be
+     refused for the day's limit, neither of which a protocol-4 shell can read. Migration 0015
+     only adds tables (`apps`, `app_grants`, `app_tokens`, `app_refresh_spent`, `app_codes`,
+     `post_opens`). Apply it, then deploy tela-jobs, tela-web, tela-api within minutes, then
+     tela-gateway:
+     - The migration first: tela-jobs' daily batch sweeps `post_opens`, and tela-api's every body
+       decision writes it.
+     - tela-jobs first, because tela-api now tells the `Ingest` RPC who is exempt; a tela-jobs from
+       before reads `is_admin` itself, so an app acting for an admin would be exempt from the
+       day's new feeds.
+     - tela-web before tela-api, as every `MIN_CLIENT` bump. This tela-web also asks tela-api
+       before it serves any body, translation or image (`POST /api/edge/opens`); until tela-api
+       is out, every one of them answers 503 (`opens decision unavailable 404` in tela-web's
+       logs), so keep the gap to minutes. Bodies already on a device still open.
+     - tela-gateway last: it needs tela-api's `/gateway/*`. Its first deploy creates
+       `api.telaread.com` (step 4 above).
+     - Rolling back: **tela-api and tela-web go back together**, tela-api first, then tela-web at
+       once. An older tela-api alone has no `/api/edge/opens`, so this tela-web refuses every
+       body; an older tela-web alone is told to upgrade by this tela-api. tela-jobs may go back
+       alone (its sweep leaves `post_opens` growing until it returns). tela-gateway may go back,
+       or be deleted, alone: only apps notice. The migration can stay.
+     - After deploy, check that:
+       - `curl -s https://telaread.com/discover | grep -c contentKey` is 0, and the same for
+         `/api/v1/public/discover/week`;
+       - opening a post from a blog you do not subscribe to shows it, and
+         `/api/v1/account/usage` counts it under `posts` (`select count(*) from post_opens where
+         day = date('now')`); an admin's account counts nothing on the web;
+       - the console has an Apps area, and its Settings list `member.unsubscribedPostsPerDay`
+         (100) and `apps.enabled` (on);
+       - the gateway answers as in step 4, then the mainland check (*tela-gateway*);
+       - a draft app registered to your own account connects and pulls (*Approved apps*).
+     - Run `bun run restore-drill` after the next nightly export, so `apps` and `app_grants` are
+       covered.
    - Protocol 2 (2026-09-29) keeps each device's copy in IndexedDB `tela-2`; earlier shells use
      `tela`, which the newer shell empties at each boot and marks as seen. A tela-web rollback
      leaves the `tela-2` copies in place, and the older shell starts over in `tela`. On the way
@@ -463,11 +510,14 @@ or every code request fails, Resend refusing the sender. Going back is the old `
 `bun run dev` is Vite with the Cloudflare plugin: the SPA with hot reload, tela-web's Worker, and
 tela-api and tela-jobs beside it as auxiliary Workers, all in workerd. Service bindings, the
 `Ingest` RPC, local queues, D1 and R2 all work, and the three share one local D1 and bucket
-because their configs name the same ones.
+because their configs name the same ones. Beside Vite, the same command runs tela-gateway (ADR
+0065) in a `wrangler dev` of its own at http://localhost:8788, the local `api.telaread.com`: it
+reaches tela-api in the Vite process through wrangler's local dev registry, and reads the same
+bucket (`--persist-to apps/reader/.wrangler/state`). It needs no `.dev.vars`.
 
 ```sh
 S=$(openssl rand -hex 32)
-printf "AUTH_SECRET=$S\nADMIN_TOKEN=local\nENV=test\nPUBLIC_URL=http://localhost:5173\n" > apps/api/.dev.vars
+printf "AUTH_SECRET=$S\nADMIN_TOKEN=local\nENV=test\nPUBLIC_URL=http://localhost:5173\nAPI_URL=http://localhost:8788\n" > apps/api/.dev.vars
 printf "ENV=test\nLLM_PROVIDER=mock\nPUBLIC_URL=http://localhost:5173\n" > apps/jobs/.dev.vars
 printf "AUTH_SECRET=$S\nTELA_NOINDEX=1\n" > apps/reader/.dev.vars
 apps/reader/node_modules/.bin/wrangler d1 migrations apply tela --local \
@@ -492,6 +542,13 @@ console to it, and prints its sign-in link. It writes the made-up states once (a
 adds what is missing), and only ever with `wrangler d1 execute --local`: it refuses any
 `TELA_URL` that is not localhost. Without an address, its own Mara is the admin it names.
 
+To try an app (ADR 0064) locally: sign in as an admin (`dev:seed` makes one), register an app in
+`/admin/apps` with your own handle as its owner and `http://127.0.0.1/callback` as its redirect,
+and follow `docs/api/authorization.md` with `http://localhost:5173/connect` for
+`https://telaread.com/connect` and `http://localhost:8788` for `https://api.telaread.com`. The
+draft connects for your account only, as it would in production. `API_URL` in `.dev.vars` is what
+makes the metadata and every `iss` name the local gateway.
+
 To try Google or GitHub, register a dev OAuth app with the callback
 `http://localhost:5173/api/auth/callback/google` (or `/github`) and add its `GOOGLE_CLIENT_ID` and
 `GOOGLE_CLIENT_SECRET` (or `GITHUB_…`) to `apps/api/.dev.vars`; join with a code from `admin code`.
@@ -505,7 +562,10 @@ To try Google or GitHub, register a dev OAuth app with the callback
 then runs the built tela-web, tela-api and tela-jobs in one `wrangler dev`, on fresh local D1, R2
 and queues under `.e2e-logs/reader/state`, and runs Playwright. `e2e/stack.ts` writes the three
 configs with the test vars inlined: a secondary Worker reads its vars from its own directory, and
-writing `.dev.vars` beside the real configs would clobber a developer's own.
+writing `.dev.vars` beside the real configs would clobber a developer's own. It writes a fourth,
+tela-gateway's, which `run.sh` starts in a `wrangler dev` of its own on port 8812
+(`E2E_GATEWAY_URL`), since only a session's first Worker answers on its port; it reaches tela-api
+through the local dev registry and reads the same state directory.
 
 - **Sign-in is real.** The global setup invites a member, reads the code from the outbox, and
   signs in. The member follows two fixture feeds, which the setup fetches with one cycle.
@@ -530,6 +590,13 @@ is tela-api.
 - **Images:** `/img/<contentKey>/<i>` fetches only what a content object names, over
   `global_fetch_strictly_public`. A broken image is the origin's answer, which the Worker logs
   show; nothing is signed, so there is no secret to rotate.
+- **Bodies, translations and images ask tela-api first** (ADR 0066): `POST /api/edge/opens` with
+  the member's cookie, for the posts this colo has not already allowed them today, which it then
+  keeps until midnight UTC. `opens decision failed` (the binding threw) or `opens decision
+  unavailable <status>` (tela-api answered something else: a 404 is a tela-api from before the
+  route) in the logs means members get 503 for every body not already on their device. A member
+  refused for the day's limit is not an error: a 429 `post_limit`, which the reader shows as the
+  post's excerpt and *Subscribe to keep reading*. Browsers get 404 for `/api/edge/*`.
 - **Public pages** (the front page `/`, Discover's five tabs, `/s/:id`, `/@handle`, a blogroll's
   `/l/:id`) are rendered here and kept in each colo's cache for five minutes, keyed by locale and
   by the build. So a deploy never serves a page that names scripts it removed, and a blog's change
@@ -759,7 +826,10 @@ D1 database and `tela-content` with tela-jobs, and only produces to the jobs que
     one away: the member signs in again, by code or password, and tries from that session.
     Setting or changing a password, or linking a provider, ends every other session the member
     has; each change, and a reset by code, mails the member a notice (`account notice not sent` or
-    `sessions not ended` in the logs when either fails; neither undoes the change). A link that
+    `sessions not ended` in the logs when either fails; neither undoes the change). A reset ends
+    the member's apps after better-auth has ended the sessions, tried twice: `apps still connected
+    after a password reset: user <id>` means both tries failed, and the member's apps still act for
+    them; end them with the console's sign-out for that member. A link that
     fails comes back to `/settings?error=<code>`, better-auth's: `account_already_linked_to_different_user`
     for a provider identity another member has linked, `unable_to_link_account` for an address the
     provider has not verified, or for a browser that no longer holds a live session of the
@@ -901,6 +971,54 @@ says who holds it:
 - Queue messages are only accelerators. Purging a queue loses no work, because the next tick
   finds everything still due.
 
+## tela-gateway
+
+`apps/gateway/wrangler.jsonc`: `api.telaread.com`, the API for approved apps (ADR 0065). Unpinned,
+at the app's edge. Its bindings are `BLOBS` (`tela-content`, read-only) and `API` (tela-api); no
+D1, no assets, no vars and no secrets, so nothing in it needs rotating.
+
+- **What it does:** drops every cookie, refuses any `Authorization` that is not an access token
+  (`Bearer tela_at_…`) except on `/meta`, `/robots.txt` and OAuth's own endpoints, serves `/o/*`,
+  `/img/*` and `/v1/bodies` from R2 through the colo cache (asking tela-api's `/gateway/opens`
+  first), forwards the rest of `/v1/*`, `/meta`, `/oauth/*` and
+  `/.well-known/oauth-authorization-server` to tela-api as `/gateway/<path>`, and answers any
+  other path 404 `not_found` itself (`/gateway/opens` is its own question). Every answer says
+  `noindex`, HSTS and `tela-api-version`. `robots.txt` disallows everything.
+- **Caches** (the colo's, purged by nothing): an allowed post per token for 60 s, so an app cut
+  off loses its images within a minute; a public answer that names `?lang=` for five minutes, by
+  path and query, served only to a token tela-api accepted in the last minute; and `/meta` for
+  five minutes, for every caller, so an operator's change to a daily limit reaches what it says
+  within those five minutes. A blog hidden or a profile suspended leaves the apps' public pages
+  within those five minutes, as on the web.
+- **Logs:** paths only (`redact_query_string`: a query names content keys and a member's
+  searches). Failure signatures:
+  - `tela-api unreachable <path>`: the binding failed; apps get 503 `unavailable` with
+    `Retry-After: 30`. tela-api is down or deploying.
+  - `opens decision failed` or `opens decision unavailable <status>`: tela-api could not decide
+    what a token may open (a 404 is a tela-api without `/gateway/opens`); apps get 503 for bodies
+    and images, nothing else.
+  - A run of 401s from one app is its tokens refused: the app cut off, its member's connections
+    ended, or a bug in its refresh. tela-api's own log `refresh token reused; device ended`
+    (with the `clientId`) is a spent refresh token that came back: a few are an app racing its
+    own refreshes, which the developer should fix; many from one app are worth asking about.
+- **Rate limits:** tela-api counts each app per member and in all, but only after resolving the
+  token, one D1 round trip each. **A suggested Cloudflare rule** in front of it, so a flood of
+  junk is stopped at the edge (Security → WAF → Rate limiting rules, on the telaread.com zone; the
+  owner's to add): when `http.host eq "api.telaread.com"`, counted per IP, 300 requests in 10
+  seconds, block for 10 seconds. That is far above one member's app (120 calls a minute, plus a
+  post's images in a burst) and leaves room for an office behind one address. Where the plan
+  allows a second rule, `http.host eq "api.telaread.com" and starts_with(http.request.uri.path,
+  "/oauth/")` at 20 in 10 seconds. Read Security → Events after the first week, and loosen a rule
+  that blocks real apps.
+- **The mainland check**, after the first deploy: boce.com (or itdog.cn) against
+  `https://api.telaread.com/meta` and `https://api.telaread.com/robots.txt`, beside the same run
+  for `https://telaread.com/`. ADR 0042 kept one origin because `workers.dev` is blocked there; a
+  telaread.com subdomain should answer wherever telaread.com does. A node that fails on
+  `api.telaread.com` but not on `telaread.com` is the subdomain's problem; one that fails on
+  both is that network's, as before.
+- **Locally**, `bun run dev` runs it at http://localhost:8788, and the e2e on port 8812
+  (*Running locally*, *End-to-end*).
+
 ## Knowing it runs
 
 Nothing here needs watching; three things speak up when something is wrong (ADR 0027).
@@ -949,7 +1067,8 @@ Nothing here needs watching; three things speak up when something is wrong (ADR 
 `/admin` (ADR 0039) is where the operator acts on what the digest and the dead-man's switch
 report: claims to review, reports of public content (ADR 0059), feeds to fetch, pause or move to
 the relay, the blogs members added and Discover's listings, members (suspend, delete), invite
-codes, translation spend, dead letters, and the runtime settings (ADR 0056). It reads from
+codes, approved apps (ADR 0064), translation spend, dead letters, and the runtime settings (ADR
+0056). It reads from
 tela-api over the network, unlike the rest of the reader, and every change it makes is audited in
 `admin_actions`.
 
@@ -1013,7 +1132,11 @@ tela-api over the network, unlike the rest of the reader, and every change it ma
   `tela-content` under `backup/<date>/` as JSON lines (`<table>.<part>.jsonl`, 5,000 rows a part),
   with a `manifest.json` of row counts and SHA-256 hashes. A second pass reads it back to verify,
   and `backup/latest.json` records the result. Thirty days are kept. Sessions, sign-in codes,
-  leases and limits are not exported: a restored database signs everyone in again.
+  leases and limits are not exported: a restored database signs everyone in again. Nor are apps'
+  tokens, spent refresh hashes and codes, or the day's opened posts (ADRs 0064, 0066): after a
+  restore every connected app is refused (401, then `invalid_grant`) and its member connects it
+  again. The apps and the connections come back, so Settings → Connected apps lists each one with
+  no devices until it is connected again.
 - **Check one by hand:** `wrangler r2 object get tela-content/backup/latest.json --pipe --remote`.
   A problem reading `<part> line N is out of key order` means the export read a row twice or out
   of order, and would not restore; the export's paging has regressed (ADR 0027).
@@ -1064,6 +1187,16 @@ tela-api over the network, unlike the rest of the reader, and every change it ma
   `429 feed_limit` and `409 subscription_limit`. An import's overflow waits in `pending_feeds`,
   and `member.pendingFeeds` adds it on the days after: `select user_id, count(*) from pending_feeds
   group by 1`. Raising the day or the cap lets the next tick move them.
+- **Posts from blogs a member does not follow** (ADR 0066): `member.unsubscribedPostsPerDay`
+  (100) counts the full posts a member opens per UTC day from blogs they do not subscribe to, on
+  the web and in every app together. Only blogs they subscribe to are free: a blog they claimed
+  counts like any other unless they subscribe to it. A post counts once a day however often it is
+  fetched. Admins are exempt on the web and never through an app. A
+  refusal is a 429 `post_limit` with `Retry-After`, and the reader shows the post's excerpt with
+  *Subscribe to keep reading*. Who is near it: `select user_id, count(*) from post_opens where day
+  = date('now') group by 1 order by 2 desc limit 10`. Lift one member early: `delete from
+  post_opens where user_id = '<user id>' and day = date('now')`; the web edge keeps posts it
+  already allowed until midnight UTC, so lowering the limit does not take back today's.
 - **Deleting an account** (ADR 0058) is the member's own, from Settings › Account with a mailed
   code; an operator's `member.delete` (People) does the same to a spam account. Neither works on
   an admin: `bun run admin ungrant <email>` first. What others see goes in that batch; the rest
@@ -1083,6 +1216,73 @@ tela-api over the network, unlike the rest of the reader, and every change it ma
   colo, pictures longer. Their body translations not yet started end, given back; their waiting
   imported feeds stay and arrive once it is lifted. Lift it from People › Suspended. An admin is
   never suspended.
+
+## Approved apps
+
+Third-party apps act for members through `api.telaread.com` (ADRs 0064, 0065), only once the
+operator registers them. What a developer reads is `docs/api/` in this repository; they write to
+the operator to get an app approved.
+
+- **Before telling any developer**, deploy the round (*Provisioning*, step 7) and let a day pass:
+  a shell cached before tela-web's deploy has no `/connect` page, and shows Not found to a member
+  an app sends there until the tab reloads (its first sync is told to upgrade, which reloads it).
+- **What to ask a developer for** (`docs/api/README.md` says the same): the app's name and who
+  makes it; a contact address that receives mail (members never see it); an https homepage and an
+  https privacy policy, both shown on the consent page; the redirect URIs, loopback
+  (`http://127.0.0.1/<path>` or `http://[::1]/<path>`, any port matches) or a reverse-DNS scheme
+  (`com.example.app:/callback`), never `localhost` or https; the most it needs, read or write, and
+  whether it needs the member's email address, and why; their Tela handle, for the draft; and
+  their expected traffic if it is past the defaults. Read the privacy policy before approving.
+- **Register** in the console: Members › Apps › *Register app*. The form checks every field as
+  tela-api will (`parseAppSettings`), and the app starts as a **draft** with its `client_id`
+  (`tela_app_…`, on the record, selectable): send that to the developer. A draft connects only for
+  its owner's account, so the developer tests on production with their own; the consent page tells
+  them it is not yet approved. With no owner, a draft connects for nobody.
+- **Approve** when the developer is ready: any member can connect it from then on. **Edit**
+  changes the settings at any time; lowering what it may do, or taking the email away, reaches its
+  live tokens at once. Its limits are requests a minute per member (120 when empty) and in all
+  (6,000 when empty), and the members connected at once (no limit when empty); 0 is none. Each of
+  these has an undo; an edit's undo puts back everything but the contact address, which an audit
+  row never holds.
+- **Cut off** (suspend) refuses every token the app holds on its next call: 401 to its access
+  tokens, `invalid_grant` to its refresh tokens, and the consent page refuses it. Its images stop
+  within a minute (the gateway's cache). Connections are kept, so **Restore** brings it back for
+  the members who connected it; both undo. Write to the developer's contact address when you cut
+  an app off, and why.
+- **End all connections** ends every member's connection and every device's tokens, for good:
+  each member has to connect it again. It is confirmed and has no undo; a member's grant is not
+  the console's to give back. Use it after a leak of the app's tokens, or before deleting an app's
+  last trace of access; cut off is the reversible stop.
+- **Stop every app at once:** `bun run admin set apps.enabled off` (or the console's Settings).
+  Every call is answered 503 `apps_paused` with `Retry-After: 300`, and the token endpoint too;
+  connections and tokens are kept, and `on` resumes them. For an incident, not for one app.
+- **A member's connections:** they see and disconnect them in Settings → Connected apps. The
+  console's People › *Sign out everywhere* and *Suspend* end them in the same batch as the
+  sessions, and the sign-out's history counts the connections it ended; so do a password set,
+  changed or reset, a provider linked, the member's own sign out everywhere, and closing the
+  account. The console never names who connected an app, only how many. By hand: `select a.name, g.scope, g.created_at, g.last_used_at
+  from app_grants g join apps a on a.id = g.app_id where g.user_id = '<user id>' and g.ended_at is
+  null`.
+- **Rate limits** (`ACTION_LIMITS`): the app's own per member and in all, a minute each, counted
+  when its token resolves (`appMember.<app id>:<user id>`, `appTotal:<app id>` in
+  `action_limits`); the token endpoint, 30 a minute per app and IP (`appToken`); the consent
+  page's answers, 30 an hour per member (`appConnect`). An app is held to every member limit as
+  well, the operator's own account included: no app is ever exempt.
+- **Deprecating an API version** (`docs/api/policy.md`): only v1 exists, in preview, where a
+  breaking change needs 14 days' notice; once stable, the successor is announced 3 months before
+  the old version is deprecated, which then answers for 12 months after its successor ships.
+  1. Write to every app's contact: `select name, developer, contact_email from apps where status
+     <> 'suspended'`.
+  2. Add the change to `docs/api/CHANGELOG.md`.
+  3. Set the version's `status` (`deprecated`) and `sunsetAt` in `API_VERSIONS`
+     (`packages/shared/src/apps.ts`), which `/meta` reports, and deploy tela-api. The
+     `Deprecation` and `Sunset` headers the policy promises are not sent yet: the first
+     deprecation adds them, in tela-api's `/gateway` headers.
+  4. A month and a week before `sunsetAt`, write again to the apps that still call it (Workers
+     Logs, by path).
+- **After a restore** (*Backups*): apps' tokens were not exported, so every app is refused and its
+  members connect it again; nothing else is needed. The apps and their settings come back as
+  they were.
 
 ## Search engines and AI
 

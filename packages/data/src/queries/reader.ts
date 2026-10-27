@@ -13,18 +13,19 @@ const siteOfFeed = (feedId: number) => sql`(select site_id from feeds where id =
 
 /**
  * Subscribe (or resubscribe); articles already stored count as unread from here on. Held to the
- * member's subscription cap (ADR 0063): false when they do not follow the feed after, because
- * they hold as many as the cap allows.
+ * member's subscription cap (ADR 0063) unless `exempt` (the actor's, ADR 0065): false when they do
+ * not follow the feed after, because they hold as many as the cap allows.
  */
 export async function subscribe(
   db: TelaDb,
   userId: string,
   feedId: number,
   now: number,
+  exempt: boolean,
 ): Promise<boolean> {
   const results = (await db.batch([
     bumpSeq(db),
-    subscribeWithinCap(db, userId, feedId, now),
+    subscribeWithinCap(db, userId, feedId, now, exempt),
     ...recountReaders(db, siteOfFeed(feedId), now),
     db.all(sql`
       select 1 as following from subscriptions

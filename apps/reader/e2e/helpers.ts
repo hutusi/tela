@@ -8,6 +8,8 @@ import { type APIRequestContext, expect, type Locator, type Page, request } from
 
 export const BASE = process.env.E2E_BASE_URL ?? 'http://127.0.0.1:8811'
 export const FIXTURES = process.env.E2E_FIXTURE_URL ?? 'http://127.0.0.1:4790'
+/** tela-gateway, api.telaread.com's stand-in (ADR 0065): the OAuth issuer and the v1 API. */
+export const GATEWAY = process.env.E2E_GATEWAY_URL ?? 'http://127.0.0.1:8812'
 export const ADMIN_TOKEN = 'e2e-admin'
 /** The member the global setup signs in, with two fixture feeds subscribed. */
 export const READER = 'reader@e2e.test'
@@ -97,6 +99,9 @@ export async function signInRequest(request: APIRequestContext, email: string): 
   if (!res.ok()) throw new Error(`sign-in failed: ${res.status()} ${await res.text()}`)
 }
 
+/** `MIN_CLIENT` (packages/sync/src/protocol.ts), as the app's calls carry it; raise it with a bump. */
+export const CLIENT = '5'
+
 /**
  * What the app sends on every member call: the protocol it speaks and the account it holds, which
  * tela-api must find to be the session's (409 `account_changed` otherwise). The account is asked
@@ -106,8 +111,7 @@ export async function memberHeaders(request: APIRequestContext): Promise<Record<
   const me = await request.get(`${BASE}/api/v1/me`)
   if (!me.ok()) throw new Error(`who am I failed: ${me.status()} ${await me.text()}`)
   const { id } = (await me.json()) as { id: string }
-  // x-tela-client carries MIN_CLIENT (packages/sync/src/protocol.ts), as the app's calls do.
-  return { 'x-tela-client': '4', 'x-tela-member': id }
+  return { 'x-tela-client': CLIENT, 'x-tela-member': id }
 }
 
 /**

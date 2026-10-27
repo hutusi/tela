@@ -6,6 +6,7 @@
  * an isolate's memory survives to the next request. better-auth limits its own endpoints per IP,
  * separately (`rate_limit`).
  */
+import { APP_DEFAULT_PER_APP_PER_MIN, APP_DEFAULT_PER_MEMBER_PER_MIN } from '@tela/shared'
 import { sql } from 'drizzle-orm'
 import type { TelaDb } from '../db'
 
@@ -88,6 +89,17 @@ export const ACTION_LIMITS = {
    * day, not to fill the operator's queue. A repeat of an open report counts too.
    */
   report: { limit: 20, windowSec: 86_400 },
+  /**
+   * An approved app's requests (ADR 0064), per minute: for one member (scoped by the app, so
+   * `appMember.<appId>:<userId>` and `closeAccount` still finds the member's), and for the app in
+   * all. Each app may have its own limits; these are the defaults (`APP_DEFAULT_*`).
+   */
+  appMember: { limit: APP_DEFAULT_PER_MEMBER_PER_MIN, windowSec: 60 },
+  appTotal: { limit: APP_DEFAULT_PER_APP_PER_MIN, windowSec: 60 },
+  /** Token requests per app and IP: an exchange or a refresh is a few a day per device. */
+  appToken: { limit: 30, windowSec: 60 },
+  /** Consent answers per member: room to connect and reconnect apps, not to mint codes in bulk. */
+  appConnect: { limit: 30, windowSec: 3600 },
 } as const satisfies Record<string, ActionLimit>
 
 export type LimitedAction = keyof typeof ACTION_LIMITS
@@ -96,7 +108,9 @@ export type LimitResult = { allowed: boolean; retryAfterSec: number }
 
 /**
  * Count one attempt in the current window and say whether it is within the limit: the action's,
- * or `limit` when the subject has its own (an invite code's places).
+ * or `limit` when the subject has its own (an invite code's places, an app's own limits). `scope`
+ * splits one action's counts further without touching the subject (`appMember.<appId>:<userId>`),
+ * so the key's subject is still the member's for `closeAccount`.
  */
 export async function consumeLimit(
   db: TelaDb,
@@ -104,12 +118,14 @@ export async function consumeLimit(
   subject: string,
   now: number,
   limit: number = ACTION_LIMITS[action].limit,
+  scope?: string,
 ): Promise<LimitResult> {
   const rule: ActionLimit = ACTION_LIMITS[action]
   const windowMs = rule.windowSec * 1000
   const windowStart = Math.floor(now / windowMs) * windowMs
+  const key = `${scope === undefined ? action : `${action}.${scope}`}:${subject}`
   const rows = await db.all<{ count: number }>(sql`
-    insert into action_limits (key, window_start, count) values (${`${action}:${subject}`}, ${windowStart}, 1)
+    insert into action_limits (key, window_start, count) values (${key}, ${windowStart}, 1)
     on conflict (key, window_start) do update set count = count + 1
     returning count
   `)

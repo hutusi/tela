@@ -16,6 +16,7 @@ import { pointAt, renderedLeaves, type Side } from '../lib/highlight-dom'
 import { type ReadingMode, readingHref } from '../lib/href'
 import { newId } from '../lib/id'
 import { lazyImages } from '../lib/lazy-images'
+import { asksForTranslation } from '../lib/open-post'
 import { useReadingPrefs } from '../lib/prefs'
 import { readerStyle, typographyOf } from '../lib/typography'
 import { useHighlights } from '../lib/use-highlights'
@@ -26,11 +27,12 @@ import {
   useArticleTranslation,
 } from '../lib/use-translation'
 import { useNow, useStore, useTables } from '../store/hooks'
-import type { ContentObject } from '../store/objects'
+import { type ContentObject, type PostRefusal, PostRefused } from '../store/objects'
 import {
   feedTitle,
   isLiked,
   isRecommended,
+  isSubscribed,
   shownRead,
   shownTitle,
   siteOfFeed,
@@ -40,6 +42,7 @@ import { CLOSE, Glyph } from './glyph'
 import { HighlightList, HighlightNote, HighlightToolbar, useSelectedAnchor } from './highlights'
 import { LikeButton } from './like-button'
 import { PairedBody } from './paired-body'
+import { RefusedBody } from './post-limit'
 import { ReaderBackBar, ReaderBottomBar, RecommendSheet } from './reader-phone'
 import {
   RecommendButton,
@@ -89,6 +92,11 @@ type Props = {
   next: { href: string; title: string; lang?: string | undefined; blog: string } | null
   /** What the list it was opened from is called: a phone's back bar goes back to it by name. */
   listName: string
+  /**
+   * Told when the post is there to read: its body is on screen, or it is known to have none. Not
+   * while it loads, failed, or was refused for the day's limit (ADR 0066).
+   */
+  onReadable?: (articleId: number) => void
 }
 
 /**
@@ -100,18 +108,33 @@ type Recommending = 'top' | 'end' | 'sheet' | null
 /** The end of the article is one column whatever the body above it: the measure, at most 680px. */
 const END = 'max-w-[min(680px,var(--reader-measure))]'
 
-export function Reader({ article, readingLang, mode, onMode, onClose, next, listName }: Props) {
+/** The longest a timer is set for: one past 2³¹ ms fires at once. */
+const MAX_TIMER_MS = 2 ** 31 - 1
+
+export function Reader({
+  article,
+  readingLang,
+  mode,
+  onMode,
+  onClose,
+  next,
+  listName,
+  onReadable,
+}: Props) {
   const t = useTranslations('reader')
   const locale = useLocale()
   const now = useNow()
   const tables = useTables()
   const { objects, engine, store } = useStore()
   // `failed` when the body could not be fetched (offline, an error), as opposed to a post that has
-  // none: the one is worth trying again, the other is not.
+  // none: the one is worth trying again, the other is not. `refused` when the day's limit on blogs
+  // the member does not subscribe to kept it back (ADR 0066), which only a subscription or the
+  // next day changes.
   const [content, setContent] = useState<{
     key: string
     object: ContentObject | null
     failed?: true
+    refused?: PostRefusal
   } | null>(null)
   const key = article.contentKey
   const [attempt, setAttempt] = useState(0)
@@ -123,10 +146,15 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next, list
     objects
       .body(key, controller.signal)
       .then((object) => setContent({ key, object }))
-      .catch(() => !controller.signal.aborted && setContent({ key, object: null, failed: true }))
+      .catch((err: unknown) => {
+        if (controller.signal.aborted) return
+        if (err instanceof PostRefused) setContent({ key, object: null, refused: err.refusal })
+        else setContent({ key, object: null, failed: true })
+      })
     return () => controller.abort()
   }, [key, objects, attempt])
   const bodyFailed = content?.key === key && content.failed === true
+  const refused = (content?.key === key ? content.refused : undefined) ?? null
   // Try again: the skeleton while it asks, as on opening.
   const retryBody = useCallback(() => {
     setContent(null)
@@ -138,6 +166,13 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next, list
     window.addEventListener('online', retryBody)
     return () => window.removeEventListener('online', retryBody)
   }, [bodyFailed, retryBody])
+  // Refused for the day, it is asked for again once the day starts again, if still open then.
+  useEffect(() => {
+    if (!refused) return
+    const wait = Math.min(MAX_TIMER_MS, Math.max(0, refused.retryAt - Date.now()) + 1000)
+    const timer = setTimeout(retryBody, wait)
+    return () => clearTimeout(timer)
+  }, [refused, retryBody])
 
   // While a summary-only post waits for its full text, pull quickly so it appears when it lands.
   const extracting = article.extractState === 'due'
@@ -151,13 +186,26 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next, list
   useEffect(() => {
     if (loaded) pane.current?.focus({ preventScroll: true })
   }, [loaded])
+  // There to read: the body, or the answer that there is none. What a post from a blog the member
+  // does not subscribe to waits for before opening it reads it (`openMarker`).
+  const readable = loaded && !refused && !bodyFailed
+  useEffect(() => {
+    if (readable) onReadable?.(article.id)
+  }, [readable, onReadable, article.id])
   // Translated on opening, or only once asked (a pref), and never in a language the member reads
-  // as written. The Reader is keyed by the article, so asking lasts for this post.
+  // as written. The Reader is keyed by the article, so asking lasts for this post. A post from a
+  // blog the member does not subscribe to is asked for once its body has answered, not refused
+  // (`asksForTranslation`).
   const prefs = useReadingPrefs(tables)
   const [asked, setAsked] = useState(false)
   const wanted = prefs.autoTranslate || asked
   const translation = useArticleTranslation(article, object, readingLang, {
-    enabled: wanted,
+    enabled: asksForTranslation({
+      wanted,
+      subscribed: isSubscribed(tables, article.feedId),
+      answered: loaded,
+      refused: refused !== null,
+    }),
     never: prefs.never,
   })
   const original = useMemo(() => (object ? readerBlocks(object) : []), [object])
@@ -296,7 +344,9 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next, list
       : null
   const titles = shownTitle(tables, article, readingLang, prefs.never)
   const read = shownRead(tables, article, now, true, prefs.markOnOpen)
-  const title = showTrans ? titles.title : article.title
+  // Refused, there is no body to read beside: the title and excerpt as the list showed them.
+  const listTitles = showTrans || refused !== null
+  const title = listTitles ? titles.title : article.title
   const runs = showTrans
     ? runsOf(prefix.pairs, 'translated')
     : [{ id: 'o', html: original.map((b) => b.html).join(''), untranslated: false, pending: false }]
@@ -413,7 +463,8 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next, list
             ) : null}
           </div>
 
-          {view && sourceLang ? (
+          {/* A refused post has nothing to translate yet: the body's place says why. */}
+          {view && sourceLang && !refused ? (
             <TranslationBar
               sourceLang={sourceLang}
               view={view}
@@ -427,7 +478,7 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next, list
               }
             />
           ) : null}
-          {translation.notice ? (
+          {translation.notice && !refused ? (
             <p
               className="mb-7 text-[13px] text-muted"
               data-testid={`translation-${translation.notice}`}
@@ -453,7 +504,7 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next, list
                 <h1
                   className="mb-6 font-serif text-[30px] font-medium leading-[1.12] tracking-tight lg:text-[40px]"
                   style={{ textWrap: 'pretty' }}
-                  lang={showTrans ? titles.lang : bodyLang}
+                  lang={listTitles ? titles.lang : bodyLang}
                   data-testid="article-title"
                 >
                   {title}
@@ -482,6 +533,15 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next, list
                     )}
                     {showTrans && prefix.rest ? <TranslatingRest /> : null}
                   </>
+                ) : refused ? (
+                  <RefusedBody
+                    feedId={article.feedId}
+                    excerpt={titles.excerpt}
+                    excerptLang={titles.excerptLang}
+                    url={article.url}
+                    refusal={refused}
+                    onRetry={retryBody}
+                  />
                 ) : bodyFailed ? (
                   // Not "no readable content": the post has some, and it did not come.
                   <div className="text-[15px] text-muted" data-testid="body-failed">

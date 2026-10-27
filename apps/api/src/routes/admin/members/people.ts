@@ -11,6 +11,7 @@ import {
   closeAccount,
   closureKey,
   currentSeq,
+  endConnections,
   first,
   historyOf,
   type TelaDb,
@@ -170,11 +171,16 @@ function toPerson(r: PersonRaw): AdminPersonRow {
   }
 }
 
+/** True (as SQL) while the member holds a live connection to any app (ADR 0064). */
+const connected = (id: string) =>
+  sql`exists (select 1 from app_grants g where g.user_id = ${id} and g.ended_at is null)`
+
 /**
- * Sign a member out on every device: `endOtherSessions` with nothing kept, in a batch with its
- * audit row, which counts the sessions it ends. Each device's signed five-minute copy of its
- * session still works where only that copy is read (ADR 0024); `/api/v1/account` and the console's
- * door read past it. No undo: a session ended cannot be given back.
+ * Sign a member out on every device: `endOtherSessions` with nothing kept, and every app connected
+ * to the account ended with its tokens (ADR 0064), in a batch with its audit row, which counts the
+ * sessions and connections it ends. Each device's signed five-minute copy of its session still
+ * works where only that copy is read (ADR 0024); `/api/v1/account` and the console's door read past
+ * it. No undo: a session or connection ended cannot be given back.
  */
 const signOut: ActHandler = async (ctx, id) => {
   const { db } = ctx.deps
@@ -190,16 +196,22 @@ const signOut: ActHandler = async (ctx, id) => {
         at: ctx.now,
       },
       {
-        from: sql`json_object('sessions', (select count(*) from session s where s.user_id = ${id}))`,
-        to: { sessions: 0 },
+        from: sql`json_object(
+          'sessions', (select count(*) from session s where s.user_id = ${id}),
+          'connections',
+            (select count(*) from app_grants g where g.user_id = ${id} and g.ended_at is null))`,
+        to: { sessions: 0, connections: 0 },
       },
-      sql`from user where id = ${id} and exists (select 1 from session s where s.user_id = ${id})`,
+      sql`from user where id = ${id}
+        and (exists (select 1 from session s where s.user_id = ${id}) or ${connected(id)})`,
     ),
+    db.all(sql`select id from user where id = ${id} and ${connected(id)}`),
     db.all(sql`delete from session where user_id = ${id} returning id`),
+    ...endConnections(db, id, 'operatorSignOut', ctx.now),
     db.all(sql`select id from user where id = ${id}`),
   ])
-  if (returned(results[1]).length > 0) return 'done'
-  return returned(results[2]).length > 0 ? 'not_applicable' : 'not_found'
+  if (returned(results[1]).length > 0 || returned(results[2]).length > 0) return 'done'
+  return returned(results.at(-1)).length > 0 ? 'not_applicable' : 'not_found'
 }
 
 /**
@@ -338,23 +350,25 @@ const isSuspended = (id: string) =>
   sql`exists (select 1 from profiles where user_id = ${id} and suspended_at is not null)`
 
 /**
- * End every session of a member while they are suspended, and the body translations they asked
- * for that have not started: what a suspension starts with. A request left waiting would hold the
- * post from every other reader for as long as the suspension lasts (`withdrawBodyRequests`).
+ * End every session of a member while they are suspended, every app connected to the account with
+ * its tokens (ADR 0064), and the body translations they asked for that have not started: what a
+ * suspension starts with. A request left waiting would hold the post from every other reader for
+ * as long as the suspension lasts (`withdrawBodyRequests`).
  */
 const endSessions = (db: TelaDb, id: string, now: number) => [
   db.all(sql`delete from session where user_id = ${id} and ${isSuspended(id)} returning id`),
+  ...endConnections(db, id, 'suspended', now, isSuspended(id)),
   ...withdrawBodyRequests(db, id, now, isSuspended(id)),
 ]
 
 /**
- * Suspend a member (ADR 0059): `suspended_at` set, and every session ended in the same batch. The
- * sign-in hook refuses them from then on, and every public answer leaves out their profile, notes
- * and blogrolls (`standingOk`). The profile's seq moves, so the devices of the members who follow
- * them drop the follow on their next pull. Their body translations not yet started end, given
- * back; their imported feeds still waiting stay, and are not added while the suspension lasts
- * (`duePendingFeeds`). Undone, they can sign in again, and their feeds arrive as before; the
- * sessions and requests it ended are not given back.
+ * Suspend a member (ADR 0059): `suspended_at` set, and every session and connected app ended in
+ * the same batch. The sign-in hook refuses them from then on, and every public answer leaves out
+ * their profile, notes and blogrolls (`standingOk`). The profile's seq moves, so the devices of the
+ * members who follow them drop the follow on their next pull. Their body translations not yet
+ * started end, given back; their imported feeds still waiting stay, and are not added while the
+ * suspension lasts (`duePendingFeeds`). Undone, they can sign in again, and their feeds arrive as
+ * before; the sessions, connections and requests it ended are not given back.
  */
 const suspend: ActHandler = async (ctx, id) => {
   const { db } = ctx.deps

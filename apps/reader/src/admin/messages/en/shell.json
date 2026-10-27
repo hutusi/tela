@@ -13,6 +13,7 @@
     "discover": "Discover",
     "people": "People",
     "invites": "Invitations",
+    "apps": "Apps",
     "translation": "Translation",
     "system": "System",
     "settings": "Settings"
@@ -31,6 +32,7 @@
     "discover": "A blog is listed once it is claimed or three people read it, or when an operator lists it. The blogs members add wait under To review: list each, or say it is not for Discover. Featuring is the operator's call, and a hidden blog never appears, whatever its claims. Changes reach Discover within five minutes.",
     "people": "Members and their account basics. Admins see a member's public card, never what they read, subscribe to, like or highlight.",
     "invites": "Tela is invitation-only. Each member has five codes to give; an operator's code admits as many people as it was given.",
+    "apps": "Apps other developers made, which members connect to their Tela account. A draft connects only for the account that owns it, so its developer can test it; approve it to offer it to every member. Cutting an app off refuses every token it holds at once, and keeps its connections for a restore. No app is ever an admin.",
     "translation": "What translation costs, in tokens, over the last 30 days. Members reserve against a daily cap; titles for everyone come out of one background budget.",
     "system": "The health check and the work it watches. A job that runs out of attempts becomes a dead letter, and nothing retries it unless someone does.",
     "settings": "What you can change while Tela runs: who may join, the limits on an ordinary account, the day's translation budgets, and when Tela mails you. A change holds at once, with no deploy."
@@ -241,6 +243,38 @@
         "done": "Invitation sent"
       }
     },
+    "app": {
+      "create": {
+        "label": "Register app",
+        "short": "Register",
+        "done": "App registered"
+      },
+      "edit": {
+        "label": "Edit",
+        "short": "Edit",
+        "done": "Settings saved"
+      },
+      "approve": {
+        "label": "Approve",
+        "short": "Approve",
+        "done": "Approved"
+      },
+      "suspend": {
+        "label": "Cut off",
+        "short": "Cut off",
+        "done": "Cut off"
+      },
+      "restore": {
+        "label": "Restore",
+        "short": "Restore",
+        "done": "Restored"
+      },
+      "endConnections": {
+        "label": "End all connections",
+        "short": "End connections",
+        "done": "Connections ended"
+      }
+    },
     "report": {
       "resolve": {
         "label": "Mark resolved",
@@ -277,6 +311,10 @@
     "hold": {
       "cancel": "Cancel this invitation? The address can no longer finish joining with it."
     },
+    "app": {
+      "suspend": "Cut this app off for everyone? Every token it holds is refused at once. Its connections are kept, and Restore brings it back.",
+      "endConnections": "End every member’s connection to this app? Each of them has to connect it again to use it. This cannot be undone."
+    },
     "yes": "Yes, go ahead",
     "no": "Cancel"
   },
@@ -295,6 +333,10 @@
     },
     "hold": {
       "cancel": "Cancel these {n} invitations? Those addresses can no longer finish joining with them."
+    },
+    "app": {
+      "suspend": "Cut these {n} apps off for everyone? Every token they hold is refused at once. Their connections are kept, and Restore brings them back.",
+      "endConnections": "End every member’s connection to these {n} apps? Each of them has to connect them again. This cannot be undone."
     }
   },
   "input": {

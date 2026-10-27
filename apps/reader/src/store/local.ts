@@ -210,6 +210,45 @@ export class LocalStore {
     }
   }
 
+  /**
+   * Articles a page asked to hold whose rows are on their way (`GET /api/v1/articles/:id`): a
+   * public page's post carries no content key (ADR 0066), so the reader shows it loading, not
+   * gone, until its row lands.
+   */
+  private fetching = new Set<number>()
+
+  /** Whether a held article's row is still on its way. */
+  isFetching(id: number): boolean {
+    return this.fetching.has(id)
+  }
+
+  /**
+   * Mark an article's row as on its way, and say the epoch it was asked for in: an answer that
+   * lands in another (the tab signed in as someone else meanwhile) is for rows it no longer has.
+   */
+  beginHold(id: number): number {
+    this.fetching.add(id)
+    this.touch()
+    return this.epoch
+  }
+
+  /**
+   * The row a hold fetched (or none, for a post Tela does not hold), kept for this visit like a
+   * remembered one, unless the tab moved on since it asked.
+   */
+  endHold(epoch: number, id: number, row: ArticleRow | null, source?: string | null): void {
+    if (epoch !== this.epoch) return
+    this.fetching.delete(id)
+    if (row) this.remember([row], source)
+    this.touch()
+  }
+
+  /** Tell the views something they read outside the tables changed, the tables themselves not. */
+  private touch() {
+    this.current = { ...this.current, version: this.current.version + 1 }
+    for (const listener of this.listeners) listener()
+  }
+
   /** An article from the synced tables, else one remembered this visit. */
   article(tables: Tables, id: number): ArticleRow | undefined {
     return tables.articles.get(id) ?? this.transient.get(id)
@@ -294,6 +333,7 @@ export class LocalStore {
     this.pruneHolds()
     this.transient = new Map()
     this.transientNames = new Map()
+    this.fetching = new Set()
     this.people = new Map()
     this.recompute()
   }
@@ -681,6 +721,15 @@ export class LocalStore {
       if (p.ackedAt === undefined) next.push(p.mutation)
     }
     return next
+  }
+
+  /**
+   * Whether the server has yet to answer for the change stamped `mid`: made here, and neither
+   * acknowledged nor refused. Not `unsent`, which stops at the first change held for an Undo and
+   * so leaves out a change queued behind it that has not gone either.
+   */
+  unanswered(mid: string): boolean {
+    return this.pending.some((p) => p.mutation.mid === mid && p.ackedAt === undefined)
   }
 
   /**

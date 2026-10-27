@@ -219,7 +219,18 @@
     "likeCount": "Like · {n}",
     "likedCount": "Liked · {n}",
     "original": "Original",
-    "backTo": "Back to {list}"
+    "backTo": "Back to {list}",
+    "postLimit": {
+      "title": "You’ve reached today’s limit",
+      "limit": "You can open {n, plural, one {# post} other {# posts}} a day in full from blogs you don’t subscribe to, and any number from blogs you do.",
+      "limitUnknown": "You can open a few posts a day in full from blogs you don’t subscribe to, and any number from blogs you do.",
+      "againToday": "You can open more after {time}.",
+      "againTomorrow": "You can open more tomorrow, after {time}.",
+      "line": "{limit} {again}",
+      "subscribe": "Subscribe to keep reading",
+      "subscribing": "Subscribing…",
+      "onBlog": "Read it on the blog"
+    }
   },
   "add": {
     "title": "Add a blog",
@@ -709,8 +720,8 @@
         "body": "Tela’s public pages, the ones anyone and any search engine can open, show your posts’ titles and short excerpts, each linking to the post on your blog. They never show a post in full."
       },
       "members": {
-        "title": "To subscribers, your posts",
-        "body": "Members who subscribe to your blog read your posts in Tela’s reader, from your feed or the post’s page, as in any feed reader. Tela keeps that copy for signed-in members, never as a page anyone can open."
+        "title": "To subscribers, your posts in full",
+        "body": "Members who subscribe to your blog read your posts in full, in Tela’s reader and in the apps Tela approves, from your feed or the post’s page, as in any feed reader. Other members can open a limited number of posts a day from blogs they don’t follow, and visitors see only excerpts. If you turn translation off, Tela stops translating your blog and stops sending its translations to readers and apps."
       },
       "translation": {
         "title": "Translations, labelled",
@@ -877,6 +888,7 @@
       "translation": "Language",
       "subscriptions": "Subscriptions",
       "privacy": "Privacy",
+      "apps": "Connected apps",
       "invites": "Invites",
       "account": "Account"
     },
@@ -1104,6 +1116,93 @@
         "rate_limited": "Too many tries. Try again later.",
         "failed": "That did not work. Try again."
       }
+    }
+  },
+  "connectedApps": {
+    "intro": "Apps you have connected to your Tela account, and what each may do. Tela approves every app before anyone can connect it.",
+    "none": "No apps connected",
+    "noneBody": "Apps made by other developers can read your Tela and, if you let them, make changes for you, such as marking posts read. Tela approves each one before anyone can connect it, and you choose what it may do when you connect it from the app.",
+    "by": "By {developer}",
+    "level": {
+      "read": "Read only",
+      "write": "Read and write"
+    },
+    "levelWithEmail": "{level}, and your email address",
+    "when": "Connected {since} · {used} · {devices, plural, =0 {no devices} one {# device} other {# devices}}",
+    "lastUsed": "last used {date}",
+    "neverUsed": "not used yet",
+    "disconnect": "Disconnect",
+    "confirm": "Disconnect {name}? It stops working on all your devices at once. What it has already kept stays with it: ask the app to delete it.",
+    "disconnectYes": "Disconnect",
+    "cancel": "Cancel",
+    "more": "<link>What apps can see</link>, and what Tela keeps about each connection.",
+    "errors": {
+      "load": "Your connected apps couldn’t be loaded. Try again later.",
+      "failed": "It couldn’t be disconnected. Try again."
+    }
+  },
+  "connect": {
+    "title": "Connect an app",
+    "signIn": {
+      "title": "Connect an app to Tela",
+      "body": "An app is asking to connect to your Tela account. Log in to see what it asks for. Nothing is shared until you say yes.",
+      "logIn": "Log in",
+      "join": "Join Tela"
+    },
+    "draft": "Not yet approved by Tela. Only you can connect it, because it is registered to your account for testing.",
+    "heading": "Connect {app} to your Tela account?",
+    "by": "By {developer}",
+    "byWithHome": "By {developer} · <home>Website</home>",
+    "account": {
+      "label": "Your account",
+      "as": "Signed in as",
+      "switch": "Use another account"
+    },
+    "level": {
+      "label": "What it can do",
+      "read": "Read only",
+      "readBody": "See your subscriptions and folders, posts and their full text, your likes, recommendations and highlights, your reading history, the people you follow, your reading preferences, and public pages. It can’t change anything, or ask for translations.",
+      "write": "Read and write",
+      "writeBody": "See all of that, and change it for you: mark posts read, like, recommend, highlight, subscribe, add feeds, file blogs in folders, follow people, change your reading preferences, and ask for translations, which count toward your daily translations."
+    },
+    "email": "Let it see your email address",
+    "never": {
+      "label": "No app can",
+      "delete": "Delete your account",
+      "signIn": "Change how you sign in, or your password",
+      "export": "Download your data",
+      "admin": "Do anything only the person who runs Tela can"
+    },
+    "returns": {
+      "loopback": "When you answer, you go back to the app on this computer ({target}).",
+      "scheme": "When you answer, you go back to the app ({target})."
+    },
+    "responsibility": "What {app} keeps is its own responsibility, under <policy>its privacy policy</policy>, not Tela’s.",
+    "responsibilityNoPolicy": "What {app} keeps is its own responsibility, not Tela’s. It has given Tela no privacy policy.",
+    "later": "You can disconnect it at any time in Settings → Connected apps. That stops it at once, but doesn’t delete what it has already kept. <link>More about apps</link>",
+    "approve": "Approve",
+    "decline": "Decline",
+    "sent": {
+      "approved": "{app} is connected",
+      "declined": "You declined {app}",
+      "loopback": "Your browser is going back to the app. If nothing happens, switch to the app yourself; you can close this page.",
+      "scheme": "Your browser is asking to open the app. If nothing happens, switch to the app yourself; you can close this page."
+    },
+    "errors": {
+      "title": "This app can’t connect",
+      "failedTitle": "Couldn’t reach Tela",
+      "invalid_client": "Tela doesn’t know this app. It may have been removed, or the link that brought you here is wrong.",
+      "invalid_redirect": "The app asked Tela to send you somewhere it never registered, so Tela won’t.",
+      "invalid_request": "The app’s request is incomplete or malformed. Try connecting again from the app.",
+      "unsupported_response_type": "The app asked to connect in a way Tela doesn’t offer.",
+      "invalid_scope": "The app asked for more than Tela lets it have.",
+      "app_unavailable": "This app can’t be connected now: it isn’t approved yet, or Tela has paused it.",
+      "max_connections": "This app has as many people connected as Tela allows for now. Try again later.",
+      "failed": "Check your connection and try again.",
+      "nothingShared": "Nothing was shared with the app.",
+      "retry": "Try again",
+      "toReading": "Go to your reading",
+      "decideFailed": "Your answer didn’t reach Tela. Try again."
     }
   },
   "search": {

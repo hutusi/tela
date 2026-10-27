@@ -27,7 +27,7 @@ import {
   type Persistence,
 } from './store/db'
 import { SyncEngine } from './store/engine'
-import { Objects } from './store/objects'
+import { Objects, REQUEST_TIMEOUT_MS } from './store/objects'
 
 /** An earlier build's database is IndexedDB's to look at, and a memory store has none. */
 const NO_EARLIER: EarlierBuild = {
@@ -59,7 +59,8 @@ async function boot(root: HTMLElement) {
   // page; a member's synced one applies again once their rows are in.
   paintChrome(pageTheme())
   const { persistence, store } = await deviceStore()
-  const objects = new Objects(persistence)
+  // A refusal for the day's limit (ADR 0066) is the account's that asked, not the next one's.
+  const objects = new Objects(persistence, Date.now, REQUEST_TIMEOUT_MS, () => store.userId)
 
   const leave = leaver({
     stop: () => engine.stop(),

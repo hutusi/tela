@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # End-to-end run of the local-first stack: build tela-web → fixture feed server → tela-web,
-# tela-api and tela-jobs in one `wrangler dev` on fresh local D1/R2/queues → Playwright.
+# tela-api and tela-jobs in one `wrangler dev` on fresh local D1/R2/queues, tela-gateway in a
+# `wrangler dev` of its own beside it → Playwright.
 # Usage: apps/reader/e2e/run.sh [playwright args]
 set -euo pipefail
 
@@ -15,12 +16,16 @@ rm -rf "$STATE"
 FIXTURE_PORT="${E2E_FIXTURE_PORT:-4790}"
 PORT="${E2E_READER_PORT:-8811}"
 INSPECTOR_PORT="${E2E_INSPECTOR_PORT:-9311}"
+GATEWAY_PORT="${E2E_GATEWAY_PORT:-8812}"
+GATEWAY_INSPECTOR_PORT="${E2E_GATEWAY_INSPECTOR_PORT:-9312}"
 WRANGLER="$READER/node_modules/.bin/wrangler"
 export E2E_FIXTURE_URL="http://127.0.0.1:${FIXTURE_PORT}"
 export E2E_BASE_URL="http://127.0.0.1:${PORT}"
+# api.telaread.com's stand-in (ADR 0065), for specs that act as an app.
+export E2E_GATEWAY_URL="http://127.0.0.1:${GATEWAY_PORT}"
 export E2E_STATE_FILE="$LOGS/member.json"
 # A stack left running would answer the health check and every spec would test it instead.
-for port in "$PORT" "$FIXTURE_PORT"; do
+for port in "$PORT" "$FIXTURE_PORT" "$GATEWAY_PORT"; do
   if lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
     echo "port $port is already in use; stop whatever holds it first" >&2; exit 1
   fi
@@ -33,7 +38,7 @@ cleanup() {
   for ((i = ${#pids[@]} - 1; i >= 0; i--)); do
     kill "${pids[$i]}" 2>/dev/null || true
   done
-  lsof -t -i ":${PORT}" -i ":${FIXTURE_PORT}" 2>/dev/null | xargs kill 2>/dev/null || true
+  lsof -t -i ":${PORT}" -i ":${FIXTURE_PORT}" -i ":${GATEWAY_PORT}" 2>/dev/null | xargs kill 2>/dev/null || true
   wait 2>/dev/null || true
 }
 trap cleanup EXIT
@@ -62,6 +67,14 @@ echo "▸ workers"
   --inspector-port "$INSPECTOR_PORT" --show-interactive-dev-session=false > "$LOGS/workers.log" 2>&1) &
 pids+=($!)
 wait_for "$E2E_BASE_URL/api/health" 90
+
+# Its own session, since only a session's first Worker has a port: it finds tela-api through the
+# local dev registry, and reads the bucket the others write, under the same state directory.
+(exec "$WRANGLER" dev -c "$LOGS/gateway.wrangler.json" --persist-to "$STATE" --ip 127.0.0.1 \
+  --port "$GATEWAY_PORT" --inspector-port "$GATEWAY_INSPECTOR_PORT" \
+  --show-interactive-dev-session=false > "$LOGS/gateway.log" 2>&1) &
+pids+=($!)
+wait_for "$E2E_GATEWAY_URL/robots.txt" 60
 
 echo "▸ playwright"
 cd "$READER" && bunx playwright test "$@"

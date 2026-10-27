@@ -143,7 +143,8 @@ export type Columns = Record<string, string>
  * The inverse of a change that set plain columns: while the row still holds every `match` key of
  * `to` (all of them by default), put each key of `from` back. `match` leaves out a column that
  * moves on its own (a feed's timeout streak), which is restored but not compared. `set` adds
- * what a restore also writes, and `after` what follows it (a lease to break), like `Change`'s.
+ * what a restore also writes, and `after` what follows it (a lease to break), like `Change`'s;
+ * `committed` what follows once the undo's batch has committed.
  */
 export function restoreColumns<T extends Table>(options: {
   table: T
@@ -151,6 +152,8 @@ export function restoreColumns<T extends Table>(options: {
   match?: string[]
   set?: (now: number) => SQL
   after?: (db: TelaDb, id: KeyOf<T>) => BatchItem<'sqlite'>[]
+  /** What follows a restore once its batch has committed: work too large for one batch. */
+  committed?: (db: TelaDb, id: KeyOf<T>, from: Record<string, unknown>) => Promise<void>
   synced?: boolean
 }): Inverse {
   const { table, columns } = options
@@ -186,6 +189,9 @@ export function restoreColumns<T extends Table>(options: {
         ...(synced && options.after ? options.after(db, id) : []),
       ],
       synced,
+      ...(options.committed
+        ? { committed: () => options.committed?.(db, id, from) ?? Promise.resolve() }
+        : {}),
     }
   }
 }

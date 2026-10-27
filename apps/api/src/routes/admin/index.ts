@@ -75,6 +75,12 @@ export function parseAct(body: unknown): AdminActRequest | null {
     if (typeof a.email !== 'string' || a.email.length > 320) return null
     parsed.email = a.email
   }
+  if (a.app !== undefined) {
+    // An app's settings (`app.create`, `app.edit`): an object, small; `parseAppSettings` checks it.
+    if (typeof a.app !== 'object' || a.app === null || Array.isArray(a.app)) return null
+    if (JSON.stringify(a.app).length > 10_000) return null
+    parsed.app = a.app
+  }
   if ('value' in a) {
     // A setting's value (`setting.set`): any JSON value, small; its key's rule checks it.
     if (JSON.stringify(a.value ?? null).length > 1000) return null
@@ -84,7 +90,11 @@ export function parseAct(body: unknown): AdminActRequest | null {
 }
 
 /** Actions that create rather than act on something, and so name no target. */
-const WITHOUT_TARGET: ReadonlySet<AdminActionName> = new Set(['code.create', 'invite.address'])
+const WITHOUT_TARGET: ReadonlySet<AdminActionName> = new Set([
+  'code.create',
+  'invite.address',
+  'app.create',
+])
 
 const undoable = (action: string): action is (typeof UNDOABLE_ACTIONS)[number] =>
   (UNDOABLE_ACTIONS as readonly string[]).includes(action)
@@ -160,6 +170,7 @@ export function adminRoutes(deps: ApiDeps, auth: Auth) {
     const guards: BatchItem<'sqlite'>[] = []
     const restores: BatchItem<'sqlite'>[] = []
     const audits: BatchItem<'sqlite'>[] = []
+    const committed: (() => Promise<void>)[] = []
     let synced = false
     for (const row of rows) {
       const inverse = inverses[row.action as AdminActionName]
@@ -185,6 +196,7 @@ export function adminRoutes(deps: ApiDeps, auth: Auth) {
       )
       guards.push(undoGuard(db, group, sql`(${step.changed}) or ${later}`))
       restores.push(...step.restore)
+      if (step.committed) committed.push(step.committed)
       audits.push(
         audit(
           db,
@@ -210,6 +222,8 @@ export function adminRoutes(deps: ApiDeps, auth: Auth) {
       if (isFenceRefusal(err)) return c.json({ error: 'changed_since' }, 409)
       throw err
     }
+    // Every restore held, or the guards would have refused the batch: what follows them now.
+    for (const follow of committed) await follow()
     return c.json({ restored: rows.length })
   })
 

@@ -1,0 +1,20 @@
+{
+  "name": "@tela/gateway",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The tela-gateway Worker at api.telaread.com: Tela's API for approved apps, bearer-only, serving content at the edge and the rest from tela-api (ADR 0065)",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json && tsc -p test/tsconfig.json",
+    "dev": "wrangler dev --port 8788 --persist-to ../reader/.wrangler/state"
+  },
+  "dependencies": {
+    "@tela/edge": "workspace:*",
+    "@tela/platform": "workspace:*",
+    "@tela/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260927.1",
+    "wrangler": "^4.143.0"
+  }
+}

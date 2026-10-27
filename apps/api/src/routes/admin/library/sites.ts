@@ -3,7 +3,7 @@
  * it is translated, whether Tela may fetch its pages, and a fetch of every feed it has. A blog's row syncs to its readers, so every
  * change bumps the sequence, bar Not for Discover, which writes only the review no device holds.
  */
-import { audit, bumpSeq, currentSeq, type TelaDb } from '@tela/data'
+import { audit, bumpSeq, currentSeq, restampTranslations, type TelaDb } from '@tela/data'
 import { isTopic, type SiteListing, type SiteReview } from '@tela/shared'
 import type { AdminActionName } from '@tela/shared/admin'
 import { type SQL, sql } from 'drizzle-orm'
@@ -196,13 +196,17 @@ const restoreTopics: Inverse = (db, change, now) => {
   }
 }
 
-/** Pause or allow translating a blog, as its owner can (ADR 0011). */
+/**
+ * Pause or allow translating a blog, as its owner can (ADR 0011). Allowed again, its title and
+ * body translation rows are stamped again once the change has committed, so apps, whose sync left
+ * them out while the blog said no, receive them (ADR 0065); `done` is exactly a change.
+ */
 function setTranslation(action: 'site.translationOff' | 'site.translationOn'): ActHandler {
   const optOut = action === 'site.translationOff' ? 1 : 0
   return async (ctx, id) => {
     const siteId = idOf(id)
     if (siteId === null) return 'not_found'
-    return applyChange(ctx, {
+    const result = await applyChange(ctx, {
       action,
       table: 'sites',
       id: siteId,
@@ -211,12 +215,18 @@ function setTranslation(action: 'site.translationOff' | 'site.translationOn'): A
       from: sql`json_object('translationOptOut', translation_opt_out)`,
       to: { translationOptOut: optOut },
     })
+    if (result === 'done' && optOut === 0) await restampTranslations(ctx.deps.db, [siteId])
+    return result
   }
 }
 
+/** An undo of either: undoing Translation off turns it back on, with the same re-stamp. */
 const restoreTranslation = restoreColumns({
   table: 'sites',
   columns: { translationOptOut: 'translation_opt_out' },
+  committed: async (db, siteId, from) => {
+    if (from.translationOptOut === 0) await restampTranslations(db, [siteId])
+  },
 })
 
 /**

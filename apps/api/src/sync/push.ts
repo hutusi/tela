@@ -33,6 +33,7 @@ function statementsFor(
   m: Mutation,
   at: number,
   now: number,
+  exempt: boolean,
 ): Statement[] {
   const fresh = sql`not exists (select 1 from applied_mutations where user_id = ${userId} and mid = ${m.mid})`
   const article = (id: number) => sql`exists (select 1 from articles where id = ${id})`
@@ -156,7 +157,7 @@ function statementsFor(
           insert into subscriptions (user_id, feed_id, watermark_id, created_at, updated_at, seq)
           select ${userId}, ${feedOf(m)}, 0, ${now}, ${now}, ${currentSeq}
           from feeds where id = ${m.feedId} ${unmerged(m)} and ${fresh}
-            and ${subscriptionRoom(userId)} > 0
+            and ${subscriptionRoom(userId, exempt)} > 0
           on conflict (user_id, feed_id) do update set
             deleted_at = null, updated_at = excluded.updated_at, seq = excluded.seq
           where subscriptions.deleted_at is not null
@@ -583,11 +584,16 @@ export function asksGravatar(raw: unknown[], applied: readonly string[]): boolea
   })
 }
 
+/**
+ * Apply a member's push. `exempt` is the actor's (ADR 0065): the web passes an admin's, an app
+ * never has it, so a subscribe past the cap writes nothing for an app whoever the member is.
+ */
 export async function applyPush(
   db: TelaDb,
   userId: string,
   raw: unknown[],
   now: number,
+  { exempt }: { exempt: boolean },
 ): Promise<PushResponse> {
   const accepted: Mutation[] = []
   const rejected: PushResponse['rejected'] = []
@@ -605,7 +611,7 @@ export async function applyPush(
   }
   const statements: Statement[] = [bumpSeq(db)]
   for (const m of accepted) {
-    statements.push(...statementsFor(db, userId, m, Math.min(Math.max(m.at, 0), now), now))
+    statements.push(...statementsFor(db, userId, m, Math.min(Math.max(m.at, 0), now), now, exempt))
     statements.push(
       db.run(sql`
         insert into applied_mutations (user_id, mid, applied_at) values (${userId}, ${m.mid}, ${now})

@@ -3,11 +3,12 @@
  * bun test suite run the same app. Reached only through tela-web, which forwards `/api/*`.
  */
 import {
+  type Actor,
   audit,
   bumpSeq,
   currentSeq,
   first,
-  isBarred,
+  memberStanding,
   newGroupId,
   readTitles,
   reapplyClosures,
@@ -27,7 +28,10 @@ import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { HTTPException } from 'hono/http-exception'
 import { type Auth, createAuth } from './auth'
+import { BODY_MAX_BYTES, PUSH_MAX_BYTES } from './body-limits'
+import { readArticle } from './core/public'
 import type { ApiDeps } from './deps'
+import { createGateway, gatewayHeaders } from './gateway'
 import { fromOperator } from './operator'
 import { accountRoutes } from './routes/account'
 import { adminRoutes } from './routes/admin'
@@ -37,8 +41,10 @@ import { avatarRoutes } from './routes/avatars'
 import { blogrollRoutes } from './routes/blogrolls'
 import { claimRoutes } from './routes/claims'
 import { clientErrorRoutes } from './routes/client-errors'
+import { connectRoutes } from './routes/connect'
 import { curate } from './routes/curate'
 import { discoverRoutes } from './routes/discover'
+import { edgeRoutes } from './routes/edge'
 import { feedRoutes } from './routes/feeds'
 import { inviteMember } from './routes/invite-member'
 import { inviteRoutes, operatorCodeRoutes } from './routes/invites'
@@ -54,9 +60,14 @@ import { websubRoutes } from './routes/websub'
 import { checkGravatarSoon } from './sync/gravatar'
 import { answerPull } from './sync/pull'
 import { applyPush, asksGravatar } from './sync/push'
+import { webActor } from './web-actor'
 
 export type Member = { id: string; email: string }
-export type ApiEnv = { Variables: { member: Member } }
+/**
+ * `actor` is who a call acts for as the shared rules take it (ADR 0065), once the member check has
+ * read it; `webActor` (`web-actor.ts`) reads it for a call the check did not.
+ */
+export type ApiEnv = { Variables: { member: Member; actor?: Actor } }
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -124,18 +135,15 @@ const STANDING_READS: ReadonlySet<string> = new Set([
   '/api/v1/export',
 ])
 export const guarded = (method: string, path: string) =>
-  (method !== 'GET' && method !== 'HEAD') || STANDING_READS.has(path)
+  (method !== 'GET' && method !== 'HEAD') ||
+  STANDING_READS.has(path) ||
+  // A post's row hands out its content key, which fetches the full post (ADR 0066).
+  path.startsWith('/api/v1/articles/')
 
 /** A client older than the protocol is told to reload, not left misreading rows. */
 const tooOld = (header: string | undefined) => protocolOf(header) < MIN_CLIENT
 
-/** The most any request body may hold unless its route says otherwise: every JSON call is small. */
-export const BODY_MAX_BYTES = 64 * 1024
-/**
- * A push: fifty changes, and a highlight's quote and note are 2,000 characters each, which in
- * Chinese or emoji is up to 16 KB a change.
- */
-export const PUSH_MAX_BYTES = 1024 * 1024
+export { BODY_MAX_BYTES, PUSH_MAX_BYTES }
 
 /**
  * The most a request's body may hold: `null` for the routes that read their own body no further
@@ -147,8 +155,10 @@ export function bodyCap(method: string, path: string): number | null {
   if (method === 'PUT' && path === '/api/v1/avatar') return null
   if (method === 'POST' && path.startsWith('/api/websub/')) return null
   if (method === 'POST' && path === '/api/v1/feeds/opml') return null
+  if (method === 'POST' && path === '/gateway/v1/feeds/opml') return null
   if (method === 'POST' && path === '/api/client-errors') return null
   if (method === 'POST' && path === '/api/v1/mutations') return PUSH_MAX_BYTES
+  if (method === 'POST' && path === '/gateway/v1/mutations') return PUSH_MAX_BYTES
   return BODY_MAX_BYTES
 }
 
@@ -390,6 +400,15 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
   app.route('/api/websub', websubRoutes(deps))
   // What breaks in a browser, a visitor's too: no session, counted per IP, logged and kept nowhere.
   app.route('/api/client-errors', clientErrorRoutes(deps, auth))
+  // tela-web's edge, asking before it serves a member content (ADR 0066): the session's cookie
+  // and nothing else, so outside the member checks below. tela-web refuses it to browsers.
+  app.route('/api/edge', edgeRoutes(deps, auth))
+
+  // The app surface (ADRs 0064, 0065): bearer tokens only, outside `/api/` so tela-web never
+  // forwards here; tela-gateway does, from api.telaread.com. Nothing under it reads a cookie, and
+  // nothing under `/api/` reads its tokens.
+  app.use('/gateway/*', gatewayHeaders())
+  app.route('/gateway', createGateway(deps, auth))
 
   /**
    * Joining with an invite code is a visitor's: `/api/v1/join` needs no session (ADR 0034).
@@ -418,8 +437,10 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
     // 0059), whatever copy of its session the cookie still carries: 401, which every shell reads
     // as the end of the session and wipes the device's copy on. Checked in D1 for the calls that
     // say who is signed in, sync, write, or hand the member their data.
-    if (guarded(c.req.method, c.req.path) && (await isBarred(deps.db, member.id))) {
-      return c.json({ error: 'unauthorized' }, 401)
+    if (guarded(c.req.method, c.req.path)) {
+      const standing = await memberStanding(deps.db, member.id)
+      if (standing.barred) return c.json({ error: 'unauthorized' }, 401)
+      c.set('actor', { userId: member.id, exempt: standing.admin })
     }
     if (c.req.path === '/api/v1/me') return next()
     if (tooOld(c.req.header(CLIENT_HEADER))) return c.json({ error: 'upgrade' }, 409)
@@ -480,9 +501,22 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
     const body = pushSchema.safeParse(await c.req.json().catch(() => null))
     if (!body.success) return c.json({ error: 'invalid_push' }, 400)
     const member = c.get('member').id
-    const result = await applyPush(deps.db, member, body.data.mutations, deps.clock.now())
+    const { exempt } = await webActor(c, deps.db)
+    const result = await applyPush(deps.db, member, body.data.mutations, deps.clock.now(), {
+      exempt,
+    })
     if (asksGravatar(body.data.mutations, result.applied)) await checkGravatarSoon(deps, member)
     return c.json(result, 200, { 'cache-control': 'no-store' })
+  })
+
+  /**
+   * A post by id, as the device holds a synced one (ADR 0066): what a member opens from a public
+   * page, whose answers carry no content key. `{article, feed, site}` in the sync's row shapes.
+   */
+  app.get('/api/v1/articles/:id', async (c) => {
+    const held = await readArticle(deps, await webActor(c, deps.db), Number(c.req.param('id')))
+    if (!held) return c.json({ error: 'not_found' }, 404, { 'cache-control': 'no-store' })
+    return c.json(held, 200, { 'cache-control': 'no-store' })
   })
 
   app.route('/api/v1/admin', adminRoutes(deps, auth))
@@ -496,6 +530,8 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
   app.route('/api/v1', socialRoutes(deps))
   app.route('/api/v1', inviteRoutes(deps, auth))
   app.route('/api/v1/account', accountRoutes(deps, auth))
+  // The consent page's questions, and Settings → Connected apps (ADR 0064).
+  app.route('/api/v1', connectRoutes(deps, auth))
 
   return { app, auth }
 }

@@ -1,0 +1,20 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/v1/feeds/opml",
+    "body": "<?xml version=\"1.0\"?><opml version=\"2.0\"><head><title>Mine</title></head><body><outline text=\"Tech\"><outline type=\"rss\" text=\"Field Log\" xmlUrl=\"https://blog4.example/feed.xml\"/><outline type=\"rss\" text=\"New\" xmlUrl=\"https://new.example/feed.xml\"/></outline></body></opml>"
+  },
+  "status": 200,
+  "headers": {
+    "cache-control": "private, no-store"
+  },
+  "body": {
+    "subscribed": 2,
+    "added": 1,
+    "waiting": 0,
+    "over": 0,
+    "perDay": 20,
+    "maxSubscriptions": 300,
+    "resetsAt": 1790640000000
+  }
+}

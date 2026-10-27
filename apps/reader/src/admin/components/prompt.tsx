@@ -1,7 +1,7 @@
 /**
  * An action's question, inline where it was asked: a confirmation strip (its consequence in words,
  * then a yes and a no), or a short form for the words an action needs (a rejection's reason, how
- * many uses, a code, an address). Never `window.confirm`: a dialog would take the keys away from
+ * many uses, a code, an address), or an app's settings (`AppForm`). Never `window.confirm`: a dialog would take the keys away from
  * the console and say nothing about what the yes does.
  */
 import { normalizeInviteCode } from '@tela/shared'
@@ -10,6 +10,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { useTranslations } from 'use-intl'
 import { actionLook, confirmWords, promptFor } from '../act'
 import type { Prompt } from '../use-act'
+import { AppForm } from './app-form'
 import { ActionButton } from './buttons'
 
 /** The most uses a code may be given at once, as tela-api caps it. */
@@ -30,6 +31,17 @@ export function ActionPrompt({
   onCancel: () => void
 }) {
   const asks = promptFor(prompt.action, prompt.args)
+  if (asks && 'input' in asks && asks.input === 'app') {
+    return (
+      <AppForm
+        initial={prompt.initial}
+        editing={prompt.action === 'app.edit'}
+        busy={busy}
+        onAnswer={onAnswer}
+        onCancel={onCancel}
+      />
+    )
+  }
   if (asks && 'input' in asks) {
     return <InputForm prompt={prompt} busy={busy} onAnswer={onAnswer} onCancel={onCancel} />
   }
@@ -119,6 +131,9 @@ function InputForm({
         const email = text.trim()
         return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? { email } : null
       }
+      case 'app':
+        // `AppForm`'s, never this form's.
+        return null
     }
   })()
 

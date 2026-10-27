@@ -7,8 +7,10 @@ import { type ArticleRow, pastSubscriptionCap, subscriptionCount, type Tables } 
 import { useCallback, useEffect, useMemo } from 'react'
 import { useTranslations } from 'use-intl'
 import { useSession } from '../session'
+import { apiJson } from '../store/api'
 import { useStore, useTables } from '../store/hooks'
-import type { MemberControls } from '../views/types'
+import type { LocalStore } from '../store/local'
+import type { MemberControls, PublicArticle } from '../views/types'
 import { readingHref } from './href'
 import { showToast } from './toasts'
 import { primeUsage, subscriptionCap } from './usage'
@@ -50,6 +52,39 @@ export function useSubscriptionCap(): (adding: number) => boolean {
   )
 }
 
+/**
+ * Hold a public page's post for the reader (ADR 0066). The page carries no content key, so the
+ * post's row is fetched by id, as the member's device would have synced it, and kept with the
+ * titles the page showed. One the device holds already, with its key, is opened as it is. While
+ * the row is on its way the reader shows the post loading (`isFetching`); if it cannot come (the
+ * network, or a tela-api from before the route), the page's row is kept as it is, so the reader
+ * still names the post and links to the blog. A tela-api from before ADR 0066 sent the key itself.
+ */
+export async function holdArticle(
+  store: LocalStore,
+  article: PublicArticle,
+  source: string | null,
+): Promise<void> {
+  const page: ArticleRow = { ...article, contentKey: article.contentKey ?? null }
+  if (article.contentKey !== undefined) return store.remember([page], source)
+  const held = store.article(store.getSnapshot().tables, article.id)
+  if (held?.contentKey) return
+  const epoch = store.beginHold(article.id)
+  const member = store.userId
+  try {
+    const { status, body } = await apiJson<{ article?: ArticleRow }>(
+      `/api/v1/articles/${article.id}`,
+      { member },
+    )
+    // Not found is a post Tela no longer holds: the reader says it is gone.
+    if (status === 404) return store.endHold(epoch, article.id, null)
+    const row = status === 200 && body?.article ? { ...article, ...body.article } : page
+    store.endHold(epoch, article.id, row, source)
+  } catch {
+    store.endHold(epoch, article.id, page, source)
+  }
+}
+
 export function useMemberControls(): MemberControls | undefined {
   const { status } = useSession()
   const { store } = useStore()
@@ -68,12 +103,12 @@ export function useMemberControls(): MemberControls | undefined {
         if (!subscribed && pastCap(1)) return
         store.mutate(subscribed ? { type: 'unsubscribe', feedId } : { type: 'subscribe', feedId })
       },
-      readHref: (article: ArticleRow) =>
+      readHref: (article) =>
         readingHref({
           feedId: isSubscribed(article.feedId) ? article.feedId : null,
           articleId: article.id,
         }),
-      hold: (article: ArticleRow, source: string | null) => store.remember([article], source),
+      hold: (article, source) => void holdArticle(store, article, source),
       handle: tables.profile?.handle ?? null,
       userId: store.userId,
       isFollowing: (userId: string) => tables.follows.has(userId),

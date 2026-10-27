@@ -1,0 +1,19 @@
+{
+  "name": "@tela/edge",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "What tela-web and tela-gateway both serve at the edge: content objects, bundles and the image proxy, behind an authorize step (ADRs 0065, 0066)",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@tela/ingest": "workspace:*",
+    "@tela/platform": "workspace:*",
+    "@tela/shared": "workspace:*"
+  }
+}

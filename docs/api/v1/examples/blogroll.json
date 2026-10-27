@@ -1,0 +1,72 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/v1/blogrolls/BoBlogroll01"
+  },
+  "status": 200,
+  "headers": {
+    "cache-control": "private, no-store"
+  },
+  "body": {
+    "id": "BoBlogroll01",
+    "name": "Slow reading",
+    "description": "Blogs worth the wait.",
+    "owner": {
+      "userId": "Bo7rTz2xKq9mVn4cWp6sLy8dFh3gJk5a",
+      "handle": "bo_reads",
+      "displayName": "Bo",
+      "avatar": "https://telaread.com/avatar/Bo7rTz2xKq9mVn4cWp6sLy8dFh3gJk5a?v=0"
+    },
+    "blogs": [
+      {
+        "blog": {
+          "id": 1,
+          "title": "Ink & Pixels",
+          "homeUrl": "https://blog1.example",
+          "description": "Notes on type and the screen.",
+          "faviconUrl": "https://assets.telaread.com/favicons/1.png",
+          "primaryLang": "en",
+          "readerCount": 0,
+          "topics": [
+            "design",
+            "tech"
+          ]
+        },
+        "feedId": 1,
+        "note": null
+      },
+      {
+        "blog": {
+          "id": 3,
+          "title": "慢读",
+          "homeUrl": "https://blog3.example",
+          "description": "读得慢一点。",
+          "faviconUrl": null,
+          "primaryLang": "zh-Hans",
+          "readerCount": 0,
+          "topics": [
+            "culture"
+          ]
+        },
+        "feedId": 3,
+        "note": "Short and kind."
+      },
+      {
+        "blog": {
+          "id": 4,
+          "title": "Field Log",
+          "homeUrl": "https://blog4.example",
+          "description": "Walks, maps and weather.",
+          "faviconUrl": null,
+          "primaryLang": "en",
+          "readerCount": 0,
+          "topics": [
+            "science"
+          ]
+        },
+        "feedId": 4,
+        "note": null
+      }
+    ]
+  }
+}

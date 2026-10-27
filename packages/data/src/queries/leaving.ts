@@ -23,6 +23,7 @@ import type { TelaDb } from '../db'
 import { isFenceRefusal } from '../leases'
 import { bumpSeq, currentSeq } from '../seq'
 import { audit, newGroupId } from './admin'
+import { endConnections } from './apps'
 import { withdrawBodyRequests } from './translation'
 
 type Statement = ReturnType<TelaDb['run']>
@@ -76,6 +77,8 @@ export type ReleaseTarget =
  * Statements for a batch that starts with `bumpSeq`. The first is the claims' update, whose
  * `RETURNING` rows are the claims released; the blog moves only in the batch that released its
  * claim (`seq = currentSeq`, which no other batch has), and a claim check in flight is cut off.
+ * An operator's removal turns translation back on, so its caller stamps the blogs' translations
+ * again once the batch has committed (`restampTranslations`, ADR 0065).
  */
 export function releaseClaim(
   db: TelaDb,
@@ -162,8 +165,9 @@ export type Closed = 'closed' | 'already' | 'admin' | 'not_found'
  * 4. its notes and blogrolls, emptied and deleted, so no page shows them;
  * 5. the profile emptied (name, bio, picture, languages, both privacy switches, the console) and
  *    marked closed; the handle stays;
- * 6. every way in: sessions, passwords and providers, mailed codes and OAuth states, and Tela's
- *    own counts for the member and the address;
+ * 6. every way in: sessions, the apps connected to it and their tokens (ADR 0064), passwords and
+ *    providers, mailed codes and OAuth states, and Tela's own counts for the member and the
+ *    address;
  * 7. its invitations: its codes revoked and their holds cancelled, and the address on the
  *    invitation it joined by replaced, so the record of who it invited, and who invited it, stays
  *    without the address; nobody else's invitation is touched;
@@ -171,7 +175,7 @@ export type Closed = 'closed' | 'already' | 'admin' | 'not_found'
  * 9. its blogs released, and a claim still pending failed, so no check gives it one later;
  * 10. its body translations waiting to run, given back to its ledger and ended unpaid; one
  *     already running finishes and is settled as ever (`member.erase` waits for it);
- * 11. imports waiting to be added for it.
+ * 11. imports waiting to be added for it, and its record of posts opened (ADR 0066).
  *
  * What stays for `member.erase`: what only the member's devices held (read states, likes,
  * highlights, folders, prefs, subscriptions) and the counts others see that rest on them.
@@ -251,6 +255,7 @@ export async function closeAccount(db: TelaDb, input: CloseAccount): Promise<Clo
       returning user_id
     `),
     db.run(sql`delete from session where user_id = ${id}`),
+    ...endConnections(db, id, 'closed', now),
     db.run(sql`delete from account where user_id = ${id}`),
     // Codes better-auth mailed the address (`<type>-otp-<address>`, Tela's own deletion code
     // among them) and an OAuth state naming the member, which holds their address. Compared
@@ -297,6 +302,8 @@ export async function closeAccount(db: TelaDb, input: CloseAccount): Promise<Clo
     // Its translations not yet started, given back and ended unpaid; one running finishes.
     ...withdrawBodyRequests(db, id, now),
     db.run(sql`delete from pending_feeds where user_id = ${id}`),
+    // The day's record of posts opened from blogs it did not follow (ADR 0066).
+    db.run(sql`delete from post_opens where user_id = ${id}`),
     db.all(sql`select deleted_at from profiles where user_id = ${id}`),
   )
   let results: unknown[]

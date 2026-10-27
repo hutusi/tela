@@ -11,7 +11,8 @@
       "!**/dist",
       "!**/fixtures/**/*.xml",
       "!**/fixtures/**/*.html",
-      "!**/migrations"
+      "!**/migrations",
+      "!docs/api/**/*.json"
     ]
   },
   "formatter": {

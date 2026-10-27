@@ -200,8 +200,15 @@ describe('public pages at the edge', () => {
     })
     // Anything else in the address is the default mode, under the default key.
     expect(route('/?titles=nope')).toMatchObject({ titles: 'original', key: '/' })
-    // SPA-only: a code in `/join?code=` must never reach a cached page, or Workers Logs.
-    for (const path of ['/join', '/join?code=ABCD', '/__tela/shell', '/admin/feeds'])
+    // SPA-only: a code in `/join?code=` must never reach a cached page, or Workers Logs; nor an
+    // app's authorization request in `/connect?…` (ADR 0064).
+    for (const path of [
+      '/join',
+      '/join?code=ABCD',
+      '/__tela/shell',
+      '/admin/feeds',
+      '/connect?client_id=tela_app_x&state=s&code_challenge=c',
+    ])
       expect(route(path)).toBeNull()
   })
 
@@ -243,7 +250,8 @@ describe('public pages at the edge', () => {
     // neither are the SPA's own pages: a code in `/join?code=` must never reach a cached page, or
     // Workers Logs (ADR 0035).
     // The admin console is the SPA's too: never rendered or cached at the edge (ADR 0039).
-    for (const path of ['/__tela/shell', '/join', '/admin', '/admin/feeds'])
+    // So is an app's consent page, whose query is the authorization request (ADR 0064).
+    for (const path of ['/__tela/shell', '/join', '/admin', '/admin/feeds', '/connect'])
       expect(runsFirst(path)).toBe(false)
     expect(patterns).not.toContain('/*')
     expect(patterns.filter((p) => p.startsWith('/discover'))).toEqual([
@@ -367,6 +375,23 @@ describe('answers the pages turn into messages', () => {
         settledNext: '/claim?url=x',
       })
     }
+  })
+  test('the consent page keeps whoever the sheet lets in, a joiner too (ADR 0064)', () => {
+    const here = { pathname: '/connect', search: '?client_id=tela_app_x&state=s%2F1' }
+    const stay = '/connect?client_id=tela_app_x&state=s%2F1'
+    for (const mode of ['join', 'login'] as const) {
+      expect(doorRoutes(mode, '/settings', null, here)).toEqual({
+        next: stay,
+        newcomer: stay,
+        settledNext: stay,
+      })
+    }
+    // Any other page keeps its own rules.
+    expect(doorRoutes('join', null, null, { pathname: '/discover', search: '?x=1' })).toEqual({
+      next: '/discover',
+      newcomer: '/discover',
+      settledNext: '/reading',
+    })
   })
   test("a mailed link's code is read, and nothing but where to go next stays in the address", () => {
     const link = (query: string) => new URLSearchParams(query)
