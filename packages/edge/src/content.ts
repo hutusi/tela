@@ -73,6 +73,9 @@ const json = (body: string, status: number, headers: Record<string, string> = {}
 
 const notFound = () => json('{"error":"not_found"}', 404, { 'cache-control': 'no-store' })
 
+/** How soon to ask again after a decision that left a key undecided, as both edges retry. */
+const UNDECIDED_RETRY_SECONDS = 30
+
 /** The content key an object belongs to: its post's, for a translation and its chunks too. */
 export const contentKeyOf = (objectKey: string): string | null =>
   /^(?:c|t|tc)\/([0-9a-f]{32})[./]/.exec(objectKey)?.[1] ?? null
@@ -119,8 +122,16 @@ export function createContent(deps: ContentDeps) {
     const refused = authorization.decision.refused[key]
     if (refused) return withCookies(refusal(refused, now()), authorization.setCookies)
     if (!authorization.decision.allowed.includes(key)) {
-      // A decision that names the key neither way: nothing is served on it.
-      return withCookies(json('{"error":"forbidden"}', 403), authorization.setCookies)
+      // A decision that names the key neither way is no decision: nothing is served on it, and
+      // the answer is the one for tela-api failing to decide, a code every client knows.
+      console.error('opens decision left a key undecided')
+      return withCookies(
+        json('{"error":"unavailable"}', 503, {
+          'cache-control': 'no-store',
+          'retry-after': String(UNDECIDED_RETRY_SECONDS),
+        }),
+        authorization.setCookies,
+      )
     }
     return null
   }

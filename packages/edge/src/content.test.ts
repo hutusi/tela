@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test } from 'bun:test'
+import { beforeEach, describe, expect, spyOn, test } from 'bun:test'
 import { memoryBlobs } from '@tela/platform/portable'
 import type { OpensDecision } from '@tela/shared'
 import { type Authorization, contentKeyOf, createContent } from './content'
@@ -118,9 +118,19 @@ describe('content at the edge', () => {
     expect((await content.serveBundle(get('/o/bundle'), [A])).status).toBe(401)
   })
 
-  test('a decision that names a key neither way serves nothing on it', async () => {
+  test('a decision that names a key neither way serves nothing on it, in a code apps know', async () => {
     decide = () => ({ ok: true, decision: { allowed: [], refused: {} } })
-    expect((await serve(`/o/c/${A}.json`)).status).toBe(403)
+    const quiet = spyOn(console, 'error').mockImplementation(() => {})
+    for (const path of [`/o/c/${A}.json`, `/img/${A}/0`]) {
+      const res = await serve(path)
+      // `unavailable` is in the API's documented codes; `forbidden` never was.
+      expect([path, res.status]).toEqual([path, 503])
+      expect(await res.json()).toEqual({ error: 'unavailable' })
+      expect(res.headers.get('retry-after')).toBe('30')
+      expect(res.headers.get('cache-control')).toBe('no-store')
+    }
+    quiet.mockRestore()
+    expect(fetched).toEqual([])
   })
 
   test('a bundle carries what was allowed and lists what was refused, kept only when whole', async () => {
