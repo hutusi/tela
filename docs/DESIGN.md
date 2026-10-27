@@ -364,7 +364,7 @@ Settings (Tela v2): from `md`, a 1040 px page, a 200 px sticky section nav on th
 the serif "Settings" heading, and the section in a 640 px column; an item is current by the
 section shown, not by the address. Each section is an address (`/settings/profile`,
 `/settings/reading`, `/settings/translation`, `/settings/subscriptions`, `/settings/privacy`,
-`/settings/invites`, `/settings/account`), so Back and a shared link land on it. Bare `/settings`
+`/settings/apps`, `/settings/invites`, `/settings/account`), so Back and a shared link land on it. Bare `/settings`
 goes to `/settings/profile` from `md` and is, below it, the list of sections (Tela Mobile 13, ADR
 0047): the serif 30 "Settings", then each section as a row at least 48 px tall, 15/500, with
 CHEVRON_RIGHT and a `line` above. On a phone a section is its own page under a 52 px back bar
@@ -381,9 +381,18 @@ profile*, a claim's "handle taken") names `/settings/profile`, so no form is edi
 width. Below `sm` a `SettingRow`'s label gives way first (it grows from nothing with a 96 px
 minimum; `gap-x-4 py-4`, a 12.5 px hint), so the size, measure and theme switches sit beside their
 labels at 360 px; a control too wide still wraps under it, and the rows built by hand use
-`SETTING_LABEL` and `SETTING_HINT`. Invites and Account are the two sections that read live answers from
+`SETTING_LABEL` and `SETTING_HINT`. Connected apps, Invites and Account are the three sections that read live answers from
 tela-api instead of the synced tables, on purpose: an invite list is counted by the server and holds
-other people's state, and how a member signs in is security state. Invites says how many of the
+other people's state, and how a member signs in, or which apps act for them, is security state.
+Connected apps (ADR 0064, `pages/settings-apps.tsx`), between Privacy and Invites, opens with a
+muted intro saying Tela approves every app, then a row per app above a `line`: the app's name (a
+link to its homepage when it has one), "By <developer>" muted, its level (*Read only*, *Read and
+write*, and "and your email address" when granted), then "Connected <day> · last used <day> · 2
+devices" muted, days in the locale's short date, never a time. *Disconnect*, a muted pill, opens
+an inline question in a `surface` box under the row, never a dialog: it names the app, says it
+stops on every device at once and keeps what it already stored, with a danger *Disconnect* pill
+and a muted *Cancel*. With nothing connected, the section says *No apps connected* and what apps
+can do, and that Tela approves each one. A line at the foot links to Privacy's `#apps`. Invites says how many of the
 five places are left, with *Create a code* (the filled button, disabled once none are left) beside
 it, then the codes, newest first: each in its groups of four, with its link
 (`/join?code=ABCD-EFGH-JKMN`, selectable), *Copy link* and a muted *Revoke* while unused, and
@@ -508,6 +517,40 @@ sheet unless a request is out; `/join` closes to `/`. Each error has its own wor
 (`door.errors.*`): too many tries is never a wrong code, the gate's refusal is never a typo, and
 a provider's code nobody listed still says the provider failed. A refused Google or GitHub
 sign-in comes back to the page it started on, which opens the sheet again saying why.
+
+The consent page (`/connect`, ADR 0064, `pages/connect.tsx`) is where an app sends a member to
+connect it. It is an app's page more than Tela's: a 56 px bar with the mark and *Tela* (not a
+link, since leaving strands the app) and the language circle, and no app header, nav or footer.
+One 540 px column, centred, under the page's fade. A visitor sees *Connect an app to Tela*, a line
+saying nothing is shared until they say yes, and *Log in* (`primary`) and *Join Tela* (quiet
+pills); the sheet opens at once, and signing in or joining, by any door, comes back to this page.
+For a member, from the top:
+- a draft's notice, a `thumb`-bordered pill with a `warn` dot: not yet approved by Tela, only you
+  can connect it;
+- the serif 30 heading, "Connect <app> to your Tela account?", wrapping anywhere, and "By
+  <developer> · Website" muted under it;
+- the account answering, in a `surface` box with a hairline: the 36 px avatar, "Signed in as",
+  the name and handle, and *Use another account*, a text button that signs out and comes back
+  here;
+- WHAT IT CAN DO (13 px uppercase muted): for an app that asks to write, two radio cards, *Read and
+  write* and *Read only*, each with a line on what it allows, the chosen one with an `ink` border;
+  for an app that only reads, the one card; then *Let it see your email address*, a checkbox, only
+  when the app asks and Tela lets it;
+- NO APP CAN: a list (delete your account, change how you sign in, download your data, anything
+  only the person who runs Tela can);
+- small muted lines: where the answer goes (a port on this computer, or the app's own scheme),
+  that what the app keeps is its own responsibility under its privacy policy (linked; or that it
+  gave none), and that it can be disconnected in Settings, with *More about apps* to Privacy;
+- *Approve* (`primary`, disabled until the device knows whose account it is) and *Decline*
+  (quiet).
+
+Answered, the page says "<app> is connected" or "You declined <app>" and that the browser is going
+back to the app, and follows tela-api's answer with `location.assign`. A request it cannot answer
+says *This app can't connect* and why (`connect.errors.*`: an unknown app, a redirect it never
+registered, a malformed request, more than Tela lets it have, an app not approved or paused, an
+app at its limit), always with "Nothing was shared with the app." and a link to the reading, and
+never sends the browser anywhere. Not reaching Tela is *Couldn't reach Tela* with *Try again*. A
+link to the app's homepage or policy is drawn only for an https address.
 
 For writers (`/writers`, from the design's *For writers v2*): a 1200 px page, 40 px sides from `md`.
 The hero is two columns once both fit at 460 px with 80 px between them (about 1080 px of window),
@@ -850,9 +893,9 @@ reader's shell.
   says it alone.
 - **Shell.** A 228px sidebar on the side ground (`.admin-side`, in `@layer components`: `paper`
   mixed toward `hover` by day and toward `field` at night, a shade below the page either way): the
-  mark, *Tela* in the serif and an *Admin* pill; Overview, then Queues (Claims), Library (Sites,
-  Feeds, Discover), Members (People, Invitations) and Running (Translation, System) under 11px
-  uppercase labels, the current one on `hover`; badges in the accent for what waits (claims to
+  mark, *Tela* in the serif and an *Admin* pill; Overview, then Queues (Claims, Reports), Library (Sites,
+  Feeds, Discover), Members (People, Invitations, Apps) and Running (Translation, System,
+  Settings) under 11px uppercase labels, the current one on `hover`; badges in the accent for what waits (claims to
   review, failing feeds, Discover's blogs to review, dead letters), refreshed after every action; the member's avatar, name
   and *Admin* at the foot, then *← Back to reading*. The content column scrolls on its own. Below
   `md` the sidebar is a strip above the page that scrolls sideways, every item `shrink-0`.
@@ -892,6 +935,19 @@ reader's shell.
   (else the focused) row, `u` undoes, `/` searches, Esc takes back a question, then the record, then
   the checks; listed under the table in `kbd` chips. A key typed in a field is the field's, and
   Enter on a button presses it.
+- **Apps** (ADR 0064). Filters *Approved*, *Drafts* and *Cut off* (the status pill: `ok`, `info`,
+  `danger`); the search takes a name, developer, client ID or contact address. A row is the app,
+  its client ID as the muted line, the developer, how many are connected and when it was last
+  used. The record says what its status means in a `Note`, then its client ID (mono, selectable),
+  developer, contact, homepage and policy (each linked by host), the most it may ask for, the email
+  address, its owner (a person link), its limits ("120 a minute (the default)", *None* for 0, *No
+  limit*), connected now, last used, registered, approved and cut off; then its redirect URIs in
+  mono, a note that the console counts who connected an app and never who, and its history.
+  *Register app* sits beside the search, as New code does, and *Edit* is a record action: both
+  open the same form inline, in place of the foot, scrolling inside itself so the record's actions
+  stay on the panel, every field labelled with its hint, the first wrong one named and focused.
+  *Cut off* and *End all connections* ask first; the second says it cannot be undone. No bulk
+  actions.
 - **Overview.** Today's date as the eyebrow, *Overview*, how many decisions wait; the health check
   as one bordered line (a dot, what fails, "checked 13:05 UTC", *System →*); *Needs you*, four
   `surface` cards (claims to review, failing feeds, dead letters, blogs to review for Discover),
