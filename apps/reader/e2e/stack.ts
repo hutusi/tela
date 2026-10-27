@@ -2,7 +2,10 @@
  * Writes the e2e stack's Worker configs: tela-web as `vite build` emitted it, tela-api and
  * tela-jobs as checked in, each with the test vars inlined. `wrangler dev` reads a secondary
  * Worker's vars from its own config directory, so one env file cannot reach all three, and
- * writing `.dev.vars` beside the real configs would clobber a developer's own.
+ * writing `.dev.vars` beside the real configs would clobber a developer's own. tela-gateway
+ * (ADR 0065) is the fourth: it has no vars, and `run.sh` runs it in a `wrangler dev` of its own
+ * on its own port, since only the first config's Worker answers on a session's port; it reaches
+ * tela-api through the local dev registry and reads the same local bucket.
  *
  *   bun apps/reader/e2e/stack.ts <outDir> <baseUrl>
  */
@@ -97,6 +100,8 @@ const configs = {
     // Asked whether a member has a Gravatar (ADR 0033): the fixture server, never gravatar.com.
     GRAVATAR_URL: `${process.env.E2E_FIXTURE_URL ?? 'http://127.0.0.1:4790'}/gravatar`,
   }),
+  // No vars and no secrets: everything it knows comes from tela-api.
+  gateway: relocate(join(root, 'apps/gateway/wrangler.jsonc'), {}),
 }
 for (const [name, config] of Object.entries(configs)) {
   writeFileSync(join(outDir, `${name}.wrangler.json`), `${JSON.stringify(config, null, 2)}\n`)

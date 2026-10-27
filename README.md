@@ -45,7 +45,7 @@ bun run typecheck     # tsc in every workspace
 bun run test          # bun test, on the portable adapters
 bun run test:workers  # the data contract and the API again, on D1 inside workerd
 bun run e2e           # Playwright against the three Workers in one wrangler dev
-bun run dev           # the reader with tela-api and tela-jobs beside it; see docs/OPERATIONS.md
+bun run dev           # the reader with tela-api and tela-jobs beside it, and tela-gateway; see docs/OPERATIONS.md
 ```
 
 ## Features

@@ -464,7 +464,10 @@ or every code request fails, Resend refusing the sender. Going back is the old `
 `bun run dev` is Vite with the Cloudflare plugin: the SPA with hot reload, tela-web's Worker, and
 tela-api and tela-jobs beside it as auxiliary Workers, all in workerd. Service bindings, the
 `Ingest` RPC, local queues, D1 and R2 all work, and the three share one local D1 and bucket
-because their configs name the same ones.
+because their configs name the same ones. Beside Vite, the same command runs tela-gateway (ADR
+0065) in a `wrangler dev` of its own at http://localhost:8788, the local `api.telaread.com`: it
+reaches tela-api in the Vite process through wrangler's local dev registry, and reads the same
+bucket (`--persist-to apps/reader/.wrangler/state`). It needs no `.dev.vars`.
 
 ```sh
 S=$(openssl rand -hex 32)
@@ -506,7 +509,10 @@ To try Google or GitHub, register a dev OAuth app with the callback
 then runs the built tela-web, tela-api and tela-jobs in one `wrangler dev`, on fresh local D1, R2
 and queues under `.e2e-logs/reader/state`, and runs Playwright. `e2e/stack.ts` writes the three
 configs with the test vars inlined: a secondary Worker reads its vars from its own directory, and
-writing `.dev.vars` beside the real configs would clobber a developer's own.
+writing `.dev.vars` beside the real configs would clobber a developer's own. It writes a fourth,
+tela-gateway's, which `run.sh` starts in a `wrangler dev` of its own on port 8812
+(`E2E_GATEWAY_URL`), since only a session's first Worker answers on its port; it reaches tela-api
+through the local dev registry and reads the same state directory.
 
 - **Sign-in is real.** The global setup invites a member, reads the code from the outbox, and
   signs in. The member follows two fixture feeds, which the setup fetches with one cycle.

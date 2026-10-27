@@ -49,7 +49,7 @@ bun run test                         # bun test: everything on libSQL, memory bl
 bun run test:workers                 # on D1 in workerd: the data contract, and tela-api's sign-in, push and pull (Vitest + @cloudflare/vitest-pool-workers)
 bun run e2e                          # Playwright: built tela-web + tela-api + tela-jobs in one wrangler dev, fixture feeds
 bun run build                        # every workspace that has a build script
-bun run dev                          # the reader in Vite, tela-api and tela-jobs beside it (http://localhost:5173; OPERATIONS.md)
+bun run dev                          # the reader in Vite, tela-api and tela-jobs beside it (http://localhost:5173), tela-gateway at :8788 (OPERATIONS.md)
 bun run dev:seed [email]             # with dev running: the curated blogs, and members, claims, troubled feeds, spend and dead letters for /admin; an email is invited and made an admin
 bun run db:generate                  # drizzle-kit generate in packages/data; review the SQL, commit packages/data/migrations/*
 bun run i18n:hant                    # regenerate the zh-Hant catalog and info pages from zh-Hans (OpenCC, Taiwan phrasing); commit the result
@@ -62,9 +62,10 @@ bun run admin grant <email>          # open the admin console (/admin) to a memb
 bun run admin settings               # the runtime settings; `bun run admin set <key> <value>` changes one (ADR 0056)
 bun run admin closures               # after any restore or Time Travel rollback: close again the accounts closed since (ADR 0058)
 bun run restore-drill                # restore the newest nightly export into a scratch libSQL file and check it (OPERATIONS.md)
-cd apps/jobs && wrangler deploy      # deploy order: tela-jobs, tela-api, then tela-web
+cd apps/jobs && wrangler deploy      # deploy order: tela-jobs, tela-api, tela-web, then tela-gateway
 cd apps/reader && bunx vite build && wrangler deploy
 cd apps/reader/redirect && wrangler deploy -c wrangler.jsonc   # tela-redirect (ADR 0042), after tela-web
+cd apps/gateway && wrangler deploy   # tela-gateway (ADR 0065), after tela-web: api.telaread.com
 ```
 
 ## Development workflow
