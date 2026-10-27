@@ -7,6 +7,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { ACTION_LIMITS, bumpSeq, currentSeq, first } from '@tela/data'
 import { openapiDocument } from '@tela/ext/openapi'
+import { pushSchema } from '@tela/ext/schema'
 import { sql } from 'drizzle-orm'
 import { FixtureServer, rss } from '../../../packages/ingest/test/fixture-server'
 import { connect, gateway, registerApp } from './apps-helpers'
@@ -399,6 +400,35 @@ describe('mutations', () => {
       body: { mutations: Array.from({ length: 51 }, () => ({})) },
     })
     expect(big.status).toBe(400)
+  })
+
+  test('words a refusal only in v1’s codes, whatever the web’s push calls it', async () => {
+    const highlight = {
+      type: 'putHighlight',
+      id: 'hl-0000001',
+      articleId: 101,
+      contentKey: keyOf(101),
+      side: 'original',
+      lang: null,
+      leafId: 'b1',
+      prefix: '',
+      suffix: '',
+      note: null,
+    }
+    const pushed = await push([
+      // The web's push says `invalid_name` and `invalid_range`: codes v1 never documented.
+      { type: 'putFolder', id: 'folder-0001', name: 'Bell\u0007' },
+      { ...highlight, start: 5, end: 5, quote: '' },
+      { ...highlight, id: 'hl-0000002', start: 0, end: 4, quote: 'two' },
+      { type: 'putFolder', id: 'folder-0002', name: 'Reading' },
+    ])
+    expect(pushed.results.map((r) => r.error ?? r.status)).toEqual([
+      'invalid',
+      'invalid',
+      'invalid',
+      'applied',
+    ])
+    expect(pushSchema.safeParse(pushed).success).toBe(true)
   })
 })
 

@@ -36,6 +36,7 @@ import {
   v1Pref,
   v1Profile,
   v1Recommendation,
+  v1Rejection,
   v1Site,
   v1State,
   v1Subscription,
@@ -217,7 +218,7 @@ export function syncRoutes(deps: ApiDeps) {
           const id = o.mutation.mid
           if (over.has(id)) return { mid: o.mid, status: 'rejected', error: 'subscription_limit' }
           if (applied.has(id)) return { mid: o.mid, status: 'applied' }
-          return { mid: o.mid, status: 'rejected', error: rejected.get(id) ?? 'invalid' }
+          return { mid: o.mid, status: 'rejected', error: v1Rejection(rejected.get(id) ?? '') }
         }),
       },
       200,

@@ -4617,7 +4617,12 @@
                   ]
                 },
                 "error": {
-                  "type": "string"
+                  "type": "string",
+                  "enum": [
+                    "invalid",
+                    "subscription_limit"
+                  ],
+                  "description": "Open enum"
                 }
               },
               "required": [

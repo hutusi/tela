@@ -42,6 +42,23 @@ export const API_ERRORS = [
 export type ApiError = (typeof API_ERRORS)[number]
 
 /**
+ * Why `POST /v1/mutations` refused a mutation. Open: an app drops a refused mutation whatever its
+ * code, and shows the member what it can.
+ *
+ * - `invalid`: it never will hold, as sent (a shape v1 does not take, a value out of range).
+ * - `subscription_limit`: a subscribe past the member's cap.
+ */
+export const V1_REJECTIONS = ['invalid', 'subscription_limit'] as const
+export type V1Rejection = (typeof V1_REJECTIONS)[number]
+
+/**
+ * A refusal as v1 words it: the web's push has codes of its own (`invalid_name`, `invalid_range`,
+ * …), free to change with the web, and every one of them is `invalid` to an app.
+ */
+export const v1Rejection = (code: string): V1Rejection =>
+  (V1_REJECTIONS as readonly string[]).includes(code) ? (code as V1Rejection) : 'invalid'
+
+/**
  * The row types v1 sync speaks, in the order a snapshot lists them. Adding one is additive: an app
  * asks for it by name, and a cursor that did not cover it gets `reset`.
  */

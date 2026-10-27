@@ -17,7 +17,7 @@
  */
 import { API_VERSION_STATUSES, APP_SCOPES, BLOGROLL_ID, READING_LANGUAGES } from '@tela/shared'
 import { z } from 'zod'
-import { API_ERRORS, V1_PREF_KEYS, V1_ROW_TYPES, type V1PrefKey } from './transform'
+import { API_ERRORS, V1_PREF_KEYS, V1_REJECTIONS, V1_ROW_TYPES, type V1PrefKey } from './transform'
 
 const id = z.number().int().positive()
 const time = z.number().int().nonnegative().meta({ description: 'Epoch milliseconds' })
@@ -408,8 +408,8 @@ export const pushSchema = z.object({
     z.object({
       mid: z.string().nullable(),
       status: z.enum(['applied', 'rejected']),
-      /** Open enum: invalid, subscription_limit, … */
-      error: z.string().optional(),
+      /** Why it was rejected (`V1_REJECTIONS`). */
+      error: z.enum(V1_REJECTIONS).meta({ description: 'Open enum' }).optional(),
     }),
   ),
 })
