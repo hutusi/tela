@@ -1,0 +1,36 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/v1/feeds",
+    "body": {
+      "url": "https://fixture.example/feed.xml"
+    }
+  },
+  "status": 200,
+  "headers": {
+    "cache-control": "private, no-store"
+  },
+  "body": {
+    "feed": {
+      "id": 6,
+      "siteId": 6,
+      "feedUrl": "https://fixture.example/feed.xml",
+      "title": null,
+      "status": "active",
+      "lastFetchedAt": null,
+      "lastItemAt": null
+    },
+    "site": {
+      "id": 6,
+      "homeUrl": "https://fixture.example",
+      "title": null,
+      "description": null,
+      "faviconUrl": null,
+      "primaryLang": null,
+      "readerCount": 0,
+      "translationAllowed": true,
+      "claimed": false
+    },
+    "added": true
+  }
+}

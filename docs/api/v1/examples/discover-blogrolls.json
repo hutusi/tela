@@ -1,0 +1,28 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/v1/discover/blogrolls?lang=fr"
+  },
+  "status": 200,
+  "headers": {
+    "cache-control": "public, max-age=300"
+  },
+  "body": {
+    "blogrolls": [
+      {
+        "id": "BoBlogroll01",
+        "name": "Slow reading",
+        "description": "Blogs worth the wait.",
+        "owner": {
+          "userId": "Bo7rTz2xKq9mVn4cWp6sLy8dFh3gJk5a",
+          "handle": "bo_reads",
+          "displayName": "Bo",
+          "avatar": "https://telaread.com/avatar/Bo7rTz2xKq9mVn4cWp6sLy8dFh3gJk5a?v=0"
+        },
+        "blogCount": 3
+      }
+    ],
+    "page": 1,
+    "more": false
+  }
+}

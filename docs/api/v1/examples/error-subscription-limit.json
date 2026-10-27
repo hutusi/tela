@@ -1,0 +1,17 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/v1/feeds",
+    "body": {
+      "url": "https://fixture.example/third.xml"
+    }
+  },
+  "status": 409,
+  "headers": {
+    "cache-control": "no-store"
+  },
+  "body": {
+    "error": "subscription_limit",
+    "limit": 6
+  }
+}

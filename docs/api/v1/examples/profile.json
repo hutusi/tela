@@ -1,0 +1,105 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/v1/profiles/bo_reads"
+  },
+  "status": 200,
+  "headers": {
+    "cache-control": "private, no-store"
+  },
+  "body": {
+    "reader": {
+      "userId": "Bo7rTz2xKq9mVn4cWp6sLy8dFh3gJk5a",
+      "handle": "bo_reads",
+      "displayName": "Bo",
+      "avatar": "https://telaread.com/avatar/Bo7rTz2xKq9mVn4cWp6sLy8dFh3gJk5a?v=0",
+      "bio": "Reads about type and slow software."
+    },
+    "recommendations": [
+      {
+        "post": {
+          "id": 101,
+          "siteId": 1,
+          "title": "Drawing with pixels",
+          "translatedTitle": "用像素作画",
+          "excerpt": "The opening of “Drawing with pixels”.",
+          "url": "https://blog1.example/posts/101",
+          "author": "A. Writer",
+          "publishedAt": 1790589600000,
+          "likeCount": 1
+        },
+        "note": "The clearest thing on pixels I have read.",
+        "createdAt": 1790596800000
+      },
+      {
+        "post": {
+          "id": 401,
+          "siteId": 4,
+          "title": "Weather on the ridge",
+          "translatedTitle": "山脊上的天气",
+          "excerpt": "The opening of “Weather on the ridge”.",
+          "url": "https://blog4.example/posts/401",
+          "author": "A. Writer",
+          "publishedAt": 1790424000000,
+          "likeCount": 0
+        },
+        "note": null,
+        "createdAt": 1790596800000
+      }
+    ],
+    "likes": [
+      {
+        "id": 301,
+        "siteId": 3,
+        "title": "一个人的书店",
+        "translatedTitle": null,
+        "excerpt": "城里最小的书店。",
+        "url": "https://blog3.example/posts/301",
+        "author": "A. Writer",
+        "publishedAt": 1790578800000,
+        "likeCount": 1
+      }
+    ],
+    "subscriptions": [
+      {
+        "id": 4,
+        "title": "Field Log",
+        "homeUrl": "https://blog4.example",
+        "description": "Walks, maps and weather.",
+        "faviconUrl": null,
+        "primaryLang": "en",
+        "readerCount": 0,
+        "topics": [
+          "science"
+        ]
+      },
+      {
+        "id": 1,
+        "title": "Ink & Pixels",
+        "homeUrl": "https://blog1.example",
+        "description": "Notes on type and the screen.",
+        "faviconUrl": "https://assets.telaread.com/favicons/1.png",
+        "primaryLang": "en",
+        "readerCount": 0,
+        "topics": [
+          "design",
+          "tech"
+        ]
+      },
+      {
+        "id": 3,
+        "title": "慢读",
+        "homeUrl": "https://blog3.example",
+        "description": "读得慢一点。",
+        "faviconUrl": null,
+        "primaryLang": "zh-Hans",
+        "readerCount": 0,
+        "topics": [
+          "culture"
+        ]
+      }
+    ],
+    "page": 1,
+    "more": false
+  }
+}

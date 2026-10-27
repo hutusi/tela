@@ -1,0 +1,17 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/v1/mutations",
+    "body": {
+      "mutations": []
+    }
+  },
+  "status": 403,
+  "headers": {
+    "cache-control": "no-store",
+    "www-authenticate": "Bearer realm=\"tela\", error=\"insufficient_scope\", scope=\"write\""
+  },
+  "body": {
+    "error": "insufficient_scope"
+  }
+}
