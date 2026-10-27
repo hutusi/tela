@@ -97,6 +97,9 @@ export async function signInRequest(request: APIRequestContext, email: string): 
   if (!res.ok()) throw new Error(`sign-in failed: ${res.status()} ${await res.text()}`)
 }
 
+/** `MIN_CLIENT` (packages/sync/src/protocol.ts), as the app's calls carry it; raise it with a bump. */
+export const CLIENT = '5'
+
 /**
  * What the app sends on every member call: the protocol it speaks and the account it holds, which
  * tela-api must find to be the session's (409 `account_changed` otherwise). The account is asked
@@ -106,8 +109,7 @@ export async function memberHeaders(request: APIRequestContext): Promise<Record<
   const me = await request.get(`${BASE}/api/v1/me`)
   if (!me.ok()) throw new Error(`who am I failed: ${me.status()} ${await me.text()}`)
   const { id } = (await me.json()) as { id: string }
-  // x-tela-client carries MIN_CLIENT (packages/sync/src/protocol.ts), as the app's calls do.
-  return { 'x-tela-client': '4', 'x-tela-member': id }
+  return { 'x-tela-client': CLIENT, 'x-tela-member': id }
 }
 
 /**
