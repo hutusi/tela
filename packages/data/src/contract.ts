@@ -1485,6 +1485,7 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
       })
       const result = await importFeeds(db, {
         userId: 'u1',
+        exempt: false,
         feeds: brought(['known', 'n1', 'n1', 'n2', 'n3', 'n4', 'n5']),
         now: T0,
       })
@@ -1521,7 +1522,7 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         addedBy: 'u1',
         now: T0,
       })
-      const within = sql`${feedRoom('u1', T0)} > 0`
+      const within = sql`${feedRoom('u1', T0, false)} > 0`
       expect(await ensureFeed(db, { ...feed('new'), within })).toBe(null)
       expect(await first(db, sql`select 1 as x from feeds`)).toBe(undefined)
       expect(await first(db, sql`select 1 as x from sites`)).toBe(undefined)
@@ -1531,15 +1532,56 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         siteId: 1,
         created: false,
       })
-      // An admin's room is never spent.
+      // An admin is held to the day when the caller says so (an app, ADR 0064)…
       await db.run(sql`update profiles set is_admin = 1 where user_id = 'u1'`)
-      expect((await ensureFeed(db, { ...feed('new'), within }))?.created).toBe(true)
+      expect(await ensureFeed(db, { ...feed('new'), within })).toBe(null)
+      // …and `is_admin` frees them where it decides (a tela-api from before the actor).
+      const asAdmin = sql`${feedRoom('u1', T0, 'is_admin')} > 0`
+      expect((await ensureFeed(db, { ...feed('new'), within: asAdmin }))?.created).toBe(true)
+      // An exempt actor's room is never spent.
+      const exempt = sql`${feedRoom('u1', T0, true)} > 0`
+      expect((await ensureFeed(db, { ...feed('newer'), within: exempt }))?.created).toBe(true)
+    })
+
+    it("an admin's import through an app is counted like anyone's", async () => {
+      const db = await makeDb()
+      await seedMember(db, { 'member.feedsPerDay': 1, 'member.maxSubscriptions': 2 })
+      await db.run(sql`update profiles set is_admin = 1 where user_id = 'u1'`)
+      const asApp = await importFeeds(db, {
+        userId: 'u1',
+        exempt: false,
+        feeds: brought(['a', 'b', 'c']),
+        now: T0,
+      })
+      expect([asApp.added, asApp.waiting, asApp.over, asApp.exempt, asApp.perDay]).toEqual([
+        1,
+        1,
+        1,
+        false,
+        1,
+      ])
+      // Nor does the wait free them later: what waits is counted as the import was.
+      const due = (now: number) => db.all(duePendingFeeds(now))
+      expect(await due(T0)).toEqual([])
+      // On the web the operator is exempt: everything is added at once.
+      const asWeb = await importFeeds(db, {
+        userId: 'u1',
+        exempt: true,
+        feeds: brought(['d', 'e']),
+        now: T0,
+      })
+      expect([asWeb.added, asWeb.over, asWeb.exempt]).toEqual([2, 0, true])
     })
 
     it('the waiting member is due when a run would move something', async () => {
       const db = await makeDb()
       await seedMember(db, { 'member.feedsPerDay': 1 })
-      await importFeeds(db, { userId: 'u1', feeds: brought(['a', 'b', 'c']), now: T0 })
+      await importFeeds(db, {
+        userId: 'u1',
+        exempt: false,
+        feeds: brought(['a', 'b', 'c']),
+        now: T0,
+      })
       const due = async (now: number) =>
         ((await db.all(duePendingFeeds(now))) as { key: string }[]).map((r) => r.key)
       expect(await due(T0)).toEqual([])
@@ -1553,8 +1595,13 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
     it('the usage answer counts the day, what waits and what is held', async () => {
       const db = await makeDb()
       await seedMember(db, { 'member.feedsPerDay': 1 })
-      await importFeeds(db, { userId: 'u1', feeds: brought(['a', 'b', 'c']), now: T0 })
-      expect(await memberAllowances(db, 'u1', T0)).toEqual({
+      await importFeeds(db, {
+        userId: 'u1',
+        exempt: false,
+        feeds: brought(['a', 'b', 'c']),
+        now: T0,
+      })
+      expect(await memberAllowances(db, 'u1', T0, false)).toEqual({
         exempt: false,
         feeds: { perDay: 1, addedToday: 1, pending: 2 },
         subscriptions: { max: 300, count: 1 },
@@ -2213,10 +2260,18 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
       db.run(sql`insert into settings (key, value, updated_at)
         values (${key}, ${JSON.stringify(value)}, 0)
         on conflict (key) do update set value = excluded.value`)
-    const ask = (userId: string, contentKey: string, reserve = 500, requestId = contentKey) => ({
+    // `exempt` is the caller's (ADR 0065): the web passes an operator's `is_admin`, an app false.
+    const ask = (
+      userId: string,
+      contentKey: string,
+      reserve = 500,
+      requestId = contentKey,
+      exempt = false,
+    ) => ({
       contentKey,
       lang: 'fr',
       userId,
+      exempt,
       requestId: `${requestId}-${userId}`,
       reserve,
       now: T0,
@@ -2225,7 +2280,7 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
       const results = (await db.batch([
         bumpSeq(db),
         ...admitBodyTranslation(db, a),
-        readBodyAllowance(db, a.userId, T0),
+        readBodyAllowance(db, a.userId, T0, a.exempt),
       ] as never)) as unknown as unknown[]
       return bodyAllowance(results.at(-1), T0)
     }
@@ -2275,12 +2330,18 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         values ('*', ${D0}, 0, 900)`)
       await admit(db, ask('u1', 'c1', 200))
       expect((await row(db, 'c1'))?.due_at).toBe(MIDNIGHT)
-      // The operator: today, past the member count and the site's tokens, and counted in both.
-      const op = await admit(db, ask('op', 'c2', 200))
-      await admit(db, ask('op', 'c3', 200))
+      // The operator on the web: today, past the member count and the site's tokens, and counted
+      // in both.
+      const op = await admit(db, ask('op', 'c2', 200, 'c2', true))
+      await admit(db, ask('op', 'c3', 200, 'c3', true))
       expect((await row(db, 'c2'))?.reserved_day).toBe(D0)
       expect((await row(db, 'c3'))?.due_at).toBe(null)
       expect([op.exempt, op.perDay]).toEqual([true, null])
+      // The same operator through an app is never exempt (ADR 0064): put off like anyone, though
+      // `is_admin` is set.
+      const app = await admit(db, ask('op', 'c6', 200, 'c6', false))
+      expect((await row(db, 'c6'))?.due_at).toBe(MIDNIGHT)
+      expect([app.exempt, app.perDay]).toEqual([false, 1])
       // A budget of 0 leaves room for nothing paid; null is no limit at all.
       await setting(db, 'translation.siteDailyTokens', 0)
       await admit(db, ask('u1', 'c4', 200))

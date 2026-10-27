@@ -401,7 +401,7 @@ describe('ingestFeed', () => {
     server.redirect('/old.xml', '/new.xml', 301)
     await addFeed('/new.xml')
     const alias = await addFeed('/old.xml')
-    await subscribe(db, 'u1', alias.feedId, clock.now())
+    await subscribe(db, 'u1', alias.feedId, clock.now(), false)
     expect(await fetchOnce(alias.feedId)).toMatchObject({ status: 'fetched' })
     const feed = await row<{ feed_url: string }>(
       sql`select feed_url from feeds where id = ${alias.feedId}`,
@@ -582,9 +582,9 @@ describe('sites', () => {
     const a = await addFeed('/a.xml')
     const b = await addFeed('/b.xml')
     expect(a.siteId).toBe(b.siteId)
-    await subscribe(db, 'a', a.feedId, NOW)
-    await subscribe(db, 'b', b.feedId, NOW)
-    await subscribe(db, 'b', a.feedId, NOW)
+    await subscribe(db, 'a', a.feedId, NOW, false)
+    await subscribe(db, 'b', b.feedId, NOW, false)
+    await subscribe(db, 'b', a.feedId, NOW, false)
     expect((await siteOf(a.feedId))?.reader_count).toBe(2)
 
     expect(await fetchOnce(a.feedId)).toMatchObject({ siteHome: 'split' })

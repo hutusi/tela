@@ -8,6 +8,7 @@
 import { buildOpml, MAX_OPML_BYTES } from '@tela/content/opml'
 import { asUrl, normalizeOrigin } from '@tela/content/url'
 import {
+  type Actor,
   claimDue,
   consumeLimit,
   dueFeeds,
@@ -28,6 +29,7 @@ import { Hono } from 'hono'
 import type { ApiEnv } from '../app'
 import type { ApiDeps } from '../deps'
 import { readAtMost } from '../read-at-most'
+import { webActor } from '../web-actor'
 
 const ERROR_STATUS = {
   invalid_url: 400,
@@ -63,11 +65,12 @@ async function subscriptionLimitAnswer(db: TelaDb) {
  * a page or a redirect that leads to a feed they follow is not known before the fetch this check
  * is there to save, and is refused.
  */
-async function atSubscriptionCap(db: TelaDb, userId: string, feedUrl: string) {
+async function atSubscriptionCap(db: TelaDb, actor: Actor, feedUrl: string) {
+  const { userId } = actor
   const url = asUrl(feedUrl)?.toString() ?? null
   const row = await first<{ room: number; following: number }>(
     db,
-    sql`select ${subscriptionRoom(userId)} as room,
+    sql`select ${subscriptionRoom(userId, actor.exempt)} as room,
       exists (select 1 from feeds f join subscriptions s on s.feed_id = coalesce(f.merged_into, f.id)
         where f.feed_url = ${url} and s.user_id = ${userId} and s.deleted_at is null) as following`,
   )
@@ -115,6 +118,7 @@ export function feedRoutes(deps: ApiDeps) {
 
   routes.post('/', async (c) => {
     const member = c.get('member')
+    const actor = await webActor(c, db)
     const { feedUrl } = await readBody(c)
     if (typeof feedUrl !== 'string') return c.json({ error: 'invalid_url' }, 400)
     const now = deps.clock.now()
@@ -123,15 +127,20 @@ export function feedRoutes(deps: ApiDeps) {
     }
     // Before the fetch, so a member at the cap adds no feed nobody would read. The subscribe below
     // is held to the cap as well, for two adds at once.
-    if (await atSubscriptionCap(db, member.id, feedUrl)) {
+    if (await atSubscriptionCap(db, actor, feedUrl)) {
       return c.json(await subscriptionLimitAnswer(db), 409)
     }
-    const added = await ingest.addFeed({ feedUrl, actorId: member.id, withinDay: true })
+    const added = await ingest.addFeed({
+      feedUrl,
+      actorId: member.id,
+      withinDay: true,
+      exempt: actor.exempt,
+    })
     if ('error' in added) {
       if (added.error === 'feed_limit') return c.json(await feedLimitAnswer(db, now), 429)
       return c.json(added, ERROR_STATUS[added.error])
     }
-    if (!(await subscribe(db, member.id, added.feedId, now))) {
+    if (!(await subscribe(db, member.id, added.feedId, now, actor.exempt))) {
       return c.json(await subscriptionLimitAnswer(db), 409)
     }
     const feed = await first<{ last_fetched_at: number | null }>(
@@ -174,7 +183,8 @@ export function feedRoutes(deps: ApiDeps) {
     })
     // Feeds Tela has subscribe free; new ones are added up to the member's day, and the rest wait
     // for `member.pendingFeeds` (ADR 0063), all within the subscription cap.
-    const brought = await importFeeds(db, { userId: member.id, feeds, now })
+    const { exempt } = await webActor(c, db)
+    const brought = await importFeeds(db, { userId: member.id, exempt, feeds, now })
     // An older tela-jobs reads no folders; its import files nothing, as imports always did. A feed
     // that waits is filed in none when it arrives: a waiting row keeps no folder.
     const filed = await fileImportedFeeds(db, member.id, read.folders ?? [], now)

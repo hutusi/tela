@@ -12,6 +12,7 @@
 import {
   admitBodyTranslation,
   type BodyAllowance,
+  type BodyAsk,
   bodyAllowance,
   bumpSeq,
   claimDue,
@@ -31,6 +32,7 @@ import { sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import type { ApiEnv } from '../app'
 import type { ApiDeps } from '../deps'
+import { webActor } from '../web-actor'
 
 export type TranslationRequestStatus =
   | 'requested'
@@ -150,12 +152,13 @@ async function sendNow(deps: ApiDeps, contentKey: string, lang: string, requestI
 }
 
 /** Run an ask's statements with the sequence bumped first, and read the member's day after them. */
-async function decide(db: TelaDb, statements: unknown[], userId: string, now: number) {
+async function decide(db: TelaDb, statements: unknown[], ask: BodyAsk) {
   const results = (await db.batch([
     bumpSeq(db),
     ...statements,
-    readBodyAllowance(db, userId, now),
+    readBodyAllowance(db, ask.userId, ask.now, ask.exempt),
   ] as never)) as unknown as unknown[]
+  const now = ask.now
   return bodyAllowance(results.at(-1), now)
 }
 
@@ -165,6 +168,7 @@ export function translationRoutes(deps: ApiDeps) {
 
   routes.post('/', async (c) => {
     const member = c.get('member')
+    const { exempt } = await webActor(c, db)
     const body = await c.req
       .json<{ articleId?: unknown; lang?: unknown }>()
       .catch(() => ({}) as Record<string, unknown>)
@@ -233,10 +237,11 @@ export function translationRoutes(deps: ApiDeps) {
       isScriptConversion(article.source_lang, lang) ||
       (await convertsFromOther(db, contentKey, lang))
     const reserve = conversion ? 0 : reservationFor(article.body_chars ?? 0, article.source_lang)
-    const ask = {
+    const ask: BodyAsk = {
       contentKey,
       lang,
       userId: member.id,
+      exempt,
       requestId: crypto.randomUUID(),
       reserve,
       now,
@@ -246,7 +251,7 @@ export function translationRoutes(deps: ApiDeps) {
       // It waits for tomorrow: a reader with room today takes it over, and it runs now. One with no
       // room today is told it waits, and spends none of the hour's asks on a take-over that could
       // not happen; one who asks too often this hour is told it waits too.
-      const before = bodyAllowance(await readBodyAllowance(db, member.id, now), now)
+      const before = bodyAllowance(await readBodyAllowance(db, member.id, now, exempt), now)
       if (!roomToday(before, reserve)) return answer('scheduled', existing, { allowance: before })
       if (!(await consumeLimit(db, conversion ? 'convert' : 'translate', member.id, now)).allowed) {
         return answer('scheduled', existing)
@@ -259,8 +264,7 @@ export function translationRoutes(deps: ApiDeps) {
           reservedDay: existing.reservedDay,
           reservedTokens: existing.reservedTokens,
         }),
-        member.id,
-        now,
+        ask,
       )
       const row = await loadBodyTranslation(db, contentKey, lang)
       if (row?.requestId === ask.requestId) {
@@ -280,7 +284,7 @@ export function translationRoutes(deps: ApiDeps) {
     // The request row and its reservation in one batch, both conditional: the row only on a day
     // with room (today, else tomorrow) and while nothing is already asked for, the reservation
     // only for this row.
-    const allowance = await decide(db, admitBodyTranslation(db, ask), member.id, now)
+    const allowance = await decide(db, admitBodyTranslation(db, ask), ask)
     const row = await loadBodyTranslation(db, contentKey, lang)
     if (row?.requestId !== ask.requestId) {
       // Another request took the row first, and may have finished since: say what it is now.

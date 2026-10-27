@@ -3,11 +3,12 @@
  * bun test suite run the same app. Reached only through tela-web, which forwards `/api/*`.
  */
 import {
+  type Actor,
   audit,
   bumpSeq,
   currentSeq,
   first,
-  isBarred,
+  memberStanding,
   newGroupId,
   readTitles,
   reapplyClosures,
@@ -57,9 +58,14 @@ import { websubRoutes } from './routes/websub'
 import { checkGravatarSoon } from './sync/gravatar'
 import { answerPull } from './sync/pull'
 import { applyPush, asksGravatar } from './sync/push'
+import { webActor } from './web-actor'
 
 export type Member = { id: string; email: string }
-export type ApiEnv = { Variables: { member: Member } }
+/**
+ * `actor` is who a call acts for as the shared rules take it (ADR 0065), once the member check has
+ * read it; `webActor` (`web-actor.ts`) reads it for a call the check did not.
+ */
+export type ApiEnv = { Variables: { member: Member; actor?: Actor } }
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -430,8 +436,10 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
     // 0059), whatever copy of its session the cookie still carries: 401, which every shell reads
     // as the end of the session and wipes the device's copy on. Checked in D1 for the calls that
     // say who is signed in, sync, write, or hand the member their data.
-    if (guarded(c.req.method, c.req.path) && (await isBarred(deps.db, member.id))) {
-      return c.json({ error: 'unauthorized' }, 401)
+    if (guarded(c.req.method, c.req.path)) {
+      const standing = await memberStanding(deps.db, member.id)
+      if (standing.barred) return c.json({ error: 'unauthorized' }, 401)
+      c.set('actor', { userId: member.id, exempt: standing.admin })
     }
     if (c.req.path === '/api/v1/me') return next()
     if (tooOld(c.req.header(CLIENT_HEADER))) return c.json({ error: 'upgrade' }, 409)
@@ -492,7 +500,10 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
     const body = pushSchema.safeParse(await c.req.json().catch(() => null))
     if (!body.success) return c.json({ error: 'invalid_push' }, 400)
     const member = c.get('member').id
-    const result = await applyPush(deps.db, member, body.data.mutations, deps.clock.now())
+    const { exempt } = await webActor(c, deps.db)
+    const result = await applyPush(deps.db, member, body.data.mutations, deps.clock.now(), {
+      exempt,
+    })
     if (asksGravatar(body.data.mutations, result.applied)) await checkGravatarSoon(deps, member)
     return c.json(result, 200, { 'cache-control': 'no-store' })
   })

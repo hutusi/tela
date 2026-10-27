@@ -46,6 +46,7 @@ import { type Auth, endOtherSessions, FRESH_SECONDS, notifyMember, PASSWORD_LENG
 import type { ApiDeps } from '../deps'
 import { type AccountChange, deleteAccountMail } from '../mail'
 import { mailLocale } from '../mail-locale'
+import { webActor } from '../web-actor'
 
 /** The session a call came with, as D1 has it now: its token, and when it was made (ms). */
 type Session = { token: string; createdAt: number }
@@ -141,7 +142,8 @@ export function accountRoutes(deps: ApiDeps, auth: Auth) {
    */
   routes.get('/usage', async (c) => {
     const now = deps.clock.now()
-    const used = await memberAllowances(db, c.get('member').id, now)
+    const { exempt } = await webActor(c, db)
+    const used = await memberAllowances(db, c.get('member').id, now, exempt)
     const none = (limit: number | null) => (used.exempt ? null : limit)
     const answer: AccountUsage = {
       translations: {

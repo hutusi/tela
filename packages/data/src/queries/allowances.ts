@@ -2,8 +2,9 @@
  * What an ordinary account may add (ADR 0063): feeds new to Tela per UTC day
  * (`member.feedsPerDay`) and subscriptions held (`member.maxSubscriptions`). Each is SQL that a
  * statement enforces inline, reading the setting as it runs, so a limit is never older than the
- * write it guards and two writes cannot both take its last place. An admin is exempt from both;
- * nothing here touches the site budget or the hourly limits in `limits.ts`.
+ * write it guards and two writes cannot both take its last place. Who is exempt from both is the
+ * caller's to say (`Exempt`, ADR 0065): the web exempts an admin, an app never does. Nothing here
+ * touches the site budget or the hourly limits in `limits.ts`.
  *
  * A room is how many more the member may add: `NO_LIMIT` when nothing bounds it, so it can stand
  * in `min()` and in a `LIMIT` as it is.
@@ -28,9 +29,19 @@ export const NO_LIMIT = 1_000_000_000
 type Who = string | SQL
 const who = (member: Who): SQL => (typeof member === 'string' ? sql`${member}` : member)
 
-/** True (as SQL) for an admin, whom a member's limits do not bound. */
-export const exemptFromLimits = (member: Who): SQL =>
-  sql`exists (select 1 from profiles where user_id = ${who(member)} and is_admin = 1)`
+/**
+ * Whether a member's limits bound an action, as its caller decided (ADRs 0064, 0065): a surface
+ * passes its actor's `exempt` (the web's routes from `is_admin`, an app's always false), and
+ * `'is_admin'` reads the flag as the statement runs, for a caller that acts for no surface: a
+ * tela-api from before the actor, which names no exemption over the `Ingest` RPC.
+ */
+export type Exempt = boolean | 'is_admin'
+
+/** True (as SQL) when the member is exempt from their limits, as `exempt` says. */
+export const exemptFromLimits = (member: Who, exempt: Exempt): SQL =>
+  exempt === 'is_admin'
+    ? sql`exists (select 1 from profiles where user_id = ${who(member)} and is_admin = 1)`
+    : sql`${exempt ? 1 : 0}`
 
 /** Feeds new to Tela the member added since the UTC day of `now` began, by URL or by claim. */
 export const feedsAddedToday = (member: Who, now: number): SQL =>
@@ -42,16 +53,16 @@ export const subscriptionsHeld = (member: Who): SQL =>
   sql`(select count(*) from subscriptions where user_id = ${who(member)} and deleted_at is null)`
 
 /** How many more feeds new to Tela the member may add today. */
-export function feedRoom(member: Who, now: number): SQL {
+export function feedRoom(member: Who, now: number, exempt: Exempt): SQL {
   const limit = settingSql('member.feedsPerDay')
-  return sql`(case when ${exemptFromLimits(member)} or ${limit} is null then ${NO_LIMIT}
+  return sql`(case when ${exemptFromLimits(member, exempt)} or ${limit} is null then ${NO_LIMIT}
     else max(0, ${limit} - ${feedsAddedToday(member, now)}) end)`
 }
 
 /** How many more subscriptions the member may hold. */
-export function subscriptionRoom(member: Who): SQL {
+export function subscriptionRoom(member: Who, exempt: Exempt): SQL {
   const limit = settingSql('member.maxSubscriptions')
-  return sql`(case when ${exemptFromLimits(member)} or ${limit} is null then ${NO_LIMIT}
+  return sql`(case when ${exemptFromLimits(member, exempt)} or ${limit} is null then ${NO_LIMIT}
     else max(0, ${limit} - ${subscriptionsHeld(member)}) end)`
 }
 
@@ -91,9 +102,9 @@ export type Brought = {
  */
 function bringStatements(
   db: TelaDb,
-  input: { userId: string; feeds: BroughtFeed[]; now: number; queue: boolean },
+  input: { userId: string; exempt: Exempt; feeds: BroughtFeed[]; now: number; queue: boolean },
 ) {
-  const { userId, now } = input
+  const { userId, now, exempt } = input
   const rows = JSON.stringify(
     input.feeds.map((f) => [f.feedUrl, f.host, f.origin, f.title ?? null]),
   )
@@ -102,7 +113,7 @@ function bringStatements(
   // the feed statements pick the same ones, since a site written changes neither room.
   const fresh = sql`(select j.value->>0 as url, j.value->>1 as host, j.value->>2 as origin
     from json_each(${rows}) j where ${isNew} order by j.key
-    limit min(${feedRoom(userId, now)}, ${subscriptionRoom(userId)}))`
+    limit min(${feedRoom(userId, now, exempt)}, ${subscriptionRoom(userId, exempt)}))`
   const follow = () =>
     db.all(sql`
     insert into subscriptions (user_id, feed_id, watermark_id, created_at, updated_at, seq)
@@ -111,7 +122,7 @@ function bringStatements(
       from json_each(${rows}) j join feeds f on f.feed_url = j.value->>0
       where not exists (select 1 from subscriptions s where s.user_id = ${userId}
         and s.feed_id = coalesce(f.merged_into, f.id) and s.deleted_at is null)
-      group by 1 order by ord limit ${subscriptionRoom(userId)}
+      group by 1 order by ord limit ${subscriptionRoom(userId, exempt)}
     ) k
     where true
     on conflict (user_id, feed_id) do update set
@@ -154,7 +165,7 @@ function bringStatements(
           select ${userId}, w.url, w.title, ${now} from (
             select j.value->>0 as url, j.value->>3 as title from json_each(${rows}) j
             where ${isNew} and not ${waits} order by j.key
-            limit max(0, ${subscriptionRoom(userId)}
+            limit max(0, ${subscriptionRoom(userId, exempt)}
               - (select count(*) from pending_feeds where user_id = ${userId}))
           ) w
           where true
@@ -171,7 +182,7 @@ function bringStatements(
         (select count(*) from json_each(${rows}) j where not ${followed} and not ${waits}) as over,
         ${settingSql('member.feedsPerDay')} as per_day,
         ${settingSql('member.maxSubscriptions')} as max_subscriptions,
-        ${exemptFromLimits(userId)} as exempt
+        ${exemptFromLimits(userId, exempt)} as exempt
     `),
   ] as const
 }
@@ -210,11 +221,12 @@ function unique(feeds: BroughtFeed[]): BroughtFeed[] {
  * An OPML import (ADR 0063): every feed Tela has subscribed, as many new ones as the member's day
  * leaves room for added, the rest waiting for `member.pendingFeeds`, all within the subscription
  * cap. One batch, whatever the count: nothing is fetched here, so nothing is verified, and a URL
- * that is not a feed fails its first fetch and dies like any other dead feed.
+ * that is not a feed fails its first fetch and dies like any other dead feed. `exempt` is the
+ * actor's (ADR 0065).
  */
 export async function importFeeds(
   db: TelaDb,
-  input: { userId: string; feeds: BroughtFeed[]; now: number },
+  input: { userId: string; exempt: boolean; feeds: BroughtFeed[]; now: number },
 ): Promise<Brought> {
   const statements = bringStatements(db, { ...input, feeds: unique(input.feeds), queue: true })
   const results = (await db.batch([bumpSeq(db), ...statements] as never)) as unknown[]
@@ -250,6 +262,14 @@ const barred = (member: SQL | string) => sql`exists (select 1 from profiles pr
   where pr.user_id = ${member} and not ${standingOk('pr')})`
 
 /**
+ * Whether the member's limits bound the feeds that wait for them: always. A feed waits only
+ * because the import that named it was counted, and that import may have come from an app, which
+ * is never exempt (ADR 0064); exempting an admin here would let an app's import past the day one
+ * sweep later. An admin's own import on the web adds everything at once, so nothing of theirs waits.
+ */
+const PENDING_EXEMPT = false
+
+/**
  * Add what the member's day now leaves room for of their waiting feeds, under the lease that took
  * them: one fenced batch, so a holder that lost its lease adds nothing. A waiting feed someone else
  * added meanwhile subscribes free. `drop` names waiting URLs that cannot be added at all (no
@@ -262,6 +282,7 @@ export async function addPendingFeeds(
 ): Promise<Brought> {
   const statements = bringStatements(db, {
     userId: input.userId,
+    exempt: PENDING_EXEMPT,
     feeds: unique(input.feeds),
     now: input.now,
     queue: false,
@@ -296,7 +317,8 @@ export function duePendingFeeds(now: number): SQL {
     where not ${barred(member)}
     group by p.user_id
     having min(p.queued_at) <= ${now}
-      and (${subscriptionRoom(member)} > 0 and (${feedRoom(member, now)} > 0 or ${known})
+      and (${subscriptionRoom(member, PENDING_EXEMPT)} > 0
+        and (${feedRoom(member, now, PENDING_EXEMPT)} > 0 or ${known})
         or exists (select 1 from pending_feeds q join feeds f on f.feed_url = q.feed_url
           join subscriptions s on s.feed_id = coalesce(f.merged_into, f.id)
           where q.user_id = p.user_id and s.user_id = p.user_id and s.deleted_at is null))`
@@ -307,11 +329,17 @@ export function duePendingFeeds(now: number): SQL {
  * follow it after. Statements for a batch that bumps the sync sequence and recounts the feed's
  * site.
  */
-export function subscribeWithinCap(db: TelaDb, userId: string, feedId: number, now: number) {
+export function subscribeWithinCap(
+  db: TelaDb,
+  userId: string,
+  feedId: number,
+  now: number,
+  exempt: boolean,
+) {
   return db.all(sql`
     insert into subscriptions (user_id, feed_id, watermark_id, created_at, updated_at, seq)
     select ${userId}, ${feedId}, 0, ${now}, ${now}, ${currentSeq}
-    where ${subscriptionRoom(userId)} > 0
+    where ${subscriptionRoom(userId, exempt)} > 0
       or exists (select 1 from subscriptions where user_id = ${userId} and feed_id = ${feedId}
         and deleted_at is null)
     on conflict (user_id, feed_id) do update set
@@ -329,11 +357,12 @@ export type MemberAllowances = {
   translations: { perDay: number | null; usedToday: number; waiting: number }
 }
 
-/** What the member has used of each allowance, in one read. */
+/** What the member has used of each allowance, in one read; `exempt` is the actor's. */
 export async function memberAllowances(
   db: TelaDb,
   userId: string,
   now: number,
+  exempt: boolean,
 ): Promise<MemberAllowances> {
   const day = utcDay(now)
   const rows = await db.all<{
@@ -348,7 +377,7 @@ export async function memberAllowances(
     waiting: number
   }>(sql`
     select
-      ${exemptFromLimits(userId)} as exempt,
+      ${exemptFromLimits(userId, exempt)} as exempt,
       ${settingSql('member.feedsPerDay')} as feeds_per_day,
       ${feedsAddedToday(userId, now)} as added_today,
       (select count(*) from pending_feeds where user_id = ${userId}) as pending,
