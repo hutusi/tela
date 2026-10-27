@@ -328,8 +328,8 @@ export async function loadBodyTranslation(
 
 /**
  * A body translation as `loadBodyTranslation` reads it, and whether its writers turned
- * translation off (ADR 0065): a post with that content is on a blog that opted out, and none is
- * on one that allows it. The web's device hides such a translation itself; an app is not trusted
+ * translation off (ADR 0065): a post that has held that content, now or in an earlier version, is
+ * on a blog that opted out, and none is on one that allows it. The web's device hides such a translation itself; an app is not trusted
  * to, so the API refuses it.
  */
 export async function loadBodyTranslationShown(
@@ -337,9 +337,14 @@ export async function loadBodyTranslationShown(
   contentKey: string,
   lang: string,
 ): Promise<{ translation: BodyTranslationRow | null; optedOut: boolean }> {
+  // Every post that has held this content, its current version or an earlier one: a key an
+  // opted-out post moved on from is still that writer's (Codex's review).
   const on = (optOut: 0 | 1) => sql`exists (select 1 from articles a
     join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
-    where a.content_key = b.content_key and s.translation_opt_out = ${sql.raw(String(optOut))})`
+    where (a.content_key = b.content_key
+        or exists (select 1 from article_versions v
+          where v.article_id = a.id and v.content_key = b.content_key))
+      and s.translation_opt_out = ${sql.raw(String(optOut))})`
   const rows = await db.all<RawBodyTranslation & { opted_out: number }>(sql`
     select b.*, (${on(1)} and not ${on(0)}) as opted_out
     from body_translations b where b.content_key = ${contentKey} and b.lang = ${lang}

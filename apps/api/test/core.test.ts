@@ -188,4 +188,27 @@ describe('a translation whose writer turned translation off', () => {
       optedOut: false,
     })
   })
+
+  test("still refused for an earlier version's content, once the post has moved on", async () => {
+    await api.db.batch([
+      bumpSeq(api.db),
+      api.db.run(sql`insert into sites (id, home_url, translation_opt_out, created_at, updated_at,
+          seq)
+        values (1, 'https://off.example', 1, 0, 0, ${currentSeq})`),
+      api.db.run(sql`insert into feeds (id, site_id, feed_url, host, next_fetch_at, created_at,
+          updated_at, seq)
+        values (1, 1, 'https://off.example/feed', 'off.example', 0, 0, 0, ${currentSeq})`),
+      // The post is on its second version; its first content still has a translation.
+      api.db.run(sql`insert into articles (id, feed_id, dedup_key, title, fetched_at, sort_at,
+          current_version, content_key, seq)
+        values (1, 1, 'k1', 'Off', 0, 0, 2, 'second', ${currentSeq})`),
+      api.db.run(sql`insert into article_versions (article_id, version, provenance, content_key,
+          norm_version, body_chars, created_at)
+        values (1, 1, 'feed', 'first', 1, 10, 0), (1, 2, 'feed', 'second', 1, 10, 0)`),
+      api.db.run(sql`insert into body_translations (content_key, lang, state, updated_at, seq)
+        values ('first', 'fr', 'done', 0, ${currentSeq})`),
+    ] as never)
+    const old = await translationStatus(deps, 'first', 'fr')
+    expect([old.translation?.state, old.optedOut]).toEqual(['done', true])
+  })
 })
