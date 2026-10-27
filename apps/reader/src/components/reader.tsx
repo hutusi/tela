@@ -16,6 +16,7 @@ import { pointAt, renderedLeaves, type Side } from '../lib/highlight-dom'
 import { type ReadingMode, readingHref } from '../lib/href'
 import { newId } from '../lib/id'
 import { lazyImages } from '../lib/lazy-images'
+import { asksForTranslation } from '../lib/open-post'
 import { useReadingPrefs } from '../lib/prefs'
 import { readerStyle, typographyOf } from '../lib/typography'
 import { useHighlights } from '../lib/use-highlights'
@@ -31,6 +32,7 @@ import {
   feedTitle,
   isLiked,
   isRecommended,
+  isSubscribed,
   shownRead,
   shownTitle,
   siteOfFeed,
@@ -171,14 +173,19 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next, list
     if (loaded) pane.current?.focus({ preventScroll: true })
   }, [loaded])
   // Translated on opening, or only once asked (a pref), and never in a language the member reads
-  // as written. The Reader is keyed by the article, so asking lasts for this post.
+  // as written. The Reader is keyed by the article, so asking lasts for this post. A post from a
+  // blog the member does not subscribe to is asked for once its body has answered, not refused
+  // (`asksForTranslation`).
   const prefs = useReadingPrefs(tables)
   const [asked, setAsked] = useState(false)
   const wanted = prefs.autoTranslate || asked
-  // Asked for once the body has answered, and not for a post refused for the day: its translation
-  // would be paid for, from the member's allowance, and refused with it (ADR 0066).
   const translation = useArticleTranslation(article, object, readingLang, {
-    enabled: wanted && loaded && !refused,
+    enabled: asksForTranslation({
+      wanted,
+      subscribed: isSubscribed(tables, article.feedId),
+      answered: loaded,
+      refused: refused !== null,
+    }),
     never: prefs.never,
   })
   const original = useMemo(() => (object ? readerBlocks(object) : []), [object])
