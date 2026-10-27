@@ -1,6 +1,5 @@
-import type { ArticleRow } from '@tela/sync'
 import { Link } from 'react-router'
-import type { MemberControls } from './types'
+import type { MemberControls, PublicArticle } from './types'
 
 /**
  * The `rel` of a public page's link out to a blog (ADR 0060). A blog an operator listed is vouched
@@ -13,7 +12,8 @@ export function outboundRel(vouched: boolean): string {
 }
 
 /**
- * A post on a public page. A member opens it in the reader; anyone else goes to the blog itself,
+ * A post on a public page. A member opens it in the reader, which holds its row (fetched by id,
+ * since a public page carries no content key, ADR 0066); anyone else goes to the blog itself,
  * which is where a post without a reader belongs, by a link `outboundRel` qualifies.
  */
 export function PostLink({
@@ -24,7 +24,7 @@ export function PostLink({
   className,
   children,
 }: {
-  article: ArticleRow
+  article: PublicArticle
   source: string | null
   member: MemberControls | undefined
   /** An operator listed the post's blog: its link is followed. */

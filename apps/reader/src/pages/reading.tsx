@@ -508,8 +508,9 @@ export function ReadingPage() {
             onReadable={marker.readable}
           />
         </ErrorBoundary>
-      ) : open && !synced ? (
-        // The first sync has not landed yet: the article is on its way, not gone.
+      ) : open && (!synced || store.isFetching(params.articleId ?? 0)) ? (
+        // The first sync has not landed yet, or a public page's post is being fetched by id (ADR
+        // 0066): the article is on its way, not gone.
         <ReaderPaneSkeleton />
       ) : open ? (
         <main
