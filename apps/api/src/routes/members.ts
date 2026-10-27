@@ -111,21 +111,18 @@ export function memberRoutes(deps: ApiDeps) {
     }
     const body = (await c.req.json().catch(() => ({}))) as { optOut?: unknown }
     const optOut = body.optOut === true
-    await db.batch([
+    const [, before] = (await db.batch([
       bumpSeq(db),
-      // Turned back on: apps were sent none of its translations while it said no (ADR 0065).
-      ...(optOut
-        ? []
-        : restampTranslations(
-            db,
-            sql`select id from sites where id = ${siteId} and translation_opt_out = 1`,
-          )),
+      db.all(sql`select translation_opt_out as was from sites where id = ${siteId}`),
       db.run(sql`
         update sites set translation_opt_out = ${optOut ? 1 : 0}, updated_at = ${deps.clock.now()},
           seq = ${currentSeq}
         where id = ${siteId}
       `),
-    ] as never)
+    ] as never)) as unknown as [unknown, { was: number }[]]
+    // Turned back on: apps were sent none of its translations while it said no (ADR 0065), so
+    // they are stamped again, now the switch has committed.
+    if (!optOut && before[0]?.was === 1) await restampTranslations(db, [siteId])
     return c.json({ optOut })
   })
 

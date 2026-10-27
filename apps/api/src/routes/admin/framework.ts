@@ -54,7 +54,13 @@ export type Inverse = (
   db: TelaDb,
   change: AuditedChange,
   now: number,
-) => { changed: SQL; restore: BatchItem<'sqlite'>[]; synced: boolean }
+) => {
+  changed: SQL
+  restore: BatchItem<'sqlite'>[]
+  synced: boolean
+  /** What follows once the undo's batch has committed: work too large for one batch. */
+  committed?: () => Promise<void>
+}
 
 /** One group of areas' routes, and the actions and inverses it brings. */
 export type AdminModule = {

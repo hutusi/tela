@@ -170,6 +170,7 @@ export function adminRoutes(deps: ApiDeps, auth: Auth) {
     const guards: BatchItem<'sqlite'>[] = []
     const restores: BatchItem<'sqlite'>[] = []
     const audits: BatchItem<'sqlite'>[] = []
+    const committed: (() => Promise<void>)[] = []
     let synced = false
     for (const row of rows) {
       const inverse = inverses[row.action as AdminActionName]
@@ -195,6 +196,7 @@ export function adminRoutes(deps: ApiDeps, auth: Auth) {
       )
       guards.push(undoGuard(db, group, sql`(${step.changed}) or ${later}`))
       restores.push(...step.restore)
+      if (step.committed) committed.push(step.committed)
       audits.push(
         audit(
           db,
@@ -220,6 +222,8 @@ export function adminRoutes(deps: ApiDeps, auth: Auth) {
       if (isFenceRefusal(err)) return c.json({ error: 'changed_since' }, 409)
       throw err
     }
+    // Every restore held, or the guards would have refused the batch: what follows them now.
+    for (const follow of committed) await follow()
     return c.json({ restored: rows.length })
   })
 

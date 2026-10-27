@@ -130,27 +130,58 @@ export function recountReaders(db: TelaDb, siteIds: SQL, now: number) {
 }
 
 /**
- * A writer turned translation back on for `siteIds` (ADR 0065): stamp the blog's title and body
- * translation rows with the batch's seq, so an app's sync, which left them out while the blog
- * said no, sends them now. The web's devices held them all along and take them again unchanged.
- *
- * Statements for a batch that starts with `bumpSeq`, placed where `siteIds` names exactly the blogs
- * turned back on: before the switch's update, as the blogs still opted out that it will turn on;
- * after it, as the blogs it stamped that now allow translation. Body translations follow each
- * post's current content, as the pull's do.
+ * Rows one re-stamping batch gives one seq: under a pull's page (`PAGE_ROWS`, 1000), so a pull can
+ * always end a page after them. One seq for a whole blog's rows would be a group no page can end
+ * inside, and `readPull` would send everything after the cursor unpaged.
  */
-export function restampTranslations(db: TelaDb, siteIds: SQL) {
-  const feedsOf = sql`select id from feeds where site_id in (${siteIds})`
-  return [
-    db.run(sql`
-      update article_titles set seq = ${currentSeq} where feed_id in (${feedsOf})
-    `),
-    db.run(sql`
-      update body_translations set seq = ${currentSeq}
-      where content_key in (select content_key from articles
-        where feed_id in (${feedsOf}) and content_key is not null)
-    `),
-  ] as const
+export const RESTAMP_CHUNK = 900
+
+/**
+ * Translation was turned back on for `siteIds` (ADR 0065): stamp the blogs' title and body
+ * translation rows again, so an app's sync, which left them out while the blogs said no, sends
+ * them now. The web's devices held them all along and take them again unchanged. Body
+ * translations follow each post's current content, as the pull's do. How many rows it stamped.
+ *
+ * Run once the batch that turned translation on has committed, in batches of its own:
+ * `RESTAMP_CHUNK` rows of one table each, each batch with its own `bumpSeq`, so no seq holds more
+ * than a page. The rows to stamp are those at or below the sequence as it stands when this
+ * starts; one stamped, or written since, is above it and sent anyway. An app that pulls between
+ * the switch and the last chunk is sent each chunk in a later delta, since the switch is already
+ * read at every pull. Stamping a blog that never said no only sends its rows again.
+ */
+export async function restampTranslations(db: TelaDb, siteIds: readonly number[]): Promise<number> {
+  if (siteIds.length === 0) return 0
+  const feedsOf = sql`select id from feeds
+    where site_id in (select value from json_each(${JSON.stringify([...new Set(siteIds)])}))`
+  const [head] = await db.all<{ seq: number }>(
+    sql`select coalesce((select v from counters where k = 'seq'), 0) as seq`,
+  )
+  const upTo = Number(head?.seq ?? 0)
+  const chunk = sql.raw(String(RESTAMP_CHUNK))
+  const chunks = [
+    sql`update article_titles set seq = ${currentSeq}
+      where rowid in (select rowid from article_titles
+        where feed_id in (${feedsOf}) and seq <= ${upTo} limit ${chunk})
+      returning 1 as stamped`,
+    sql`update body_translations set seq = ${currentSeq}
+      where rowid in (select rowid from body_translations
+        where content_key in (select content_key from articles
+          where feed_id in (${feedsOf}) and content_key is not null)
+          and seq <= ${upTo} limit ${chunk})
+      returning 1 as stamped`,
+  ]
+  let stamped = 0
+  for (const statement of chunks) {
+    for (;;) {
+      const [, rows] = (await db.batch([bumpSeq(db), db.all(statement)] as never)) as unknown as [
+        unknown,
+        unknown[],
+      ]
+      stamped += rows.length
+      if (rows.length < RESTAMP_CHUNK) break
+    }
+  }
+  return stamped
 }
 
 /**

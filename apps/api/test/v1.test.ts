@@ -8,6 +8,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:tes
 import { ACTION_LIMITS, bumpSeq, currentSeq, first } from '@tela/data'
 import { openapiDocument } from '@tela/ext/openapi'
 import { pushSchema } from '@tela/ext/schema'
+import { PAGE_ROWS } from '@tela/sync'
 import { sql } from 'drizzle-orm'
 import { FixtureServer, rss } from '../../../packages/ingest/test/fixture-server'
 import { connect, gateway, registerApp } from './apps-helpers'
@@ -380,6 +381,45 @@ describe('a writer’s “no translation”', () => {
       translation: true,
       allowed: true,
     })
+  })
+
+  test('turned back on for a blog of more titles than a page, sends them a page at a time', async () => {
+    const { db } = world.api
+    const ids = Array.from({ length: PAGE_ROWS + 100 }, (_, i) => 20_000 + i)
+    await write(
+      world.api,
+      db.run(sql`insert into articles (id, feed_id, dedup_key, title, fetched_at, sort_at, seq)
+        select value, 2, 'k' || value, 'Post ' || value, ${world.now}, ${world.now}, ${currentSeq}
+        from json_each(${JSON.stringify(ids)}) where true`),
+      db.run(sql`insert into article_titles (article_id, lang, feed_id, title, status, source_hash,
+          updated_at, seq)
+        select value, 'zh-Hans', 2, '文章 ' || value, 'done', 'h' || value, 0, ${currentSeq}
+        from json_each(${JSON.stringify(ids)}) where true`),
+    )
+    await subscribeAll()
+    await db.run(sql`update sites set claimed_by = ${world.bo.userId} where id = 2`)
+    let cursor = (await pull('lang=zh-Hans')).cursor
+    const res = await world.api.request('/api/v1/sites/2/translation', {
+      method: 'PUT',
+      as: world.bo,
+      body: { optOut: false },
+    })
+    expect(res.status).toBe(200)
+    // Every title comes, and no page holds more than a page's rows: one seq for all of them would
+    // make the pull send them in one page, past its size.
+    const titles = new Set<unknown>()
+    let pages = 0
+    for (;;) {
+      const page = await pull(`lang=zh-Hans&cursor=${cursor}`)
+      pages += 1
+      expect(page.rows.titles.length).toBeLessThanOrEqual(PAGE_ROWS)
+      for (const t of page.rows.titles) titles.add(t.articleId)
+      cursor = page.cursor
+      if (!page.more) break
+    }
+    expect(pages).toBeGreaterThan(1)
+    expect(ids.every((id) => titles.has(id))).toBe(true)
+    expect(titles.has(201)).toBe(true)
   })
 })
 

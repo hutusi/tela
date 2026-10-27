@@ -11,6 +11,7 @@ import {
   laterActionOn,
   listingUnclaimed,
   releaseClaim,
+  restampTranslations,
   type TelaDb,
 } from '@tela/data'
 import type { SiteListing } from '@tela/shared'
@@ -192,6 +193,8 @@ const remove: ActHandler = async (ctx, id) => {
   if (claim.status !== 'verified') return 'not_applicable'
   const results = await runBatch(db, [
     bumpSeq(db),
+    // Whether the blog said no to translation as the batch began: the removal takes that back.
+    db.all(sql`select translation_opt_out as was from sites where id = ${claim.site_id}`),
     audit(
       db,
       {
@@ -222,7 +225,13 @@ const remove: ActHandler = async (ctx, id) => {
     // the opt-out taken back and the claim overruled: only an operator's removal does that.
     ...releaseClaim(db, { claimId, by: 'operator', now: ctx.now }),
   ])
-  return returned(results[2]).length > 0 ? 'done' : 'not_applicable'
+  if (returned(results[3]).length === 0) return 'not_applicable'
+  // Translation is allowed again: apps, sent none of the blog's while it said no, receive them
+  // (ADR 0065), stamped again now the removal has committed.
+  if ((returned(results[1])[0] as { was?: number } | undefined)?.was === 1) {
+    await restampTranslations(db, [claim.site_id])
+  }
+  return 'done'
 }
 
 /**

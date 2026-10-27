@@ -197,25 +197,16 @@ const restoreTopics: Inverse = (db, change, now) => {
 }
 
 /**
- * After a change to a blog's translation switch in the same batch: when it turned translation
- * back on, its title and body translation rows are stamped again, so apps, whose sync left them
- * out while the blog said no, receive them (ADR 0065). The blog stamped by this batch and now
- * allowing translation is exactly one turned back on, since every caller applies only to a change.
+ * Pause or allow translating a blog, as its owner can (ADR 0011). Allowed again, its title and
+ * body translation rows are stamped again once the change has committed, so apps, whose sync left
+ * them out while the blog said no, receive them (ADR 0065); `done` is exactly a change.
  */
-const translationBackOn = (db: TelaDb, siteId: number) =>
-  restampTranslations(
-    db,
-    sql`select id from sites where id = ${siteId} and seq = ${currentSeq}
-      and translation_opt_out = 0`,
-  )
-
-/** Pause or allow translating a blog, as its owner can (ADR 0011). */
 function setTranslation(action: 'site.translationOff' | 'site.translationOn'): ActHandler {
   const optOut = action === 'site.translationOff' ? 1 : 0
   return async (ctx, id) => {
     const siteId = idOf(id)
     if (siteId === null) return 'not_found'
-    return applyChange(ctx, {
+    const result = await applyChange(ctx, {
       action,
       table: 'sites',
       id: siteId,
@@ -223,8 +214,9 @@ function setTranslation(action: 'site.translationOff' | 'site.translationOn'): A
       set: sql`translation_opt_out = ${optOut}`,
       from: sql`json_object('translationOptOut', translation_opt_out)`,
       to: { translationOptOut: optOut },
-      after: (db) => (optOut === 0 ? [...translationBackOn(db, siteId)] : []),
     })
+    if (result === 'done' && optOut === 0) await restampTranslations(ctx.deps.db, [siteId])
+    return result
   }
 }
 
@@ -232,7 +224,9 @@ function setTranslation(action: 'site.translationOff' | 'site.translationOn'): A
 const restoreTranslation = restoreColumns({
   table: 'sites',
   columns: { translationOptOut: 'translation_opt_out' },
-  after: (db, siteId) => [...translationBackOn(db, siteId)],
+  committed: async (db, siteId, from) => {
+    if (from.translationOptOut === 0) await restampTranslations(db, [siteId])
+  },
 })
 
 /**

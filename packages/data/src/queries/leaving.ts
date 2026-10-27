@@ -24,7 +24,6 @@ import { isFenceRefusal } from '../leases'
 import { bumpSeq, currentSeq } from '../seq'
 import { audit, newGroupId } from './admin'
 import { endConnections } from './apps'
-import { restampTranslations } from './sites'
 import { withdrawBodyRequests } from './translation'
 
 type Statement = ReturnType<TelaDb['run']>
@@ -78,6 +77,8 @@ export type ReleaseTarget =
  * Statements for a batch that starts with `bumpSeq`. The first is the claims' update, whose
  * `RETURNING` rows are the claims released; the blog moves only in the batch that released its
  * claim (`seq = currentSeq`, which no other batch has), and a claim check in flight is cut off.
+ * An operator's removal turns translation back on, so its caller stamps the blogs' translations
+ * again once the batch has committed (`restampTranslations`, ADR 0065).
  */
 export function releaseClaim(
   db: TelaDb,
@@ -105,16 +106,6 @@ export function releaseClaim(
       where ${target} and status = 'verified'
       returning id
     `),
-    // An operator's removal turns translation back on: before it does, the blogs it turns on
-    // have their translations stamped again, so apps, sent none while they said no, receive
-    // them (ADR 0065).
-    ...(operator
-      ? restampTranslations(
-          db,
-          sql`select id from sites where claimed_by = ${claimant} and translation_opt_out = 1
-            and ${released}`,
-        )
-      : []),
     // A closing account's blogs all go, whatever its claim rows say: nobody may hold one for it.
     db.run(sql`
       update sites set claimed_by = null, claimed_at = null, declared_feed_urls = '[]',
