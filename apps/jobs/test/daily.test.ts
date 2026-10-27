@@ -50,6 +50,7 @@ describe('daily', () => {
       prunedSessions: 0,
       prunedAuthLimits: 0,
       prunedVerifications: 0,
+      prunedOpens: 0,
     })
     const feeds = await db.all<{
       feed_url: string
@@ -72,6 +73,32 @@ describe('daily', () => {
     )
     expect(states.map((s) => s.article_id)).toEqual([2, 3, 4])
     expect(await first(db, sql`select 1 as x from action_limits where key = 'old'`)).toBeUndefined()
+  })
+
+  test('keeps two days of posts opened from blogs a member does not follow (ADR 0066)', async () => {
+    const { db } = await createTestDb()
+    await addTestUser(db, 'u')
+    const key = 'a'.repeat(32)
+    await db.run(sql`
+      insert into post_opens (user_id, day, content_key, opened_at) values
+        ('u', '2026-09-17', ${key}, 0), ('u', '2026-09-18', ${key}, 0),
+        ('u', '2026-09-19', ${key}, 0), ('u', '2026-09-20', ${key}, 0)
+    `)
+    expect((await daily(db, NOW)).prunedOpens).toBe(2)
+    const days = await db.all<{ day: string }>(sql`select day from post_opens order by day`)
+    expect(days.map((r) => r.day)).toEqual(['2026-09-19', '2026-09-20'])
+  })
+
+  test('counts the rate counters it prunes, however many there are', async () => {
+    const { db } = await createTestDb()
+    await db.run(sql`
+      insert into action_limits (key, window_start, count)
+      select 'app:' || value, ${NOW - 2 * DAY}, 1 from json_each(${JSON.stringify(
+        Array.from({ length: 300 }, (_, i) => i),
+      )}) where true
+    `)
+    expect((await daily(db, NOW)).prunedRateLimits).toBe(300)
+    expect(await first(db, sql`select 1 as x from action_limits`)).toBeUndefined()
   })
 
   test('prunes what has no further use: lapsed holds, ended sessions, old counters, spent codes', async () => {

@@ -2,7 +2,14 @@
  * The daily cron (03:17 UTC). Each step is one statement over domain state, so the whole thing is
  * one batch and a missed day is simply caught up by the next.
  */
-import { bumpSeq, compactReadStates, currentSeq, pruneInvites, type TelaDb } from '@tela/data'
+import {
+  bumpSeq,
+  compactReadStates,
+  currentSeq,
+  pruneInvites,
+  type TelaDb,
+  utcDay,
+} from '@tela/data'
 import { RELAY_REPROBE_DAYS } from '@tela/ingest/region-policy'
 import { DEAD_AFTER_ERRORS } from '@tela/ingest/schedule'
 import { sql } from 'drizzle-orm'
@@ -21,6 +28,7 @@ export type DailyReport = {
   prunedSessions: number
   prunedAuthLimits: number
   prunedVerifications: number
+  prunedOpens: number
 }
 
 export async function daily(db: TelaDb, now: number): Promise<DailyReport> {
@@ -40,7 +48,10 @@ export async function daily(db: TelaDb, now: number): Promise<DailyReport> {
       where status = 'dead' and last_fetched_at < ${now - 7 * DAY}
       returning id
     `),
-    db.all(sql`delete from action_limits where window_start < ${now - DAY} returning key`),
+    // Counted, then deleted: a counter per app and minute (ADR 0064) makes the rows returned as
+    // many as the rows, where a count is one. The batch is atomic, so the two agree.
+    db.all(sql`select count(*) as n from action_limits where window_start < ${now - DAY}`),
+    db.run(sql`delete from action_limits where window_start < ${now - DAY}`),
     db.all(sql`
       delete from applied_mutations where applied_at < ${now - APPLIED_MUTATIONS_KEEP_DAYS * DAY}
       returning mid
@@ -56,19 +67,37 @@ export async function daily(db: TelaDb, now: number): Promise<DailyReport> {
     db.all(sql`delete from session where expires_at < ${now} returning id`),
     db.all(sql`delete from rate_limit where last_request < ${now - DAY} returning id`),
     db.all(sql`delete from verification where expires_at < ${now} returning id`),
+    // Posts opened from blogs a member does not follow (ADR 0066): only today's count decides
+    // anything, and the privacy page promises a two-day record, so the day before yesterday goes.
+    db.all(sql`select count(*) as n from post_opens where day <= ${utcDay(now - 2 * DAY)}`),
+    db.run(sql`delete from post_opens where day <= ${utcDay(now - 2 * DAY)}`),
   ])
-  const [, reprobed, revived, limits, mutations, compacted, holds, sessions, authLimits, codes] =
-    results
+  const [
+    ,
+    reprobed,
+    revived,
+    limits,
+    ,
+    mutations,
+    compacted,
+    holds,
+    sessions,
+    authLimits,
+    codes,
+    opens,
+  ] = results
   const n = (rows: unknown) => (rows as unknown[]).length
+  const count = (rows: unknown) => Number((rows as { n?: unknown }[])[0]?.n ?? 0)
   return {
     reprobed: n(reprobed),
     revived: n(revived),
-    prunedRateLimits: n(limits),
+    prunedRateLimits: count(limits),
     prunedMutations: n(mutations),
     compacted: n(compacted),
     prunedHolds: n(holds),
     prunedSessions: n(sessions),
     prunedAuthLimits: n(authLimits),
     prunedVerifications: n(codes),
+    prunedOpens: count(opens),
   }
 }

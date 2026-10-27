@@ -381,6 +381,8 @@ export function finishErasure(db: TelaDb, id: string, now: number): Statement[] 
         requests = usage_daily.requests + excluded.requests
     `),
     db.run(sql`delete from usage_daily where subject = ${id} and not ${inFlight(id)}`),
+    // Posts opened by a signed copy of the session still read after the closing (ADR 0066).
+    db.run(sql`delete from post_opens where user_id = ${id}`),
     db.run(sql`
       update profiles set display_name = null, bio = null, avatar_key = null, is_admin = 0,
         public_subscriptions = 0, public_likes = 0, updated_at = ${now}, seq = ${currentSeq}

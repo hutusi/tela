@@ -61,6 +61,7 @@ import {
   waitsOnFullCode,
 } from './queries/invites'
 import { closeAccount, releaseClaim } from './queries/leaving'
+import { admitOpens } from './queries/opens'
 import { avatarOf, dueGravatarChecks } from './queries/people'
 import { compactReadStates, fileImportedFeeds, writeImportFiling } from './queries/reader'
 import {
@@ -3406,6 +3407,122 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         // A second release finds no verified claim and moves no blog.
         expect((await release())[1]).toEqual([])
       }
+    })
+  })
+
+  describe('posts from blogs a member does not follow (ADR 0066)', () => {
+    const MIDNIGHT = nextUtcMidnight(T0)
+    const key = (c: string) => c.repeat(32)
+    /** Feed 1 is followed, feed 2 is not; feed 1's post was reprocessed from `o…` to `s…`. */
+    async function seed(db: TelaDb) {
+      for (const id of ['u1', 'u2']) {
+        await db.run(sql`insert into user (id, name, email, email_verified, created_at, updated_at)
+          values (${id}, ${id}, ${`${id}@x.y`}, 1, 0, 0)`)
+        await db.run(sql`insert into profiles (user_id, handle, created_at, updated_at)
+          values (${id}, ${`h_${id}`}, 0, 0)`)
+      }
+      await db.run(sql`insert into sites (id, home_url, created_at, updated_at)
+        values (1, 'https://b.example', 0, 0)`)
+      await db.run(sql`insert into feeds (id, site_id, feed_url, host, next_fetch_at, created_at, updated_at)
+        values (1, 1, 'https://b.example/a', 'b.example', 0, 0, 0),
+          (2, 1, 'https://b.example/b', 'b.example', 0, 0, 0)`)
+      const posts: [number, number, string][] = [
+        [1, 1, 's'],
+        [2, 2, '1'],
+        [3, 2, '2'],
+        [4, 2, '3'],
+        [5, 2, '4'],
+      ]
+      for (const [id, feed, c] of posts) {
+        await db.run(sql`insert into articles (id, feed_id, dedup_key, fetched_at, sort_at,
+            current_version, content_key)
+          values (${id}, ${feed}, ${`g:${id}`}, 0, 0, ${id === 1 ? 2 : 1}, ${key(c)})`)
+        await db.run(sql`insert into article_versions (article_id, version, provenance,
+            content_key, norm_version, body_chars, created_at)
+          values (${id}, ${id === 1 ? 2 : 1}, 'feed', ${key(c)}, 1, 10, 0)`)
+      }
+      await db.run(sql`insert into article_versions (article_id, version, provenance,
+          content_key, norm_version, body_chars, created_at)
+        values (1, 1, 'feed', ${key('o')}, 1, 10, 0)`)
+      await db.run(sql`insert into subscriptions (user_id, feed_id, watermark_id, created_at, updated_at)
+        values ('u1', 1, 0, 0, 0)`)
+    }
+    const setting = (db: TelaDb, value: unknown) =>
+      db.run(sql`insert into settings (key, value, updated_at)
+        values ('member.unsubscribedPostsPerDay', ${JSON.stringify(value)}, 0)
+        on conflict (key) do update set value = excluded.value`)
+    const admit = (db: TelaDb, keys: string[], now = T0, userId = 'u1', exempt = false) =>
+      admitOpens(db, { userId, exempt, keys: keys.map(key), now })
+    const opened = async (db: TelaDb) =>
+      (
+        await db.all<{ user_id: string; day: string; content_key: string }>(
+          sql`select user_id, day, content_key from post_opens order by user_id, day, content_key`,
+        )
+      ).map((r) => `${r.user_id} ${r.day} ${r.content_key.slice(0, 1)}`)
+
+    it('follows are free, others count once a day up to the limit, in the order asked', async () => {
+      const db = await makeDb()
+      await seed(db)
+      await setting(db, 2)
+      const day = utcDay(T0)
+      expect(await admit(db, ['s', '1'])).toEqual({ allowed: [key('s'), key('1')], refused: {} })
+      // The post opened already is free again; the second place goes, and the third is refused.
+      expect(await admit(db, ['1', '2', '3'])).toEqual({
+        allowed: [key('1'), key('2')],
+        refused: { [key('3')]: { error: 'post_limit', limit: 2, resetsAt: MIDNIGHT } },
+      })
+      // A followed post's earlier version, and a key no post holds: free, and nothing written.
+      expect((await admit(db, ['o', 'f'])).allowed).toEqual([key('o'), key('f')])
+      expect(await opened(db)).toEqual([`u1 ${day} 1`, `u1 ${day} 2`])
+      // Another member counts apart; the next UTC day starts again.
+      expect((await admit(db, ['3'], T0, 'u2')).allowed).toEqual([key('3')])
+      expect((await admit(db, ['3'], MIDNIGHT)).allowed).toEqual([key('3')])
+      // An admin on the web is never counted.
+      expect((await admit(db, ['4'], T0, 'u1', true)).allowed).toEqual([key('4')])
+      expect(await opened(db)).toHaveLength(4)
+      // 0 is nothing at all, and null no limit.
+      await setting(db, 0)
+      expect(Object.keys((await admit(db, ['4'], MIDNIGHT)).refused)).toEqual([key('4')])
+      expect((await admit(db, ['1'])).allowed).toEqual([key('1')])
+      await setting(db, null)
+      expect((await admit(db, ['3', '4'])).allowed).toEqual([key('3'), key('4')])
+    })
+
+    it('a post kept from a blog the member left is counted', async () => {
+      const db = await makeDb()
+      await seed(db)
+      await setting(db, 1)
+      await db.run(sql`update subscriptions set deleted_at = 5 where user_id = 'u1'`)
+      await db.run(sql`insert into user_article_states (user_id, article_id, liked_at, liked_updated_at)
+        values ('u1', 1, 5, 5)`)
+      expect((await admit(db, ['s'])).allowed).toEqual([key('s')])
+      expect(Object.keys((await admit(db, ['1'])).refused)).toEqual([key('1')])
+      expect(await opened(db)).toEqual([`u1 ${utcDay(T0)} s`])
+    })
+
+    it('two decisions racing never take more places than the limit', async () => {
+      const db = await makeDb()
+      await seed(db)
+      await setting(db, 3)
+      const [a, b] = await Promise.all([admit(db, ['1', '2']), admit(db, ['3', '4'])])
+      expect((a?.allowed.length ?? 0) + (b?.allowed.length ?? 0)).toBe(3)
+      expect(await opened(db)).toHaveLength(3)
+    })
+
+    it('closing an account takes its record, and only its own', async () => {
+      const db = await makeDb()
+      await seed(db)
+      await admit(db, ['1'])
+      await admit(db, ['2'], T0, 'u2')
+      const closed = await closeAccount(db, {
+        userId: 'u1',
+        actor: 'u1',
+        action: 'account.delete',
+        group: 'g',
+        now: T0,
+      })
+      expect(closed).toBe('closed')
+      expect(await opened(db)).toEqual([`u2 ${utcDay(T0)} 2`])
     })
   })
 

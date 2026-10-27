@@ -173,7 +173,7 @@ export type Closed = 'closed' | 'already' | 'admin' | 'not_found'
  * 9. its blogs released, and a claim still pending failed, so no check gives it one later;
  * 10. its body translations waiting to run, given back to its ledger and ended unpaid; one
  *     already running finishes and is settled as ever (`member.erase` waits for it);
- * 11. imports waiting to be added for it.
+ * 11. imports waiting to be added for it, and its record of posts opened (ADR 0066).
  *
  * What stays for `member.erase`: what only the member's devices held (read states, likes,
  * highlights, folders, prefs, subscriptions) and the counts others see that rest on them.
@@ -300,6 +300,8 @@ export async function closeAccount(db: TelaDb, input: CloseAccount): Promise<Clo
     // Its translations not yet started, given back and ended unpaid; one running finishes.
     ...withdrawBodyRequests(db, id, now),
     db.run(sql`delete from pending_feeds where user_id = ${id}`),
+    // The day's record of posts opened from blogs it did not follow (ADR 0066).
+    db.run(sql`delete from post_opens where user_id = ${id}`),
     db.all(sql`select deleted_at from profiles where user_id = ${id}`),
   )
   let results: unknown[]
