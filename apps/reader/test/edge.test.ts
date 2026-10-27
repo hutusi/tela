@@ -7,7 +7,7 @@ import { memoryBlobs } from '@tela/platform/portable'
 import type { UiLocale } from '@tela/shared'
 import { sql } from 'drizzle-orm'
 import { XMLValidator } from 'fast-xml-parser'
-import { createTestApi, signedIn, type TestApi } from '../../api/test/helpers'
+import { createTestApi, operatorSets, signedIn, type TestApi } from '../../api/test/helpers'
 import { requestLocale } from '../src/i18n'
 import { type PublicRoute, publicRoute, renderPublicPage } from '../src/ssr'
 import type {
@@ -38,12 +38,13 @@ let cookie: string
 /** What the member's client names itself with on a member call (protocol and member id). */
 let client: Record<string, string>
 
-function memoryCache(): EdgeCache & { size: number } {
+function memoryCache(): EdgeCache & { size: number; keys(): string[] } {
   const store = new Map<string, { body: ArrayBuffer; init: ResponseInit }>()
   return {
     get size() {
       return store.size
     },
+    keys: () => [...store.keys()],
     async match(key) {
       const hit = store.get(key.url)
       return hit ? new Response(hit.body.slice(0), hit.init) : undefined
@@ -63,6 +64,10 @@ let edge: ReturnType<typeof createEdge>
 let apiCalls: string[]
 /** The cookie each call to tela-api carried, if any. */
 let apiCookies: (string | null)[]
+/** The keys each opens decision asked tela-api about (ADR 0066). */
+let opensAsked: string[][]
+/** The signed-in reader's id. */
+let readerId: string
 /** The edge's clock, for the age of a colo copy. */
 let edgeNow: number
 
@@ -102,6 +107,7 @@ beforeEach(async () => {
   fetched = []
   apiCalls = []
   apiCookies = []
+  opensAsked = []
   edgeNow = Date.UTC(2026, 9, 19, 12)
   cache = memoryCache()
   edge = createEdge({
@@ -110,6 +116,9 @@ beforeEach(async () => {
       fetch: async (req) => {
         apiCalls.push(new URL(req.url).pathname)
         apiCookies.push(req.headers.get('cookie'))
+        if (new URL(req.url).pathname === '/api/edge/opens') {
+          opensAsked.push(((await req.clone().json()) as { keys: string[] }).keys)
+        }
         return api.app.fetch(req)
       },
     },
@@ -129,6 +138,7 @@ beforeEach(async () => {
   const reader = await signedIn(api)
   cookie = reader.cookie
   client = reader.headers
+  readerId = reader.userId
   await blobs.put(
     `c/${KEY}.json`,
     JSON.stringify({
@@ -171,8 +181,11 @@ describe('content objects', () => {
 
   test('a bundle carries the objects that exist, keyed, capped at 25', async () => {
     const res = await get(`/o/bundle?k=${KEY},${OTHER},nothex,${KEY}`)
-    expect(Object.keys((await res.json()) as object)).toEqual([KEY])
+    expect(await res.json()).toMatchObject({ objects: { [KEY]: { key: KEY } }, refused: {} })
     expect((await get(`/o/bundle?k=${KEY}`, null)).status).toBe(401)
+    const many = Array.from({ length: 30 }, (_, i) => i.toString(16).padStart(32, '0'))
+    await get(`/o/bundle?k=${many.join(',')}`)
+    expect(opensAsked.at(-1)).toEqual(many.slice(0, 25))
   })
 
   test('a lapsed session cache is renewed through tela-api, and the fresh cookie passed on', async () => {
@@ -295,6 +308,148 @@ describe('the image proxy', () => {
     const hit = await get(`/img/${OTHER}/0`)
     expect(hit.headers.get('cache-control')).toBe('private, max-age=604800, immutable')
     expect(fetched.filter((u) => u.endsWith('c.png'))).toHaveLength(1)
+  })
+})
+
+describe('posts from blogs a member does not follow (ADR 0066)', () => {
+  const SUB = 'c'.repeat(32)
+  const K1 = 'd'.repeat(32)
+  const K2 = 'e'.repeat(32)
+  const MIDNIGHT = Date.UTC(2026, 9, 20)
+
+  /** SUB is a post in a feed the reader follows; K1 and K2 are in one they do not. */
+  beforeEach(async () => {
+    await api.db.run(sql`insert into sites (id, home_url, created_at, updated_at)
+      values (1, 'https://b.example', 0, 0)`)
+    await api.db.run(sql`insert into feeds (id, site_id, feed_url, host, next_fetch_at, created_at, updated_at)
+      values (1, 1, 'https://b.example/a', 'b.example', 0, 0, 0),
+        (2, 1, 'https://b.example/b', 'b.example', 0, 0, 0)`)
+    for (const [id, feed, k] of [
+      [1, 1, SUB],
+      [2, 2, K1],
+      [3, 2, K2],
+    ] as const) {
+      await api.db.run(sql`insert into articles (id, feed_id, dedup_key, fetched_at, sort_at,
+          current_version, content_key)
+        values (${id}, ${feed}, ${`g:${id}`}, 0, 0, 1, ${k})`)
+      await api.db.run(sql`insert into article_versions (article_id, version, provenance,
+          content_key, norm_version, body_chars, created_at)
+        values (${id}, 1, 'feed', ${k}, 1, 10, 0)`)
+      await blobs.put(
+        `c/${k}.json`,
+        JSON.stringify({ key: k, blocks: [], images: [`https://img.example/${k}.png`] }),
+      )
+      await blobs.put(`t/${k}/fr/0123abcd.json`, JSON.stringify({ lang: 'fr' }))
+      images.push({
+        url: `https://img.example/${k}.png`,
+        response: () =>
+          new Response(new Uint8Array([1]), { headers: { 'content-type': 'image/png' } }),
+      })
+    }
+    await api.db.run(sql`insert into subscriptions (user_id, feed_id, watermark_id, created_at, updated_at)
+      values (${readerId}, 1, 0, 0, 0)`)
+    await operatorSets(api, 'member.unsubscribedPostsPerDay', 1)
+  })
+
+  const opensCalls = () => apiCalls.filter((p) => p === '/api/edge/opens').length
+
+  test('a followed blog has no limit, and a post allowed asks nothing more that day', async () => {
+    await operatorSets(api, 'member.unsubscribedPostsPerDay', 0)
+    for (const path of [`/o/c/${SUB}.json`, `/o/t/${SUB}/fr/0123abcd.json`, `/img/${SUB}/0`]) {
+      expect([path, (await get(path)).status]).toEqual([path, 200])
+    }
+    const bundle = await get(`/o/bundle?k=${SUB}`)
+    expect(bundle.headers.get('cache-control')).toBe('private, max-age=31536000, immutable')
+    expect(Object.keys(((await bundle.json()) as { objects: object }).objects)).toEqual([SUB])
+    // One question to tela-api, kept by the colo under the member's hashed id, never the id.
+    expect(opensCalls()).toBe(1)
+    const kept = cache.keys().filter((k) => k.includes('/opens/'))
+    expect(kept).toHaveLength(1)
+    expect(kept[0]).not.toContain(readerId)
+    expect(kept[0]).toContain(`/2026-10-19/${SUB}`)
+    // The next UTC day asks again.
+    edgeNow = MIDNIGHT
+    expect((await get(`/o/c/${SUB}.json`)).status).toBe(200)
+    expect(opensCalls()).toBe(2)
+  })
+
+  test("a bundle past the day's limit lists what it refused, and is kept by nobody", async () => {
+    const res = await get(`/o/bundle?k=${K1},${K2},${SUB}`)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('cache-control')).toBe('no-store')
+    const body = (await res.json()) as { objects: object; refused: object }
+    expect(Object.keys(body.objects)).toEqual([K1, SUB])
+    expect(body.refused).toEqual({
+      [K2]: {
+        error: 'post_limit',
+        limit: 1,
+        resetsAt: Date.UTC(2026, 8, 29), // tela-api's own day
+      },
+    })
+  })
+
+  test('a single object or image refused is a 429 that says when to ask again', async () => {
+    expect((await get(`/o/c/${K1}.json`)).status).toBe(200)
+    for (const path of [`/o/c/${K2}.json`, `/o/t/${K2}/fr/0123abcd.json`, `/img/${K2}/0`]) {
+      const res = await get(path)
+      expect([path, res.status]).toEqual([path, 429])
+      expect(res.headers.get('cache-control')).toBe('no-store')
+      expect(Number(res.headers.get('retry-after'))).toBeGreaterThan(0)
+      expect(await res.json()).toMatchObject({ error: 'post_limit', limit: 1 })
+    }
+    // Refused, so asked again each time: subscribing makes it readable at once.
+    expect(opensAsked.filter((keys) => keys.includes(K2))).toHaveLength(3)
+    expect(fetched).toEqual([])
+    // The post allowed stays allowed: its translation and images ask nothing.
+    const before = opensCalls()
+    expect((await get(`/o/t/${K1}/fr/0123abcd.json`)).status).toBe(200)
+    expect((await get(`/img/${K1}/0`)).status).toBe(200)
+    expect(opensCalls()).toBe(before)
+  })
+
+  test('a refused post is never served from the colo, though another member put it there', async () => {
+    const other = await signedIn(api, 'other@x.test')
+    expect((await get(`/o/c/${K2}.json`, other.cookie)).status).toBe(200)
+    expect((await get(`/img/${K2}/0`, other.cookie)).status).toBe(200)
+    expect((await get(`/o/c/${K1}.json`)).status).toBe(200) // the reader's one place
+    const reads = gets.length
+    expect((await get(`/o/c/${K2}.json`)).status).toBe(429)
+    expect((await get(`/img/${K2}/0`)).status).toBe(429)
+    expect(gets).toHaveLength(reads)
+    expect(fetched.filter((u) => u.includes(K2))).toHaveLength(1)
+  })
+
+  test('a decision tela-api cannot give is a 503 to retry, and allows nothing', async () => {
+    const down = createEdge({
+      blobs,
+      api: {
+        fetch: async (req) =>
+          new URL(req.url).pathname === '/api/edge/opens'
+            ? new Response('down', { status: 500 })
+            : api.app.fetch(req),
+      },
+      assets: { fetch: async () => new Response(TEMPLATE) },
+      pages: pages as unknown as PublicPages,
+      cache,
+      fetchImage: async () => new Response('nope', { status: 404 }),
+      config: { authSecret: 'a-test-secret-that-is-long-enough-for-hmac', noindex: true },
+    })
+    const res = await down.fetch(new Request(`${ORIGIN}/o/c/${K1}.json`, { headers: { cookie } }))
+    expect(res.status).toBe(503)
+    expect(res.headers.get('retry-after')).toBe('30')
+    expect(cache.keys().filter((k) => k.includes('/opens/'))).toEqual([])
+  })
+
+  test('the decision is not for browsers to ask', async () => {
+    const res = await edge.fetch(
+      new Request(`${ORIGIN}/api/edge/opens`, {
+        method: 'POST',
+        headers: { cookie, origin: ORIGIN, 'content-type': 'application/json' },
+        body: JSON.stringify({ keys: [K1] }),
+      }),
+    )
+    expect(res.status).toBe(404)
+    expect(await api.db.all(sql`select * from post_opens`)).toEqual([])
   })
 })
 

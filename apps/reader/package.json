@@ -17,6 +17,7 @@
     "@fontsource/eb-garamond": "^5.3.0",
     "@fontsource/figtree": "^5.3.0",
     "@tela/content": "workspace:*",
+    "@tela/edge": "workspace:*",
     "@tela/ingest": "workspace:*",
     "@tela/platform": "workspace:*",
     "@tela/shared": "workspace:*",
