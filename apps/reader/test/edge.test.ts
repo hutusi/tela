@@ -441,14 +441,22 @@ describe('posts from blogs a member does not follow (ADR 0066)', () => {
   })
 
   test('the decision is not for browsers to ask', async () => {
-    const res = await edge.fetch(
-      new Request(`${ORIGIN}/api/edge/opens`, {
-        method: 'POST',
-        headers: { cookie, origin: ORIGIN, 'content-type': 'application/json' },
-        body: JSON.stringify({ keys: [K1] }),
-      }),
-    )
-    expect(res.status).toBe(404)
+    // Spelled any way that decodes to it: tela-api's router decodes the path before it matches.
+    for (const path of [
+      '/api/edge/opens',
+      '/api/%65dge/opens',
+      '/api/edge%2Fopens',
+      '/api/%65%64ge/',
+    ]) {
+      const res = await edge.fetch(
+        new Request(`${ORIGIN}${path}`, {
+          method: 'POST',
+          headers: { cookie, origin: ORIGIN, 'content-type': 'application/json' },
+          body: JSON.stringify({ keys: [K1] }),
+        }),
+      )
+      expect([path, res.status]).toEqual([path, 404])
+    }
     expect(await api.db.all(sql`select * from post_opens`)).toEqual([])
   })
 })

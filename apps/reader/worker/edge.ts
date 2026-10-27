@@ -42,6 +42,7 @@ import {
   type EdgeCache,
   nextUtcMidnight,
   readAtMost,
+  safeDecode,
   sha256Hex,
   utcDay,
   type Waiter,
@@ -165,6 +166,18 @@ function keepsAtTheColo(res: Response): boolean {
 const CROSS_ORIGIN_WRITERS = /^\/api\/(websub|admin)\//
 /** tela-api's routes for this Worker alone (ADR 0066): never forwarded from a browser. */
 const EDGE_ONLY = '/api/edge/'
+
+/**
+ * Whether a path is one of tela-api's routes for this Worker alone, however a browser spelled it.
+ * tela-api's router decodes each run of escapes in a path before it matches (Hono's
+ * `tryDecodeURI`), so `/api/%65dge/opens` is `/api/edge/opens` there: the path is read here as it
+ * will be read there, each run decoded where it decodes and left as it is where it does not, and
+ * `%2F` decoded too, which only refuses more.
+ */
+function edgeOnly(path: string): boolean {
+  const decoded = path.replace(/(?:%[0-9A-Fa-f]{2})+/g, (run) => safeDecode(run) ?? run)
+  return decoded.startsWith(EDGE_ONLY)
+}
 /** How soon to ask again when tela-api could not decide what a member may open. */
 const DECISION_RETRY_SECONDS = 30
 
@@ -619,7 +632,7 @@ export function createEdge(deps: EdgeDeps) {
           llms.set(url.origin, body)
         }
         response = text(body, 200, { 'cache-control': 'public, max-age=3600' })
-      } else if (path.startsWith(EDGE_ONLY)) {
+      } else if (edgeOnly(path)) {
         response = text('not found', 404)
       } else if (path.startsWith('/api/')) {
         const foreign = request.headers.get('origin') !== url.origin
