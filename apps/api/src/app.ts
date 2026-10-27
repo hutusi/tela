@@ -531,7 +531,7 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
   app.route('/api/v1', inviteRoutes(deps, auth))
   app.route('/api/v1/account', accountRoutes(deps, auth))
   // The consent page's questions, and Settings → Connected apps (ADR 0064).
-  app.route('/api/v1', connectRoutes(deps))
+  app.route('/api/v1', connectRoutes(deps, auth))
 
   return { app, auth }
 }

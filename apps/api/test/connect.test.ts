@@ -239,6 +239,18 @@ describe('POST /api/v1/connect/decide', () => {
     expect([...url.searchParams.keys()].sort()).toEqual(['code', 'iss', 'state'])
   })
 
+  test('a session ended elsewhere approves nothing, though its signed copy still works', async () => {
+    // Sign out everywhere, or a password reset, deletes the session rows; the browser's signed
+    // five-minute copy still passes the member checks every /api/v1 call takes.
+    await api.db.run(sql`delete from session where user_id = ${ann.userId}`)
+    expect((await askConsent(api, ann, authorizationParams(app, challenge))).status).toBe(200)
+    const res = await decide(api, ann, authorizationParams(app, challenge))
+    expect([res.status, await body(res)]).toEqual([401, { error: 'unauthorized' }])
+    expect(
+      await first(api.db, sql`select 1 as x from app_codes where user_id = ${ann.userId}`),
+    ).toBeUndefined()
+  })
+
   test('declining answers access_denied, and connects nothing', async () => {
     const res = await decide(api, ann, authorizationParams(app, challenge), {
       decision: 'decline',

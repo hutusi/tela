@@ -29,6 +29,7 @@ import {
 } from '@tela/shared'
 import { Hono } from 'hono'
 import type { ApiEnv } from '../app'
+import type { Auth } from '../auth'
 import type { ApiDeps } from '../deps'
 import { answerAt, isChallenge, matchRedirect, parseScope, STATE_MAX } from '../gateway/authorize'
 
@@ -133,7 +134,7 @@ function queryFields(url: string): Record<string, unknown> {
   return fields
 }
 
-export function connectRoutes(deps: ApiDeps) {
+export function connectRoutes(deps: ApiDeps, auth: Auth) {
   const { db, clock, config } = deps
   const routes = new Hono<ApiEnv>()
 
@@ -168,6 +169,14 @@ export function connectRoutes(deps: ApiDeps) {
     const body = (await c.req.json().catch(() => null)) as Record<string, unknown> | null
     if (typeof body !== 'object' || body === null) return c.json({ error: 'invalid_request' }, 400)
     const member = c.get('member')
+    // The session itself, read from D1 past its signed five-minute copy, as the account routes
+    // read it: approving mints tokens that outlive any session, so a session ended by a password
+    // reset or sign-out everywhere must not approve anything in the minutes its copy still works.
+    const live = await auth.api.getSession({
+      headers: c.req.raw.headers,
+      query: { disableCookieCache: true },
+    })
+    if (!live || live.user.id !== member.id) return c.json({ error: 'unauthorized' }, 401)
     const checked = await check(deps, member.id, body)
     if (!checked.ok) return c.json({ error: checked.error }, 400)
     const { decision, scope_granted: granted, email_granted: emailGranted } = body
