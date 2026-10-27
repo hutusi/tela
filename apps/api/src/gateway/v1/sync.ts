@@ -12,7 +12,7 @@
  * mint the same id cannot cancel each other's changes as replays. A subscribe past the member's
  * cap is answered `rejected` with `subscription_limit`, where the web's is a silent no-op.
  */
-import { first, subscriptionRoom, type TelaDb } from '@tela/data'
+import { first, NO_LIMIT, settingSql, subscriptionsHeld, type TelaDb } from '@tela/data'
 import {
   mutationSchema,
   prefSchemas,
@@ -86,7 +86,10 @@ async function overTheCap(db: TelaDb, userId: string, mutations: Mutation[]): Pr
   const mids = moves.map((m) => m.mid)
   const row = await first<{ room: number; targets: string; followed: string; replays: string }>(
     db,
-    sql`select ${subscriptionRoom(userId, false)} as room,
+    // The room as it is, below zero for a member over a cap lowered since: an unsubscribe frees
+    // one place of what they hold, not one under the cap (Codex's review). An app is never exempt.
+    sql`select (case when ${settingSql('member.maxSubscriptions')} is null then ${NO_LIMIT}
+        else ${settingSql('member.maxSubscriptions')} - ${subscriptionsHeld(userId)} end) as room,
       (select json_group_object(f.id, coalesce(f.merged_into, f.id)) from feeds f
         where f.id in (select value from json_each(${JSON.stringify(feedIds)}))) as targets,
       (select json_group_array(s.feed_id) from subscriptions s

@@ -154,6 +154,30 @@ describe('an admin’s token is an app’s', () => {
     expect(after.map((r) => r.feed_id)).toEqual([2, 3])
   })
 
+  test('a member over a cap lowered since is not made room by one unsubscribe', async () => {
+    await push([
+      { type: 'subscribe', feedId: 1 },
+      { type: 'subscribe', feedId: 2 },
+      { type: 'subscribe', feedId: 3 },
+    ])
+    await operatorSets(world.api, 'member.maxSubscriptions', 1)
+    const pushed = await push([
+      { type: 'unsubscribe', feedId: 3 },
+      { type: 'subscribe', feedId: 3 },
+    ])
+    // Two held after the unsubscribe, against a cap of one: the subscribe is refused, as the
+    // database refuses it, rather than reported applied and silently dropped.
+    expect(pushed.results.map((r) => r.error ?? r.status)).toEqual([
+      'applied',
+      'subscription_limit',
+    ])
+    const held = await world.api.db.all<{ feed_id: number }>(
+      sql`select feed_id from subscriptions where user_id = ${world.ann.userId}
+        and deleted_at is null order by feed_id`,
+    )
+    expect(held.map((r) => r.feed_id)).toEqual([1, 2])
+  })
+
   test('is counted on feeds, OPML, translations and opened posts, and sees its limits', async () => {
     await operatorSets(world.api, 'member.feedsPerDay', 0)
     const added = await call(world, '/v1/feeds', { body: { url: server.url('/feed1.xml') } })
