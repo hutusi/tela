@@ -28,6 +28,7 @@ import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { HTTPException } from 'hono/http-exception'
 import { type Auth, createAuth } from './auth'
+import { readArticle } from './core/public'
 import type { ApiDeps } from './deps'
 import { createGateway, gatewayHeaders } from './gateway'
 import { fromOperator } from './operator'
@@ -133,7 +134,10 @@ const STANDING_READS: ReadonlySet<string> = new Set([
   '/api/v1/export',
 ])
 export const guarded = (method: string, path: string) =>
-  (method !== 'GET' && method !== 'HEAD') || STANDING_READS.has(path)
+  (method !== 'GET' && method !== 'HEAD') ||
+  STANDING_READS.has(path) ||
+  // A post's row hands out its content key, which fetches the full post (ADR 0066).
+  path.startsWith('/api/v1/articles/')
 
 /** A client older than the protocol is told to reload, not left misreading rows. */
 const tooOld = (header: string | undefined) => protocolOf(header) < MIN_CLIENT
@@ -506,6 +510,16 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
     })
     if (asksGravatar(body.data.mutations, result.applied)) await checkGravatarSoon(deps, member)
     return c.json(result, 200, { 'cache-control': 'no-store' })
+  })
+
+  /**
+   * A post by id, as the device holds a synced one (ADR 0066): what a member opens from a public
+   * page, whose answers carry no content key. `{article, feed, site}` in the sync's row shapes.
+   */
+  app.get('/api/v1/articles/:id', async (c) => {
+    const held = await readArticle(deps, await webActor(c, deps.db), Number(c.req.param('id')))
+    if (!held) return c.json({ error: 'not_found' }, 404, { 'cache-control': 'no-store' })
+    return c.json(held, 200, { 'cache-control': 'no-store' })
   })
 
   app.route('/api/v1/admin', adminRoutes(deps, auth))

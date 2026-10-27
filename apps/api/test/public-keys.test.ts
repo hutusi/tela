@@ -7,7 +7,7 @@
  * Every GET route under `/api/v1/public` is found in Hono's own table, so a public route added
  * later is checked without being named here.
  */
-import { beforeEach, expect, test } from 'bun:test'
+import { beforeEach, describe, expect, test } from 'bun:test'
 import { bumpSeq, currentSeq, type TelaDb } from '@tela/data'
 import { sql } from 'drizzle-orm'
 import { createTestApi, type SignedIn, signedIn, type TestApi } from './helpers'
@@ -138,4 +138,34 @@ test('nor does the Following feed, which shows other members’ posts', async ()
   const text = await res.text()
   expect(text.includes('Post 1')).toBe(true)
   expect(text.includes('contentKey') || text.includes(SECRET)).toBe(false)
+})
+
+describe('a post by id', () => {
+  test('gives a member the row their device holds, content key and all, with its feed and blog', async () => {
+    const res = await api.request('/api/v1/articles/2', { as: viewer })
+    expect(res.status).toBe(200)
+    expect(res.headers.get('cache-control')).toBe('no-store')
+    const held = (await res.json()) as {
+      article: Record<string, unknown>
+      feed: Record<string, unknown>
+      site: Record<string, unknown>
+    }
+    expect(held.article).toMatchObject({ id: 2, feedId: 2, contentKey: `${SECRET}-2` })
+    expect(held.feed).toMatchObject({ id: 2, siteId: 2, feedUrl: 'https://blog2.example/feed' })
+    expect(held.site).toMatchObject({ id: 2, owned: false, claimed: false })
+    expect(held.site.translationOptOut).toBe(false)
+    // The blog's claimant holds it as their own.
+    const own = await api.request('/api/v1/articles/1', { as: writer })
+    expect(((await own.json()) as { site: { owned: boolean } }).site.owned).toBe(true)
+  })
+
+  test('is nothing for a post Tela does not hold, and only for a member in good standing', async () => {
+    for (const id of ['99', 'abc', '0', '-1']) {
+      expect((await api.request(`/api/v1/articles/${id}`, { as: viewer })).status).toBe(404)
+    }
+    expect((await api.request('/api/v1/articles/1')).status).toBe(401)
+    // Suspended, whatever copy of the session the cookie still carries (ADR 0059).
+    await db.run(sql`update profiles set suspended_at = 1 where user_id = ${viewer.userId}`)
+    expect((await api.request('/api/v1/articles/1', { as: viewer })).status).toBe(401)
+  })
 })

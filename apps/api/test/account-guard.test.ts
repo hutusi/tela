@@ -255,6 +255,8 @@ const MEMBER_ROUTES: MemberRoute[] = [
     body: () => ({ lang: 'fr', ids: [1] }),
     effect: 'reads',
   },
+  // A post by id, as a member opens one from a public page (ADR 0066).
+  { route: 'GET /api/v1/articles/:id', path: '/api/v1/articles/1', effect: 'reads' },
   // The admin console (ADR 0039): b is an admin.
   {
     route: 'POST /api/v1/admin/act',

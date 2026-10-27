@@ -82,8 +82,9 @@ const BLOGROLL = sql.raw(`id, name, description, is_public as "isPublic",
 const BLOGROLL_BLOG = sql.raw(`blogroll_id as "blogrollId", feed_id as "feedId", note,
   note_at as "noteAt", added_at as "addedAt", updated_at as "updatedAt",
   removed_at as "removedAt", seq`)
-const FEED = sql.raw(`f.id, f.site_id as "siteId", f.feed_url as "feedUrl", f.title, f.status,
-  f.last_fetched_at as "lastFetchedAt", f.last_error as "lastError",
+/** A feed as the reader holds one (`FeedRow`), from a table aliased `f`. */
+export const FEED_COLUMNS = sql.raw(`f.id, f.site_id as "siteId", f.feed_url as "feedUrl",
+  f.title, f.status, f.last_fetched_at as "lastFetchedAt", f.last_error as "lastError",
   f.last_item_at as "lastItemAt", f.seq`)
 /** An article as the reader holds one (`ArticleRow`), from a table aliased `a`. */
 export const ARTICLE_COLUMNS = sql.raw(`a.id, a.feed_id as "feedId", a.url, a.title, a.author,
@@ -138,7 +139,12 @@ const TRANSLATION = sql.raw(`b.content_key as "contentKey", b.lang, b.state,
   b.chunk_keys as "chunkKeys", b.object_key as "objectKey", b.failed_leaves as "failedLeaves",
   b.due_at as "dueAt", b.seq`)
 
-function siteColumns(userId: string): SQL {
+/**
+ * A blog as `userId`'s reader holds one (`SiteRow`), from a table aliased `s`: whether it is theirs,
+ * and its reader count as a device may show it. SQLite's 0/1 for `owned`, `claimed` and
+ * `translationOptOut`; the API makes them booleans.
+ */
+export function siteColumns(userId: string): SQL {
   return sql`s.id, s.home_url as "homeUrl", s.title, s.description, s.favicon_key as "faviconKey",
     s.primary_lang as "primaryLang", s.listing, (s.claimed_by = ${userId}) as "owned",
     (s.claimed_by is not null) as "claimed", ${deviceReaderCount('s')} as "readerCount",
@@ -304,10 +310,10 @@ export async function readPull(
 
     // Shared rows: the fresh part is unbounded (a horizon is bounded by itself); the changed part
     // is cut at `limit` like every other delta table.
-    freshFeeds: sql`select ${FEED} from feeds f where f.id in (${fresh})`,
+    freshFeeds: sql`select ${FEED_COLUMNS} from feeds f where f.id in (${fresh})`,
     feeds: snapshot
       ? sql`select 1 where false`
-      : sql`select ${FEED} from feeds f where f.id in (${heldFeeds}) and f.seq > ${cursor}
+      : sql`select ${FEED_COLUMNS} from feeds f where f.id in (${heldFeeds}) and f.seq > ${cursor}
           order by f.seq limit ${over}`,
     freshArticles: sql`select ${ARTICLE_COLUMNS} from articles a where a.id in (${freshArticles})`,
     articles: snapshot

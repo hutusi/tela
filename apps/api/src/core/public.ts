@@ -18,15 +18,18 @@ import {
   ARTICLE_COLUMNS,
   avatarOf,
   BLOG_NAME,
+  FEED_COLUMNS,
   inDiscover,
   isShown,
   PUBLIC_ARTICLE_COLUMNS,
   publicReaderCount,
+  siteColumns,
   standingOk,
   type TelaDb,
   visibleBlogsFrom,
 } from '@tela/data'
 import { BLOGROLL_ID, isReadingLanguage, isTopic } from '@tela/shared'
+import type { ArticleRow, FeedRow, SiteRow } from '@tela/sync'
 import { type SQL, sql } from 'drizzle-orm'
 import type { ApiDeps } from '../deps'
 import {
@@ -1066,5 +1069,46 @@ export async function search(
     sites: sites.slice(0, SEARCH_SITES),
     articles: articles.slice(0, SEARCH_POSTS_PAGE),
     more: articles.length > SEARCH_POSTS_PAGE,
+  }
+}
+
+/** A post as a member's device holds one, with its feed and blog, in the sync's row shapes. */
+export type HeldArticle = { article: ArticleRow; feed: FeedRow; site: SiteRow }
+
+/**
+ * A post by id, for `actor` to hold and open as if their device had synced it (ADR 0066): the
+ * article row with its content key, its feed and its blog, or null when Tela holds no such post.
+ * Any member may open any post Tela holds, the web's rule, which apps follow: what bounds it is
+ * the day's limit on bodies from blogs the member does not follow, counted when the body is
+ * fetched, not here. Whoever calls this has checked the actor's standing (tela-api's member
+ * check for the web, the token's resolution for an app).
+ */
+export async function readArticle(
+  deps: Pick<ApiDeps, 'db'>,
+  actor: Pick<Actor, 'userId'>,
+  articleId: number,
+): Promise<HeldArticle | null> {
+  const { db } = deps
+  if (!Number.isSafeInteger(articleId) || articleId <= 0) return null
+  const feedOf = sql`(select feed_id from articles where id = ${articleId})`
+  const [articles, feeds, sites] = (await db.batch([
+    db.all(sql`select ${ARTICLE_COLUMNS} from articles a where a.id = ${articleId}`),
+    db.all(sql`select ${FEED_COLUMNS} from feeds f where f.id = ${feedOf}`),
+    db.all(sql`select ${siteColumns(actor.userId)} from sites s
+      where s.id = (select site_id from feeds where id = ${feedOf})`),
+  ] as never)) as unknown as [ArticleRow[], FeedRow[], Row[]]
+  const article = articles[0]
+  const feed = feeds[0]
+  const site = sites[0]
+  if (!article || !feed || !site) return null
+  return {
+    article,
+    feed,
+    site: {
+      ...(site as unknown as SiteRow),
+      owned: site.owned === 1,
+      claimed: site.claimed === 1,
+      translationOptOut: site.translationOptOut === 1,
+    },
   }
 }
