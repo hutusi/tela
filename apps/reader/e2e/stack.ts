@@ -82,6 +82,9 @@ const configs = {
     ADMIN_TOKEN: 'e2e-admin',
     ENV: 'test',
     PUBLIC_URL: baseUrl,
+    // The gateway's own port stands in for api.telaread.com (ADR 0065): the OAuth issuer, and
+    // the `iss` a consent answer carries, must name the origin the suite's app calls.
+    API_URL: process.env.E2E_GATEWAY_URL ?? 'http://127.0.0.1:8812',
     // The fixture server stands in for gravatar.com (ADR 0032).
     GRAVATAR_URL: `${process.env.E2E_FIXTURE_URL ?? 'http://127.0.0.1:4790'}/gravatar`,
     // Apps that exist nowhere, so the sheet offers both providers (ADR 0036). tela-api only
