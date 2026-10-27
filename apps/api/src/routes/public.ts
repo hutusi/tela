@@ -30,11 +30,7 @@ import {
   withTitles,
 } from './public-sql'
 
-/**
- * Blogs on one page of Discover. The directory outgrew one page when the editorial list reached
- * 110, and a bare `limit` dropped the newest blogs from All with nothing to say so. Blogs a
- * blogroll's card on a profile names, in the blogroll's order.
- */
+/** Discover's page of blogs and a profile card's blogs are the shared reads' (`core/public.ts`). */
 export { DISCOVER_PAGE, PROFILE_CARD_BLOGS } from '../core/public'
 export { PROFILE_CACHE, PUBLIC_CACHE }
 

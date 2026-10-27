@@ -58,7 +58,10 @@ import {
 
 type Row = Record<string, unknown>
 
-/** Blogs on one page of Discover's Blogs. */
+/**
+ * Blogs on one page of Discover's Blogs. The directory outgrew one page when the editorial list
+ * reached 110, and a bare `limit` dropped the newest blogs from All with nothing to say so.
+ */
 export const DISCOVER_PAGE = 60
 /** Posts on one page of Articles. */
 export const ARTICLES_PAGE = 30
