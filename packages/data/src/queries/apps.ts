@@ -34,18 +34,25 @@ import { standingOk } from './standing'
  * End every live connection a member has, and each device's tokens under them, for `reason`. Two
  * statements, tokens first, for the caller's own batch: wherever Tela ends a member's other
  * sessions (password, provider link, sign out everywhere, the console's sign-out and suspension,
- * closing the account), their apps stop in the same commit.
+ * closing the account), their apps stop in the same commit. `onlyIf` (true as SQL) holds both to a
+ * condition the batch decides, as a suspension ends sessions only while it holds.
  */
-export function endConnections(db: TelaDb, userId: string, reason: AppEndReason, now: number) {
+export function endConnections(
+  db: TelaDb,
+  userId: string,
+  reason: AppEndReason,
+  now: number,
+  onlyIf: SQL = sql`1`,
+) {
   return [
     db.run(sql`
       update app_tokens set ended_at = ${now}, end_reason = ${reason}
-      where ended_at is null
+      where ended_at is null and ${onlyIf}
         and grant_id in (select id from app_grants where user_id = ${userId} and ended_at is null)
     `),
     db.run(sql`
       update app_grants set ended_at = ${now}, end_reason = ${reason}, updated_at = ${now}
-      where user_id = ${userId} and ended_at is null
+      where user_id = ${userId} and ended_at is null and ${onlyIf}
     `),
   ] as const
 }

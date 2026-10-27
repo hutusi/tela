@@ -23,6 +23,7 @@ import type { TelaDb } from '../db'
 import { isFenceRefusal } from '../leases'
 import { bumpSeq, currentSeq } from '../seq'
 import { audit, newGroupId } from './admin'
+import { endConnections } from './apps'
 import { withdrawBodyRequests } from './translation'
 
 type Statement = ReturnType<TelaDb['run']>
@@ -162,8 +163,9 @@ export type Closed = 'closed' | 'already' | 'admin' | 'not_found'
  * 4. its notes and blogrolls, emptied and deleted, so no page shows them;
  * 5. the profile emptied (name, bio, picture, languages, both privacy switches, the console) and
  *    marked closed; the handle stays;
- * 6. every way in: sessions, passwords and providers, mailed codes and OAuth states, and Tela's
- *    own counts for the member and the address;
+ * 6. every way in: sessions, the apps connected to it and their tokens (ADR 0064), passwords and
+ *    providers, mailed codes and OAuth states, and Tela's own counts for the member and the
+ *    address;
  * 7. its invitations: its codes revoked and their holds cancelled, and the address on the
  *    invitation it joined by replaced, so the record of who it invited, and who invited it, stays
  *    without the address; nobody else's invitation is touched;
@@ -251,6 +253,7 @@ export async function closeAccount(db: TelaDb, input: CloseAccount): Promise<Clo
       returning user_id
     `),
     db.run(sql`delete from session where user_id = ${id}`),
+    ...endConnections(db, id, 'closed', now),
     db.run(sql`delete from account where user_id = ${id}`),
     // Codes better-auth mailed the address (`<type>-otp-<address>`, Tela's own deletion code
     // among them) and an OAuth state naming the member, which holds their address. Compared

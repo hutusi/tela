@@ -16,6 +16,7 @@ import {
   claimInvite,
   consumeLimit,
   currentSeq,
+  endConnections,
   first,
   holdsInvite,
   isClosedEmail,
@@ -27,7 +28,7 @@ import {
   type TelaDb,
   waitsOnFullCode,
 } from '@tela/data'
-import { DEFAULT_UI_LOCALE, normalizeInviteCode } from '@tela/shared'
+import { type AppEndReason, DEFAULT_UI_LOCALE, normalizeInviteCode } from '@tela/shared'
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import {
@@ -310,18 +311,27 @@ const NO_TOKENS = {
 
 /**
  * End every session a member has but the one whose token is kept (none when `keep` is null), and
- * say how many ended (ADR 0036). Each device's signed five-minute copy of an ended session still
- * works where only that copy is read (ADR 0024); `/api/v1/account` reads past it.
+ * say how many ended (ADR 0036); and, in the same batch, every app connected to the account, with
+ * each device's tokens, for `reason` (ADR 0064): whatever made the member end their other sessions
+ * (a password set or changed, a provider linked, "sign out everywhere") is as much reason to stop
+ * an app acting for them. Each device's signed five-minute copy of an ended session still works
+ * where only that copy is read (ADR 0024); `/api/v1/account` reads past it. A token is read from
+ * D1 on every call, so an app stops at once.
  */
 export async function endOtherSessions(
   db: TelaDb,
   userId: string,
   keep: string | null,
+  reason: AppEndReason,
+  now: number,
 ): Promise<number> {
-  const ended = await db
-    .delete(schema.session)
-    .where(and(eq(schema.session.userId, userId), ne(schema.session.token, keep ?? '')))
-    .returning({ id: schema.session.id })
+  const [ended] = await db.batch([
+    db
+      .delete(schema.session)
+      .where(and(eq(schema.session.userId, userId), ne(schema.session.token, keep ?? '')))
+      .returning({ id: schema.session.id }),
+    ...endConnections(db, userId, reason, now),
+  ])
   return ended.length
 }
 
@@ -435,9 +445,16 @@ export function createAuth(deps: Pick<ApiDeps, 'db' | 'mail' | 'clock' | 'config
       minPasswordLength: PASSWORD_LENGTH.min,
       maxPasswordLength: PASSWORD_LENGTH.max,
       revokeSessionsOnPasswordReset: true,
-      // The member is told, as at every change to their ways in. A notice that fails to go is
-      // logged rather than fail the reset, which has set the password by then.
-      onPasswordReset: ({ user }) => notifyMember(deps, user, { kind: 'password-reset' }),
+      // better-auth has ended the sessions by now; the apps connected to the account end here
+      // (ADR 0064), as wherever Tela ends a member's other sessions. Then the member is told, as at
+      // every change to their ways in. Neither failure fails the reset, which has set the password
+      // by then: each is logged.
+      onPasswordReset: async ({ user }) => {
+        await db
+          .batch([...endConnections(db, user.id, 'password', clock.now())])
+          .catch((err) => console.error('connections not ended', user.id, err))
+        await notifyMember(deps, user, { kind: 'password-reset' })
+      },
     },
     advanced: {
       cookiePrefix: COOKIE_PREFIX,
@@ -612,9 +629,13 @@ export function createAuth(deps: Pick<ApiDeps, 'db' | 'mail' | 'clock' | 'config
               context.context.authCookies.sessionToken.name,
               context.context.secret,
             )
-            await endOtherSessions(db, link.userId, typeof token === 'string' ? token : null).catch(
-              (err) => console.error('sessions not ended', link.userId, err),
-            )
+            await endOtherSessions(
+              db,
+              link.userId,
+              typeof token === 'string' ? token : null,
+              'link',
+              clock.now(),
+            ).catch((err) => console.error('sessions not ended', link.userId, err))
             await notifyMember(
               deps,
               { id: link.userId, email: link.email },

@@ -367,7 +367,10 @@ describe('signing a member out', () => {
       target_key: ann.userId,
       actor_id: ops.userId,
     })
-    expect(JSON.parse(row?.detail ?? '{}')).toEqual({ from: { sessions: 2 }, to: { sessions: 0 } })
+    expect(JSON.parse(row?.detail ?? '{}')).toEqual({
+      from: { sessions: 2, connections: 0 },
+      to: { sessions: 0, connections: 0 },
+    })
 
     expect(await act({ action: 'member.signOut', ids: [ann.userId, 'nobody'] })).toEqual({
       done: [],
