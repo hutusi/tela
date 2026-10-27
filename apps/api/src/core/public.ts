@@ -1016,7 +1016,8 @@ export type SearchPage = {
  * blogs anyone can find plus the actor's own private ones (`SEARCH_SITES` of them, ranked, on
  * every page). A hit may match its translation, so it comes with the title the member reads it
  * under in `lang` (AGENTS.md: showing the original would render a hit with none of the words
- * typed), never one of a blog whose writer turned translation off.
+ * typed), never one of a blog whose writer turned translation off. Nor is such a blog's post found
+ * by a translation it hides: the hit would show none of the words typed either.
  */
 export async function search(
   deps: Pick<ApiDeps, 'db'>,
@@ -1051,7 +1052,10 @@ export async function search(
       from articles a
       where a.feed_id in (select feed_id from subscriptions where user_id = ${actor.userId} and deleted_at is null)
         and (a.title like ${pattern} escape '\\' or exists (
-          select 1 from article_titles t where t.article_id = a.id and t.title like ${pattern} escape '\\'))
+          select 1 from article_titles t join feeds tf on tf.id = a.feed_id
+            join sites ts on ts.id = tf.site_id
+          where t.article_id = a.id and ts.translation_opt_out = 0
+            and t.title like ${pattern} escape '\\'))
       order by a.sort_at desc, a.id desc
       limit ${SEARCH_POSTS_PAGE + 1} offset ${(page - 1) * SEARCH_POSTS_PAGE}
     `),

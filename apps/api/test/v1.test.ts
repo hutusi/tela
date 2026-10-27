@@ -296,6 +296,20 @@ describe('a writer’s “no translation”', () => {
     expect((site.posts as Json[])[0]?.translatedTitle).toBeNull()
   })
 
+  test('search finds none of its posts by the translations it hides, on the API or the web', async () => {
+    await subscribeAll()
+    // `被守住的安静` is post 201's stored title in Simplified Chinese, which blog 2 said no to.
+    const found = await json(await call(world, `/v1/search?q=${encodeURIComponent('安静')}`))
+    expect(found.posts).toEqual([])
+    const web = await world.api.request(`/api/v1/search?q=${encodeURIComponent('安静')}`, {
+      as: world.ann,
+    })
+    expect(((await web.json()) as { articles: unknown[] }).articles).toEqual([])
+    // Another blog's translation still finds its post: `像素` is in 101's.
+    const pixels = await json(await call(world, `/v1/search?q=${encodeURIComponent('像素')}`))
+    expect((pixels.posts as Json[]).map((p) => p.id)).toEqual([101])
+  })
+
   test('turned back on by its claimant, sends what it kept out in the next delta', async () => {
     await subscribeAll()
     await world.api.db.run(sql`update sites set claimed_by = ${world.bo.userId} where id = 2`)
