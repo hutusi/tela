@@ -258,10 +258,14 @@ Two things stop your app without ending connections:
 
 - **Your app is cut off** (suspended) by the operator: every call is refused with 403
   `app_suspended`, and every refresh with `unauthorized_client`, until the app is restored; then
-  the same tokens work again, so keep them. Content a device was allowed in the last minute can still load for up to a
-  minute. The operator writes to your contact address before or as they do this.
+  the same tokens work again, so keep them. The operator writes to your contact address before or
+  as they do this.
 - **The operator stops every app** (`apps.enabled`): every call answers 503 `apps_paused` with
   `Retry-After`. Wait, and keep the tokens.
+
+In both cases, and when a connection ends, what the API's edge serves from its own copies can
+still answer for up to a minute: public answers kept there, and bodies, translations and images
+of posts a device was allowed in the last minute (see [v1.md](v1.md#rate-limits)).
 
 The operator lowering your app's level, or taking the email away, reaches live tokens at once: a
 `write` token then acts as `read`. Settings lists each connection with what it may do, when it was
