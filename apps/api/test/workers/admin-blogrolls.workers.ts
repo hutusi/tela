@@ -31,6 +31,7 @@ it('lists, hides, restores and undoes a blogroll by its text id on D1', async ()
     ingest: {} as Ingest,
     config: {
       publicUrl: ORIGIN,
+      apiUrl: 'http://api.tela.test',
       authSecret: 'a-test-secret-that-is-long-enough-for-hmac',
       adminToken: 'admin',
       mailFrom: 'Tela <noreply@tela.test>',

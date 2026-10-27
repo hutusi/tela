@@ -17,6 +17,8 @@ export type Env = {
   }
   /** The public origin, e.g. https://telaread.com. */
   PUBLIC_URL: string
+  /** The API's origin for apps and the OAuth issuer, e.g. https://api.telaread.com (ADR 0065). */
+  API_URL: string
   MAIL_FROM: string
   /** Secret: signs sessions and the cookie cache. tela-web holds the same value. */
   AUTH_SECRET: string

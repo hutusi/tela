@@ -12,6 +12,12 @@ export type OAuthClient = { clientId: string; clientSecret: string }
 export type ApiConfig = {
   /** The public origin readers use (the only one: workers.dev is off). better-auth's base URL. */
   publicUrl: string
+  /**
+   * The API's origin for apps, `https://api.telaread.com` (ADR 0065): the OAuth issuer, and where
+   * its token and revocation endpoints are (ADR 0064). No trailing slash: RFC 9207 compares the
+   * issuer exactly.
+   */
+  apiUrl: string
   /** Signs sessions and the cookie cache; tela-web holds the same secret to read the cache. */
   authSecret: string
   /** Bearer token for `/api/admin/*`; unset turns those routes off. */

@@ -57,6 +57,7 @@ function appFor(env: Env) {
     ...(env.ENV === 'test' ? { cycle: (options) => env.JOBS.cycle(options) } : {}),
     config: {
       publicUrl: env.PUBLIC_URL,
+      apiUrl: env.API_URL,
       authSecret: env.AUTH_SECRET,
       ...(env.ADMIN_TOKEN ? { adminToken: env.ADMIN_TOKEN } : {}),
       mailFrom: env.MAIL_FROM,

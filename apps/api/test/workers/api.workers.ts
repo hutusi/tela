@@ -43,6 +43,7 @@ function stack() {
     ingest: {} as Ingest,
     config: {
       publicUrl: ORIGIN,
+      apiUrl: 'http://api.tela.test',
       authSecret: 'a-test-secret-that-is-long-enough-for-hmac',
       adminToken: 'admin',
       mailFrom: 'Tela <noreply@tela.test>',
