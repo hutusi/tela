@@ -4085,6 +4085,22 @@
               "description": "Open enum"
             }
           },
+          "removed": {
+            "type": "object",
+            "properties": {
+              "articles": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                }
+              }
+            },
+            "required": [
+              "articles"
+            ]
+          },
           "rows": {
             "type": "object",
             "properties": {
@@ -5055,6 +5071,7 @@
           "reset",
           "lang",
           "types",
+          "removed",
           "rows"
         ]
       },

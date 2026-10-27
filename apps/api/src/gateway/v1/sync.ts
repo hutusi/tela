@@ -37,6 +37,7 @@ import {
   v1Profile,
   v1Recommendation,
   v1Rejection,
+  v1Removed,
   v1Site,
   v1State,
   v1Subscription,
@@ -156,6 +157,7 @@ export function syncRoutes(deps: ApiDeps) {
         reset: startOver || pull.reset,
         lang,
         types,
+        removed: v1Removed(pull.tombstones, types),
         rows: {
           profile: has('profile') && profile ? v1Profile(profile, ctx) : null,
           prefs: some('prefs', r.prefs, sentPref),

@@ -61,6 +61,7 @@ type Sync = {
   reset: boolean
   more: boolean
   types: string[]
+  removed: { articles: number[] }
   rows: { profile: Json | null } & Record<
     'subscriptions' | 'sites' | 'articles' | 'titles' | 'states' | 'translations',
     Json[]
@@ -234,6 +235,24 @@ describe('the cursor', () => {
     expect((await pull('lang=fr&cursor=not-a-cursor')).reset).toBe(true)
     expect((await call(world, '/v1/sync?lang=fr&types=claims')).status).toBe(400)
     expect((await call(world, '/v1/sync?lang=ja')).status).toBe(400)
+  })
+
+  test('a delta says which posts Tela no longer holds', async () => {
+    await subscribeAll()
+    const snapshot = await pull('lang=en')
+    expect(snapshot.removed).toEqual({ articles: [] })
+    const { db } = world.api
+    // How the web's pull says a post went (no writer removes one today): a tombstone in its feed.
+    await write(
+      world.api,
+      db.run(sql`insert into tombstones (seq, user_id, feed_id, entity, key)
+        values (${currentSeq}, null, 1, 'article', '102'), (${currentSeq}, null, 1, 'feed', '1')`),
+    )
+    const delta = await pull(`lang=en&cursor=${snapshot.cursor}`)
+    expect(delta.removed).toEqual({ articles: [102] })
+    // Only to an app that holds posts.
+    const titlesOnly = await pull(`lang=en&types=titles&cursor=${snapshot.cursor}`)
+    expect(titlesOnly.removed).toEqual({ articles: [] })
   })
 
   test('a post marked unread by hand says so, and a read one does not', async () => {

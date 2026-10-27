@@ -4,10 +4,59 @@ import { join } from 'node:path'
 import { NORM_VERSION } from '@tela/shared'
 import { parseFeedText } from './feed'
 import { FIXTURE_FEEDS, FIXTURES_DIR } from './fixtures.test-helper'
-import { buildContentObject, contentKeyOf, imageProxyPath, objectKeys } from './object'
+import {
+  buildContentObject,
+  contentKeyOf,
+  imageProxyPath,
+  OBJECT_FORMAT,
+  objectKeys,
+} from './object'
 import { processArticleHtml } from './process'
 
 const body = (html: string) => processArticleHtml({ html, baseUrl: 'https://blog.example/post/' })
+
+/**
+ * Every content object's shape, by `OBJECT_FORMAT`: its keys, its blocks', its leaves' (optional
+ * ones marked `?`) and its stats'. Apps read objects as they are stored (`/o/c/…`, ADR 0065), and
+ * `format` is how they know what they read. A change to the shape is a new format: add its entry
+ * here and bump `OBJECT_FORMAT`; never edit an entry a format already shipped with.
+ */
+const SHAPES: Record<number, Record<string, string[]>> = {
+  1: {
+    object: ['blocks', 'format', 'images', 'key', 'lang', 'leaves', 'norm', 'stats'],
+    block: ['html', 'leaves', 'tag'],
+    leaf: ['chars', 'hash', 'skip?'],
+    stats: ['chars', 'minutes', 'words'],
+  },
+}
+
+describe('a content object’s shape', () => {
+  test('is the one its OBJECT_FORMAT says, so apps can trust `format`', async () => {
+    // A leaf with words and one without (`skip`), and an image.
+    const object = buildContentObject(
+      await body('<p>Words to read <img src="https://cdn.example/a.png"></p><p>2026</p>'),
+    )
+    expect(object.format).toBe(OBJECT_FORMAT)
+    const leaves = Object.values(object.leaves)
+    expect(leaves.some((l) => l.skip)).toBe(true)
+    const keys = (value: object) => Object.keys(value).sort()
+    const always = leaves.map(keys).reduce((a, b) => a.filter((k) => b.includes(k)))
+    const shape = {
+      object: keys(object),
+      block: [...new Set(object.blocks.flatMap(keys))].sort(),
+      leaf: [...new Set(leaves.flatMap(keys))]
+        .map((k) => (always.includes(k) ? k : `${k}?`))
+        .sort(),
+      stats: keys(object.stats),
+    }
+    if (JSON.stringify(shape) !== JSON.stringify(SHAPES[OBJECT_FORMAT])) {
+      throw new Error(
+        `a content object's shape changed without OBJECT_FORMAT (${OBJECT_FORMAT}): bump it and add its shape to SHAPES`,
+      )
+    }
+    expect(shape).toEqual(SHAPES[OBJECT_FORMAT] as typeof shape)
+  })
+})
 
 describe('buildContentObject', () => {
   test('is keyed by the annotated body, and the same body always builds the same object', async () => {

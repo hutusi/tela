@@ -354,6 +354,12 @@ export const syncSchema = z.object({
   reset: z.boolean(),
   lang: language,
   types: z.array(openEnum(V1_ROW_TYPES)),
+  /**
+   * Rows Tela no longer holds, sent once in the delta after they went: drop each, with what the app
+   * keeps of it. `articles`: posts by id, their states, titles and highlights with them. Empty in
+   * a snapshot, which `reset` already replaces whole, and for an app that holds no posts.
+   */
+  removed: z.object({ articles: z.array(id) }),
   rows: z.object({
     profile: profileRowSchema.nullable(),
     prefs: z.array(prefRowSchema),

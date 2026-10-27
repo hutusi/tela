@@ -28,6 +28,9 @@
       "feedFolders",
       "follows"
     ],
+    "removed": {
+      "articles": []
+    },
     "rows": {
       "profile": {
         "handle": "ann",

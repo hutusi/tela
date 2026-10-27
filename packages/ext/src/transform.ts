@@ -513,6 +513,24 @@ export const v1Follow = (
   deletedAt: row.deletedAt,
 })
 
+/**
+ * What a delta says Tela no longer holds, from the pull's tombstones: the posts, by id, for an app
+ * that holds posts. No writer removes a post today, so it is empty, and it is in v1 from the start
+ * so that one can later without a new version.
+ */
+export function v1Removed(
+  tombstones: readonly { entity: string; key: string }[],
+  types: readonly V1RowType[],
+) {
+  const articles = types.includes('articles')
+    ? tombstones
+        .filter((t) => t.entity === 'article')
+        .map((t) => Number(t.key))
+        .filter((id) => Number.isSafeInteger(id) && id > 0)
+    : []
+  return { articles }
+}
+
 // ———————————————————————————————————————————— the public side
 
 /**
