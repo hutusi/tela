@@ -9,6 +9,13 @@ everything so far sits under `[Unreleased]`.
 
 ### Changed
 
+- **Full posts from blogs you don't follow are counted** (ADR 0066). A member reads as many posts
+  as they like from blogs they subscribe to, and 100 a day in full from any other blog, on the
+  web and in their apps together; opening one again that day, its translation or its images cost
+  nothing more. A post past the day's count shows its excerpt, when more open, *Subscribe to keep
+  reading* and *Read it on the blog*, and stays unread. Public pages no longer carry the keys
+  that fetch full text, so walking Discover copies nothing, and the reader prefetches only posts
+  from blogs the member subscribes to. For writers and Privacy say so.
 - **Adding a blog finds feeds it used to miss.** A server that answers with the whole feed but
   calls it a partial answer (status 206, as Caddy does for a compressed file) is read as it is
   meant: kalzumeus.com could not be added, and its feed had failed every fetch. A feed is read up
@@ -91,6 +98,17 @@ everything so far sits under `[Unreleased]`.
 
 ### Added
 
+- **Approved apps** (ADRs 0064, 0065). Apps other developers make, a desktop app first, can act
+  for a member through Tela's own API at `api.telaread.com`, once the operator approves them. A
+  member connects one in their browser at `telaread.com/connect`, where they see who made it,
+  what it asks for (read only, or read and write, which they can lower) and what no app can do,
+  and never hand it a password; Settings → Connected apps lists each connection and disconnects
+  it. Changing the password, linking Google or GitHub or signing out everywhere ends them too. An
+  app syncs and works offline as the web app does, is held to every member limit, and is never an
+  admin, even on the operator's account. The console's Apps area registers an app as a draft its
+  developer tests with their own account, approves it, cuts it off and restores it. The API is a
+  fifth Worker, tela-gateway, with formats of its own, so the web can keep changing; v1 is a
+  preview, documented for developers in `docs/api/`.
 - **Ready to open to everyone** (ADRs 0056–0063). Sign-up can open to anyone and close again from
   the console, with no deploy and a daily cap on new accounts; the operator's limits and budgets
   are settings, changed and undone there or with `bun run admin set`. Members can delete their

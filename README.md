@@ -44,7 +44,7 @@ bun run lint          # biome
 bun run typecheck     # tsc in every workspace
 bun run test          # bun test, on the portable adapters
 bun run test:workers  # the data contract and the API again, on D1 inside workerd
-bun run e2e           # Playwright against the three Workers in one wrangler dev
+bun run e2e           # Playwright against tela-web, tela-api and tela-jobs in one wrangler dev, tela-gateway beside it
 bun run dev           # the reader with tela-api and tela-jobs beside it, and tela-gateway; see docs/OPERATIONS.md
 ```
 
@@ -76,6 +76,10 @@ bun run dev           # the reader with tela-api and tela-jobs beside it, and te
   subscriptions by original or translated title.
 - **Freshness**: adaptive polling with conditional requests, plus WebSub push where a feed
   advertises a hub.
+- **Apps**: approved third-party apps, a desktop app first, connect in the member's browser and
+  act for them through Tela's own API at `api.telaread.com`, offline-first like the web app and
+  never as an admin; members see and disconnect them in Settings. Developers start at
+  `docs/api/`.
 - **Your data**: export it as JSON and OPML, release a claimed blog, or delete your account from
   Settings; report what breaks the rules on any public page.
 - **Findable**: public pages in each of the four languages by address, with sitemaps,
@@ -92,6 +96,7 @@ bun run dev           # the reader with tela-api and tela-jobs beside it, and te
 ## Status
 
 The local-first stack (three Cloudflare Workers, D1, R2 and Queues) is built and tested, and
-replaces the Postgres app at the cutover in `docs/OPERATIONS.md`. See `docs/ARCHITECTURE.md` for
+replaces the Postgres app at the cutover in `docs/OPERATIONS.md`; another Worker, tela-gateway,
+serves the API for apps. See `docs/ARCHITECTURE.md` for
 the design, `docs/OPERATIONS.md` for how it is provisioned and run, and `CHANGELOG.md` for what
 has shipped.
