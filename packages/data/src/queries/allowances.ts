@@ -355,6 +355,8 @@ export type MemberAllowances = {
   feeds: { perDay: number | null; addedToday: number; pending: number }
   subscriptions: { max: number | null; count: number }
   translations: { perDay: number | null; usedToday: number; waiting: number }
+  /** Posts opened today from blogs the member does not follow (ADR 0066), each once a day. */
+  posts: { perDay: number | null; openedToday: number }
 }
 
 /** What the member has used of each allowance, in one read; `exempt` is the actor's. */
@@ -375,6 +377,8 @@ export async function memberAllowances(
     translations_per_day: number | null
     used_today: number
     waiting: number
+    posts_per_day: number | null
+    opened_today: number
   }>(sql`
     select
       ${exemptFromLimits(userId, exempt)} as exempt,
@@ -387,7 +391,10 @@ export async function memberAllowances(
       coalesce((select requests from usage_daily where subject = ${userId} and day = ${day}), 0)
         as used_today,
       (select count(*) from body_translations where requested_by = ${userId}
-        and state = 'requested' and due_at > ${now}) as waiting
+        and state = 'requested' and due_at > ${now}) as waiting,
+      ${settingSql('member.unsubscribedPostsPerDay')} as posts_per_day,
+      (select count(*) from post_opens where user_id = ${userId} and day = ${day})
+        as opened_today
   `)
   const r = rows[0]
   if (!r) throw new Error('the allowance read returned no row')
@@ -405,5 +412,6 @@ export async function memberAllowances(
       usedToday: Number(r.used_today),
       waiting: Number(r.waiting),
     },
+    posts: { perDay: limit(r.posts_per_day), openedToday: Number(r.opened_today) },
   }
 }

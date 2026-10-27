@@ -1601,11 +1601,15 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         feeds: brought(['a', 'b', 'c']),
         now: T0,
       })
+      // One post opened today from a blog they do not follow, and one yesterday.
+      await db.run(sql`insert into post_opens (user_id, day, content_key, opened_at)
+        values ('u1', ${utcDay(T0)}, 'c1', ${T0}), ('u1', ${utcDay(T0 - 86_400_000)}, 'c0', 0)`)
       expect(await memberAllowances(db, 'u1', T0, false)).toEqual({
         exempt: false,
         feeds: { perDay: 1, addedToday: 1, pending: 2 },
         subscriptions: { max: 300, count: 1 },
         translations: { perDay: 20, usedToday: 0, waiting: 0 },
+        posts: { perDay: 100, openedToday: 1 },
       })
     })
   })

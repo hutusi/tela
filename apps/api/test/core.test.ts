@@ -147,9 +147,14 @@ describe('an admin acting through an app is counted', () => {
       translations: { perDay: 20 },
       feeds: { perDay: 20 },
       subscriptions: { max: 300 },
+      posts: { perDay: 100, openedToday: 0 },
       exempt: false,
     })
-    expect(await readUsage(deps, asWeb)).toMatchObject({ feeds: { perDay: null }, exempt: true })
+    expect(await readUsage(deps, asWeb)).toMatchObject({
+      feeds: { perDay: null },
+      posts: { perDay: null },
+      exempt: true,
+    })
   })
 })
 

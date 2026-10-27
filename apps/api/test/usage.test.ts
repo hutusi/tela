@@ -31,6 +31,7 @@ describe('the usage answer', () => {
       translations: { perDay: 20, usedToday: 0, waiting: 0, resetsAt: NEXT_DAY },
       feeds: { perDay: 20, addedToday: 0, pending: 0 },
       subscriptions: { max: 300, count: 0 },
+      posts: { perDay: 100, openedToday: 0, resetsAt: NEXT_DAY },
       exempt: false,
     })
   })
@@ -62,12 +63,18 @@ describe('the usage answer', () => {
         values ('c1', 'fr', 'requested', ${reader.userId}, ${NEXT_DAY}, ${now}),
           ('c2', 'fr', 'requested', ${reader.userId}, null, ${now})`),
       api.db.run(sql`insert into settings (key, value, updated_at)
-        values ('member.feedsPerDay', '5', 0), ('member.maxSubscriptions', 'null', 0)`),
+        values ('member.feedsPerDay', '5', 0), ('member.maxSubscriptions', 'null', 0),
+          ('member.unsubscribedPostsPerDay', '2', 0)`),
+      // Two posts opened today from blogs they do not follow, and one yesterday (ADR 0066).
+      api.db.run(sql`insert into post_opens (user_id, day, content_key, opened_at)
+        values (${reader.userId}, ${day}, 'c1', ${now}), (${reader.userId}, ${day}, 'c2', ${now}),
+          (${reader.userId}, '2026-09-27', 'c3', 0)`),
     ] as never)
     expect(await usage()).toEqual({
       translations: { perDay: 20, usedToday: 3, waiting: 1, resetsAt: NEXT_DAY },
       feeds: { perDay: 5, addedToday: 2, pending: 1 },
       subscriptions: { max: null, count: 2 },
+      posts: { perDay: 2, openedToday: 2, resetsAt: NEXT_DAY },
       exempt: false,
     })
   })
@@ -78,6 +85,7 @@ describe('the usage answer', () => {
       translations: { perDay: null },
       feeds: { perDay: null },
       subscriptions: { max: null },
+      posts: { perDay: null },
       exempt: true,
     })
   })
