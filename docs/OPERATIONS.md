@@ -1182,8 +1182,9 @@ tela-api over the network, unlike the rest of the reader, and every change it ma
   group by 1`. Raising the day or the cap lets the next tick move them.
 - **Posts from blogs a member does not follow** (ADR 0066): `member.unsubscribedPostsPerDay`
   (100) counts the full posts a member opens per UTC day from blogs they do not subscribe to, on
-  the web and in every app together; their own blogs are never counted, and a post counts once a
-  day however often it is fetched. Admins are exempt on the web and never through an app. A
+  the web and in every app together. Only blogs they subscribe to are free: a blog they claimed
+  counts like any other unless they subscribe to it. A post counts once a day however often it is
+  fetched. Admins are exempt on the web and never through an app. A
   refusal is a 429 `post_limit` with `Retry-After`, and the reader shows the post's excerpt with
   *Subscribe to keep reading*. Who is near it: `select user_id, count(*) from post_opens where day
   = date('now') group by 1 order by 2 desc limit 10`. Lift one member early: `delete from

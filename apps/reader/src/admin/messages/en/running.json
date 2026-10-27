@@ -184,7 +184,7 @@
         },
         "unsubscribedPostsPerDay": {
           "name": "Posts from unfollowed blogs per member",
-          "about": "Posts a member opens in full in a UTC day from blogs they don’t subscribe to, on the web and in their apps together. Their own subscriptions are never counted. It slows anyone copying Tela wholesale.",
+          "about": "Posts a member opens in full in a UTC day from blogs they don’t subscribe to, on the web and in their apps together. Blogs they subscribe to are never counted. It slows anyone copying Tela wholesale.",
           "value": "{n, plural, =0 {None} one {# post a day} other {# posts a day}}",
           "none": "No limit"
         }
