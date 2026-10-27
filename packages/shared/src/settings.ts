@@ -40,7 +40,8 @@ export const SETTINGS = {
   'member.maxSubscriptions': { kind: 'limit', default: 300, max: 1_000_000 },
   /**
    * Posts a member opens in full per UTC day from blogs they do not subscribe to, on the web and
-   * in every app together (ADR 0066). Their own blogs are never counted.
+   * in every app together (ADR 0066). Posts of blogs they subscribe to are never counted; a blog
+   * they claimed but do not subscribe to is counted like any other (`admitOpens`).
    */
   'member.unsubscribedPostsPerDay': { kind: 'limit', default: 100, max: 1_000_000 },
   /** Whether approved apps may act for members (ADR 0064): `off` stops every app at once. */
