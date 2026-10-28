@@ -164,7 +164,7 @@ describe('the changes', () => {
       ok: false,
       problem: { error: 'invalid', field: 'redirectUris' },
     })
-    answer(409, { error: 'app_limit', limit: 5 })
+    answer(409, { error: 'too_many_apps', limit: 5 })
     expect(await registerApp({ ...SETTINGS, acceptTerms: true })).toEqual({
       ok: false,
       problem: { error: 'app_limit', limit: 5 },
@@ -181,7 +181,7 @@ describe('the changes', () => {
 
   test('a reason it cannot read is failed, never shown as given', () => {
     expect(problemOf(400, { error: 'invalid', field: 'owner' })).toEqual({ error: 'failed' })
-    expect(problemOf(409, { error: 'app_limit' })).toEqual({ error: 'failed' })
+    expect(problemOf(409, { error: 'too_many_apps' })).toEqual({ error: 'failed' })
     expect(problemOf(409, { error: 'something_new' })).toEqual({ error: 'failed' })
     expect(problemOf(500, null)).toEqual({ error: 'failed' })
     expect(problemOf(404, { error: 'not_found' })).toEqual({ error: 'failed' })

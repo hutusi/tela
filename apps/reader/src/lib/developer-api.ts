@@ -111,7 +111,7 @@ export function problemOf(status: number, body: unknown): DeveloperProblem {
     return field ? { error: 'invalid', field } : { error: 'failed' }
   }
   if (status === 400 && b.error === 'privacy_required') return { error: 'privacy_required' }
-  if (status === 409 && b.error === 'app_limit' && isCount(b.limit)) {
+  if (status === 409 && b.error === 'too_many_apps' && isCount(b.limit)) {
     return { error: 'app_limit', limit: b.limit }
   }
   if (status === 409 && (b.error === 'cut_off' || b.error === 'reported')) return { error: b.error }

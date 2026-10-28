@@ -150,7 +150,7 @@ describe('registering an app', () => {
     await operatorSets(api, 'apps.perMember', 2)
     await registered(dev)
     await registered(dev)
-    expect(await answer(await register(dev))).toEqual([409, { error: 'too_many_apps' }])
+    expect(await answer(await register(dev))).toEqual([409, { error: 'too_many_apps', limit: 2 }])
     // Two at once for the last place: one is registered.
     await operatorSets(api, 'apps.perMember', 1)
     const raced = await Promise.all([register(bo), register(bo)])

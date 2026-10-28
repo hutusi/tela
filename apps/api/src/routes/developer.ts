@@ -28,6 +28,7 @@ import {
   endOthersConnections,
   newClientId,
   newGroupId,
+  readSetting,
   settingSql,
 } from '@tela/data'
 import {
@@ -152,7 +153,7 @@ const refuse = (
   c: Context,
   error: DeveloperError,
   status: ContentfulStatusCode,
-  extra: Record<string, string> = {},
+  extra: Record<string, string | number | null> = {},
 ) => c.json({ error, ...extra }, status)
 
 export function developerRoutes(deps: ApiDeps) {
@@ -247,7 +248,10 @@ export function developerRoutes(deps: ApiDeps) {
       db.all<Raw>(sql`${SELECT} where a.client_id = ${clientId}`),
     ] as never)) as unknown as [{ id: number }[], unknown, Raw[]]
     const app = rows[0]
-    if (inserted.length === 0 || !app) return refuse(c, 'too_many_apps', 409)
+    // The page says how many one account may hold, so it is read here, where it is rare.
+    if (inserted.length === 0 || !app) {
+      return refuse(c, 'too_many_apps', 409, { limit: await readSetting(db, 'apps.perMember') })
+    }
     return c.json({ app: toApp(app) }, 201)
   })
 
