@@ -161,7 +161,7 @@ describe('the consent page', () => {
       redirect: { kind: 'scheme', target: 'com.loom.desktop' },
     })
     expect(html).toContain('data-testid="connect-draft"')
-    expect(html).toContain('not live yet')
+    expect(html).toContain('only its developer can connect it')
     expect(html).toContain('you go back to the app (com.loom.desktop)')
     expect(html).toContain('It has given Tela no privacy policy.')
   })
@@ -294,7 +294,7 @@ describe('Settings → Connected apps', () => {
       '/settings/apps',
     )
     expect(html).toContain('No apps connected')
-    expect(html).toContain('You choose what each may do')
+    expect(html).toContain('Any member can register one, and Tela reviews only some')
     // Members register apps themselves now (ADR 0067): no promise that Tela approves each.
     expect(html).not.toContain('Tela approves')
     expect(html).not.toContain('data-testid="connection"')

@@ -1120,9 +1120,9 @@
     }
   },
   "connectedApps": {
-    "intro": "Apps you have connected to your Tela account, and what each may do.",
+    "intro": "Apps you have connected to your Tela account, and what each may do. Members register apps themselves and Tela reviews only some, so an app it hasn’t reviewed says so.",
     "none": "No apps connected",
-    "noneBody": "Apps made by other developers can read your Tela and, if you let them, make changes for you, such as marking posts read. You choose what each may do when you connect it from the app.",
+    "noneBody": "Apps made by other developers can read your Tela and, if you let them, make changes for you, such as marking posts read. Any member can register one, and Tela reviews only some: each says whether it was reviewed. You choose what it may do when you connect it from the app.",
     "by": "By {developer}",
     "byHandle": "By <member>@{handle}</member>",
     "notReviewed": "Not reviewed by Tela",
@@ -1244,7 +1244,7 @@
       "logIn": "Log in",
       "join": "Join Tela"
     },
-    "draft": "In testing, not live yet. Only you can connect it, because it is registered to your account for testing.",
+    "draft": "In testing: only its developer can connect it, and it is registered to your account. It isn’t live for anyone else yet.",
     "heading": "Connect {app} to your Tela account?",
     "by": "By {developer}",
     "byWithHome": "By {developer} · <home>Website</home>",

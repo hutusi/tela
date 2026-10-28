@@ -1120,9 +1120,9 @@
     }
   },
   "connectedApps": {
-    "intro": "Les applications que vous avez connectées à votre compte Tela, et ce que chacune peut faire.",
+    "intro": "Les applications que vous avez connectées à votre compte Tela, et ce que chacune peut faire. Les membres enregistrent eux-mêmes leurs applications et Tela n’en vérifie que certaines : une application non vérifiée l’indique.",
     "none": "Aucune application connectée",
-    "noneBody": "Des applications faites par d’autres développeurs peuvent lire votre Tela et, si vous le leur permettez, faire des changements pour vous, comme marquer des articles comme lus. Vous choisissez ce que chacune peut faire en la connectant depuis l’application.",
+    "noneBody": "Des applications faites par d’autres développeurs peuvent lire votre Tela et, si vous le leur permettez, faire des changements pour vous, comme marquer des articles comme lus. Tout membre peut en enregistrer une, et Tela n’en vérifie que certaines : chacune indique si elle a été vérifiée. Vous choisissez ce qu’elle peut faire en la connectant depuis l’application.",
     "by": "Par {developer}",
     "byHandle": "Par <member>@{handle}</member>",
     "notReviewed": "Non vérifiée par Tela",
@@ -1244,7 +1244,7 @@
       "logIn": "Se connecter",
       "join": "Rejoindre Tela"
     },
-    "draft": "En test, pas encore en ligne. Vous seul pouvez la connecter, car elle est enregistrée sur votre compte pour des essais.",
+    "draft": "En test : seul son développeur peut la connecter, et elle est enregistrée sur votre compte. Elle n’est encore en ligne pour personne d’autre.",
     "heading": "Connecter {app} à votre compte Tela ?",
     "by": "Par {developer}",
     "byWithHome": "Par {developer} · <home>Site web</home>",
