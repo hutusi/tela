@@ -1,16 +1,19 @@
 /** What a browser reports when something breaks (`POST /api/client-errors`): logged, kept nowhere. */
-import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test'
+import { afterAll, afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test'
 import { ACTION_LIMITS } from '@tela/data'
 import { withoutQueries } from '@tela/shared'
 import { CLIENT_ERROR_MAX_BYTES, STACK_MAX } from '../src/routes/client-errors'
 import { createTestApi, type TestApi } from './helpers'
 
 let api: TestApi
+// Restored after the file: `bun run test` runs every file in one process, and a spy left in place
+// mutes later files' logs and adds to their own spies' counts.
 const logged = spyOn(console, 'error').mockImplementation(() => {})
 beforeEach(async () => {
   api = await createTestApi()
 })
 afterEach(() => logged.mockClear())
+afterAll(() => logged.mockRestore())
 
 const report = (body: unknown, ip = '203.0.113.7', headers: Record<string, string> = {}) =>
   api.request('/api/client-errors', { body, headers: { 'cf-connecting-ip': ip, ...headers } })
