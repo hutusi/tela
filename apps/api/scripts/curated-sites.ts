@@ -512,16 +512,10 @@ export const CURATED_SITES = [
   { feedUrl: 'https://mistral.ai/news/rss', topics: ['ai'], title: 'Mistral AI' },
   {
     feedUrl:
-      'https://raw.githubusercontent.com/Olshansk/rss-feeds/main/feeds/feed_anthropic_news.xml',
-    topics: ['ai'],
-    title: 'Anthropic',
-    note: 'No feed of its own; github.com/Olshansk/rss-feeds keeps these three',
-  },
-  {
-    feedUrl:
       'https://raw.githubusercontent.com/Olshansk/rss-feeds/main/feeds/feed_anthropic_research.xml',
     topics: ['ai'],
     title: 'Anthropic',
+    note: 'Kept by github.com/Olshansk/rss-feeds, as Engineering is. Not News: it repeats Research',
   },
   {
     feedUrl:
