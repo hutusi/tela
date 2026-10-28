@@ -333,6 +333,59 @@ describe('discovery on a feed-only blog (ADR 0061)', () => {
   })
 })
 
+describe('discovery on a blog in Discover with no feed of its own (ADR 0068)', () => {
+  const ELSEWHERE = 'https://feeds.example/lab-engineering.xml'
+
+  /** A blog at the fixture's origin read through a feed kept on another host, as a lab's is. */
+  async function keptElsewhere() {
+    serveHtml('/engineering', '<html><body><a href="/engineering/a">A post</a></body></html>')
+    return registerFeed(db, { feedUrl: ELSEWHERE, homeUrl: server.url('/engineering'), now: NOW })
+  }
+
+  test('offers the feeds its public page shows, only once it is listed', async () => {
+    const { siteId } = await keptElsewhere()
+    const ingest = createIngest({ db, http, now: () => clock.now() })
+    const page = server.url('/engineering')
+    // Private, it is one member's choice of feed, and a feed address can carry a secret.
+    expect(await ingest.discover({ url: page })).toEqual({ feeds: [] })
+
+    await db.run(sql`update sites set listing = 'listed' where id = ${siteId}`)
+    const offered = {
+      feeds: [
+        {
+          url: ELSEWHERE,
+          title: null,
+          format: 'rss' as const,
+          itemCount: 0,
+          homeUrl: server.origin,
+        },
+      ],
+    }
+    expect(await ingest.discover({ url: page })).toEqual(offered)
+    await db.run(sql`update sites set listing = 'featured' where id = ${siteId}`)
+    expect(await ingest.discover({ url: server.url('/') })).toEqual(offered)
+
+    // A claim still needs the blog's own feed: one kept elsewhere is no proof of the blog.
+    expect(await ingest.startClaim({ url: page, actorId: 'u1' })).toEqual({ error: 'not_a_feed' })
+  })
+
+  test('answers a page with a feed of its own as before, and never offers a dead feed', async () => {
+    const { feedId, siteId } = await keptElsewhere()
+    await db.run(sql`update sites set listing = 'listed' where id = ${siteId}`)
+    const ingest = createIngest({ db, http, now: () => clock.now() })
+
+    await db.run(sql`update feeds set status = 'dead' where id = ${feedId}`)
+    expect(await ingest.discover({ url: server.url('/engineering') })).toEqual({ feeds: [] })
+
+    await db.run(sql`update feeds set status = 'active' where id = ${feedId}`)
+    server.text('/own.xml', rss({ link: server.url('/'), items: [] }))
+    serveHtml('/news', `<link rel="alternate" type="application/rss+xml" href="/own.xml">`)
+    const found = await ingest.discover({ url: server.url('/news') })
+    expect(found).toMatchObject({ feeds: [{ url: server.url('/own.xml') }] })
+    expect('feeds' in found && found.feeds).toHaveLength(1)
+  })
+})
+
 describe('verifyClaimJob', () => {
   async function pendingClaim(siteId: number, userId: string, token = 'tok-123') {
     await db.run(sql`

@@ -9,7 +9,7 @@ import { asUrl, normalizeOrigin } from '@tela/content'
 import { feedsFromOpml } from '@tela/content/opml'
 import { type Exempt, feedRoom, type TelaDb } from '@tela/data'
 import { FEED_FORMATS, type FeedFormat } from '@tela/shared'
-import { sql } from 'drizzle-orm'
+import { type SQL, sql } from 'drizzle-orm'
 import { type DiscoveredFeed, discoverFeeds } from '../discover'
 import type { HttpClient } from '../http'
 import { HttpError } from '../http'
@@ -80,13 +80,8 @@ export interface Ingest {
 
 export { asUrl }
 
-/**
- * The feeds Tela keeps for the blog `url` is on, when its writer asked Tela to use only what its
- * feed provides (ADR 0061): discovery answers from these and fetches none of its pages. Null for
- * a URL on any other blog, which discovery finds as it always has. The blog is found by its home,
- * with or without `www.` and over either scheme, as a member might type it.
- */
-export async function feedOnlyFeeds(db: TelaDb, url: string): Promise<DiscoveredFeed[] | null> {
+/** The homes a member may mean by `url`'s host: with or without `www.`, over either scheme. */
+function homesOf(url: string): string[] | null {
   let parsed: URL
   try {
     parsed = new URL(url)
@@ -95,40 +90,75 @@ export async function feedOnlyFeeds(db: TelaDb, url: string): Promise<Discovered
   }
   const bare = parsed.hostname.toLowerCase().replace(/^www\./, '')
   const port = parsed.port ? `:${parsed.port}` : ''
-  const homes = ['https:', 'http:'].flatMap((scheme) =>
+  return ['https:', 'http:'].flatMap((scheme) =>
     ['', 'www.'].map((www) => `${scheme}//${www}${bare}${port}`),
   )
+}
+
+/**
+ * The live feeds of the blogs at `homes` that `which` picks, as discovery answers them: a row
+ * with a null `url` is a blog with no such feed left. Active feeds first, then the oldest.
+ */
+async function keptFeeds(db: TelaDb, homes: string[], which: SQL) {
   const rows = await db.all<{
-    site_id: number
     url: string | null
     title: string | null
     format: string | null
     home_url: string
     items: number
   }>(sql`
-    select s.id as site_id, f.feed_url as url, f.title, f.format, s.home_url,
+    select f.feed_url as url, f.title, f.format, s.home_url,
       (select count(*) from articles a where a.feed_id = f.id) as items
     from sites s left join feeds f on f.site_id = s.id and f.merged_into is null
       and f.status <> 'dead'
-    where s.feed_only = 1 and s.home_url in (select value from json_each(${JSON.stringify(homes)}))
+    where ${which} and s.home_url in (select value from json_each(${JSON.stringify(homes)}))
     order by f.status = 'active' desc, f.id
   `)
-  if (rows.length === 0) return null
   const formatOf = (f: string | null): FeedFormat =>
     (FEED_FORMATS as readonly string[]).includes(f ?? '') ? (f as FeedFormat) : 'rss'
-  return rows.flatMap((r) =>
-    r.url === null
-      ? []
-      : [
-          {
-            url: r.url,
-            title: r.title,
-            format: formatOf(r.format),
-            itemCount: r.items,
-            homeUrl: r.home_url,
-          },
-        ],
-  )
+  return {
+    blogs: rows.length,
+    feeds: rows.flatMap((r): DiscoveredFeed[] =>
+      r.url === null
+        ? []
+        : [
+            {
+              url: r.url,
+              title: r.title,
+              format: formatOf(r.format),
+              itemCount: r.items,
+              homeUrl: r.home_url,
+            },
+          ],
+    ),
+  }
+}
+
+/**
+ * The feeds Tela keeps for the blog `url` is on, when its writer asked Tela to use only what its
+ * feed provides (ADR 0061): discovery answers from these and fetches none of its pages. Null for
+ * a URL on any other blog, which discovery finds as it always has. The blog is found by its home,
+ * with or without `www.` and over either scheme, as a member might type it.
+ */
+export async function feedOnlyFeeds(db: TelaDb, url: string): Promise<DiscoveredFeed[] | null> {
+  const homes = homesOf(url)
+  if (!homes) return null
+  const kept = await keptFeeds(db, homes, sql`s.feed_only = 1`)
+  return kept.blogs === 0 ? null : kept.feeds
+}
+
+/**
+ * The feeds of a blog in Discover, for a URL on it where discovery found none (ADR 0068). A blog
+ * that publishes no feed (an AI lab's, say) is read through one somebody else keeps, at an
+ * address no member could guess from the blog's; once an operator lists it, typing the blog's
+ * address finds it. Only a listed or featured blog: its page shows these feed URLs to anyone
+ * already (`sitePage`), while a private blog's feeds are what its readers chose, and a feed URL
+ * can carry a secret (a paid newsletter's, say).
+ */
+export async function listedFeeds(db: TelaDb, url: string): Promise<DiscoveredFeed[]> {
+  const homes = homesOf(url)
+  if (!homes) return []
+  return (await keptFeeds(db, homes, sql`s.listing in ('listed', 'featured')`)).feeds
 }
 
 export function createIngest(deps: { db: TelaDb; http: HttpClient; now: () => number }): Ingest {
@@ -154,7 +184,16 @@ export function createIngest(deps: { db: TelaDb; http: HttpClient; now: () => nu
     async discover({ url }) {
       const parsed = asUrl(url)
       if (!parsed) return { error: 'invalid_url' }
-      return find(parsed.toString(), 5)
+      const found = await find(parsed.toString(), 5)
+      const nothing =
+        'error' in found
+          ? found.error === 'not_a_feed' || found.error === 'unreachable'
+          : found.feeds.length === 0
+      if (!nothing) return found
+      // Nothing to add at that address: a blog in Discover may still be read through a feed kept
+      // elsewhere (ADR 0068). Adding only; a claim must find the blog's own feed.
+      const listed = await listedFeeds(db, parsed.toString())
+      return listed.length > 0 ? { feeds: listed.slice(0, 5) } : found
     },
 
     async addFeed({ feedUrl, actorId, withinDay, exempt }) {
