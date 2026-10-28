@@ -5,6 +5,8 @@
  * the console translates every word it shows.
  */
 
+import type { DeveloperAction } from '../developer'
+
 /** The console's areas, in the order the sidebar lists them. */
 export const ADMIN_AREAS = [
   'overview',
@@ -332,8 +334,9 @@ export type AdminUndoResponse = { restored: number } | { error: 'not_found' | 'c
 export type AdminPerson = { id: string; handle: string; name: string | null }
 
 /**
- * What an audit row records: a console action, an undo, the CLI granting the console, or a member
- * closing their own account (ADR 0058), which the console shows beside an operator's deletion.
+ * What an audit row records: a console action, an undo, the CLI granting the console, a member
+ * closing their own account (ADR 0058), which the console shows beside an operator's deletion, or
+ * a member changing an app they registered (ADR 0067), which the app's history shows.
  */
 export type AdminAuditAction =
   | AdminActionName
@@ -341,6 +344,7 @@ export type AdminAuditAction =
   | 'admin.grant'
   | 'admin.ungrant'
   | 'account.delete'
+  | DeveloperAction
 
 /** One audit row: who did what to which target, and what it replaced. */
 export type AdminHistoryEntry = {

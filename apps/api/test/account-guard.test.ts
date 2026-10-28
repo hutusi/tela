@@ -111,6 +111,13 @@ beforeEach(async () => {
         '["http://127.0.0.1/callback"]', 'approved', 0, 0)`),
     db.run(sql`insert into app_grants (id, app_id, user_id, scope, created_at, updated_at)
       values (1, 1, ${b.userId}, 'read', 0, 0)`),
+    // An app b registered in Settings → Developer, in Testing, for b to edit, make Live, ask a
+    // review of and delete (ADR 0067).
+    db.run(sql`insert into apps (id, client_id, name, developer, contact_email, privacy_url,
+        redirect_uris, status, owner_user_id, developer_id, terms_at, created_at, updated_at)
+      values (2, 'tela_app_guard_dev', 'Loom', 'Loom Labs', 'b@x.test',
+        'https://loom.example/privacy', '["http://127.0.0.1/callback"]', 'draft', ${b.userId},
+        ${b.userId}, 0, 0, 0)`),
   ] as never)
 })
 
@@ -234,6 +241,16 @@ const SQUARE_PNG = new Uint8Array([
 ])
 const OPML = `<?xml version="1.0"?><opml version="2.0"><head><title>s</title></head><body>
   <outline text="x" xmlUrl="https://imported.example/feed"/></body></opml>`
+/** An app as Settings → Developer registers and edits one (ADR 0067). */
+const DEVELOPER_APP = {
+  name: 'Weft',
+  developer: 'Weft Labs',
+  contactEmail: 'b@x.test',
+  homepageUrl: null,
+  privacyUrl: 'https://weft.example/privacy',
+  redirectUris: ['http://127.0.0.1/callback'],
+  maxScope: 'read',
+}
 /** An app's authorization request, as the consent page passes it through (ADR 0064). */
 const CONSENT = {
   client_id: 'tela_app_guard',
@@ -519,6 +536,40 @@ const MEMBER_ROUTES: MemberRoute[] = [
   {
     route: 'DELETE /api/v1/connections/:id{[0-9]+}',
     path: '/api/v1/connections/1',
+    method: 'DELETE',
+    effect: 'writes',
+  },
+  // Settings → Developer (ADR 0067): app 2 is b's own, in Testing.
+  { route: 'GET /api/v1/developer/apps', path: '/api/v1/developer/apps', effect: 'reads' },
+  {
+    route: 'POST /api/v1/developer/apps',
+    path: '/api/v1/developer/apps',
+    body: () => ({ ...DEVELOPER_APP, acceptTerms: true }),
+    effect: 'writes',
+    status: 201,
+  },
+  {
+    route: 'PUT /api/v1/developer/apps/:id{[0-9]+}',
+    path: '/api/v1/developer/apps/2',
+    method: 'PUT',
+    body: () => DEVELOPER_APP,
+    effect: 'writes',
+  },
+  {
+    route: 'POST /api/v1/developer/apps/:id{[0-9]+}/live',
+    path: '/api/v1/developer/apps/2/live',
+    body: () => ({ live: true }),
+    effect: 'writes',
+  },
+  {
+    route: 'POST /api/v1/developer/apps/:id{[0-9]+}/review',
+    path: '/api/v1/developer/apps/2/review',
+    body: () => ({ note: 'Please', wantsEmail: false }),
+    effect: 'writes',
+  },
+  {
+    route: 'DELETE /api/v1/developer/apps/:id{[0-9]+}',
+    path: '/api/v1/developer/apps/2',
     method: 'DELETE',
     effect: 'writes',
   },

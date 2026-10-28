@@ -43,6 +43,7 @@ import { claimRoutes } from './routes/claims'
 import { clientErrorRoutes } from './routes/client-errors'
 import { connectRoutes } from './routes/connect'
 import { curate } from './routes/curate'
+import { developerRoutes } from './routes/developer'
 import { discoverRoutes } from './routes/discover'
 import { edgeRoutes } from './routes/edge'
 import { feedRoutes } from './routes/feeds'
@@ -126,13 +127,15 @@ function protocolOf(header: string | undefined): number {
 
 /**
  * The member calls that read the account's standing from D1 first (ADRs 0058, 0059): who is signed
- * in, the pull, the export, and every call that writes. Other reads trust the session as ever;
- * the next pull, a minute away at most, signs the tab out.
+ * in, the pull, the export, the apps they registered (each with its contact address, ADR 0067),
+ * and every call that writes. Other reads trust the session as ever; the next pull, a minute away
+ * at most, signs the tab out.
  */
 const STANDING_READS: ReadonlySet<string> = new Set([
   '/api/v1/me',
   '/api/v1/sync',
   '/api/v1/export',
+  '/api/v1/developer/apps',
 ])
 export const guarded = (method: string, path: string) =>
   (method !== 'GET' && method !== 'HEAD') ||
@@ -532,6 +535,8 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
   app.route('/api/v1/account', accountRoutes(deps, auth))
   // The consent page's questions, and Settings → Connected apps (ADR 0064).
   app.route('/api/v1', connectRoutes(deps, auth))
+  // Settings → Developer: the apps a member registers themselves (ADR 0067).
+  app.route('/api/v1/developer/apps', developerRoutes(deps))
 
   return { app, auth }
 }

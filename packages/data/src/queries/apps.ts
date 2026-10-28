@@ -91,6 +91,24 @@ export function endAppConnections(db: TelaDb, appId: number, reason: AppEndReaso
 }
 
 /**
+ * End every other member's connection to one app, its developer keeping their own (ADR 0067):
+ * an app taken back to Testing, which only its developer may connect. Only while `onlyIf` holds,
+ * which the caller's batch decides after the move it makes.
+ */
+export function endOthersConnections(
+  db: TelaDb,
+  appId: number,
+  reason: AppEndReason,
+  now: number,
+  onlyIf: SQL,
+) {
+  return endConnectionsTo(db, sql`(${appId})`, reason, now, {
+    except: sql`(select developer_id from apps where id = ${appId})`,
+    onlyIf,
+  })
+}
+
+/**
  * End every live connection to the apps a member registered (ADR 0067), as the operator's "End
  * all connections" does: what closing the developer's account does to them.
  */

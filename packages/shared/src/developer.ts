@@ -86,6 +86,46 @@ export function parseReviewNote(value: unknown): string | null | undefined {
   return appText(value, REVIEW_NOTE_MAX)
 }
 
+/**
+ * What a member's change to their app records in the admin console's audit log (ADR 0067), with
+ * the member as its actor and the app as its target, never its contact address: registering it,
+ * editing it, making it Live or taking it back to Testing, asking for a review, and deleting it.
+ */
+export const DEVELOPER_ACTIONS = [
+  'developer.register',
+  'developer.edit',
+  'developer.live',
+  'developer.testing',
+  'developer.review',
+  'developer.delete',
+] as const
+export type DeveloperAction = (typeof DEVELOPER_ACTIONS)[number]
+
+/**
+ * What `/api/v1/developer/apps` refuses with, as `{ error }`:
+ *
+ * - `invalid` (400), with `field`: the first setting that is wrong (`DeveloperAppField`; a name or
+ *   developer that says "Tela" is wrong), or `note`, `wantsEmail` or `live`;
+ * - `terms` (400): registering needs `acceptTerms: true`;
+ * - `privacy_required` (400): an app goes Live only with a privacy policy URL;
+ * - `not_found` (404): no app of the member's has that id;
+ * - `too_many_apps` (409): `apps.perMember` reached;
+ * - `cut_off` (409): the operator cut it off, so it neither moves nor goes;
+ * - `reported` (409): an open report names it, so it is not deleted;
+ * - `rate_limited` (429, with `retry-after`): registered or edited too often today.
+ */
+export const DEVELOPER_ERRORS = [
+  'invalid',
+  'terms',
+  'privacy_required',
+  'not_found',
+  'too_many_apps',
+  'cut_off',
+  'reported',
+  'rate_limited',
+] as const
+export type DeveloperError = (typeof DEVELOPER_ERRORS)[number]
+
 /** `GET /api/v1/developer/apps`: one of the member's apps, as Settings → Developer shows it. */
 export type DeveloperApp = DeveloperAppSettings & {
   appId: number
