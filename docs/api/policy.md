@@ -28,7 +28,7 @@ says which version of those they follow.
 
 v1 is in **preview** now. During preview:
 
-- a change that breaks apps can still happen, with **14 days' notice** to every approved app's
+- a change that breaks apps can still happen, with **14 days' notice** to every live app's
   developer;
 - the support period below does not bind yet.
 
@@ -50,16 +50,23 @@ breaking change. `/meta` and [CHANGELOG.md](CHANGELOG.md) will say so.
 
 Every change that needs an app to act is announced in three places:
 
-- an email to each approved app's contact address;
+- an email to each live app's contact address;
 - [CHANGELOG.md](CHANGELOG.md) in this folder;
 - `/meta`: a version's `status` and `sunsetAt`, and its `features`.
 
-Keep your contact address current: write to <mailto:me@hutu.si> when it changes.
+Keep your contact address current: change it in Settings → Developer.
 
 ## Rules for developers
 
-By connecting your app to Tela, you agree to these. An app that breaks them can be cut off, for
-every member at once.
+You accept these when you register an app in Settings → Developer. An app that breaks them can be
+cut off, for every member at once, and its developer's account suspended.
+
+- **Your app is yours.** Registering it doesn't make Tela responsible for it. Tela doesn't check an
+  app before it goes Live; a review, when you ask for one, checks that it does what it says, and
+  lifts the limits on unreviewed apps (see [README.md](README.md#reviews)). Changing a reviewed
+  app's name, redirect URIs or scope clears its review.
+- **Don't pass for Tela.** Only Tela's own apps may use the word "Tela" in their name or
+  developer.
 
 - **Be who you say you are.** The name, developer, homepage and privacy policy members see on the
   consent page are yours, and accurate.

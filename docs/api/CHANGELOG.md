@@ -3,6 +3,15 @@
 Changes to Tela's API for apps, newest first. See [policy.md](policy.md) for how changes are made
 and announced.
 
+## 2026-10-28
+
+- **Any member registers apps,** in Settings → Developer: Testing for the developer alone, then
+  Live for everyone. The operator reviews apps when their developers ask. An app not reviewed is
+  shown as "Not reviewed by Tela", may hold at most 100 members at once across its developer's
+  unreviewed apps, and can't ask for the email address. Members can report apps.
+- **The consent page** shows an unreviewed app's developer by their Tela handle. No route or
+  format of v1 changed.
+
 ## v1 preview — 2026-10-27
 
 The first version, for approved apps.

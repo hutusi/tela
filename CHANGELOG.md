@@ -9,6 +9,12 @@ everything so far sits under `[Unreleased]`.
 
 ### Changed
 
+- **Members register their own apps** (ADR 0067), in Settings → Developer, as on GitHub: Testing
+  for the developer alone, then Live for everyone. The operator reviews apps when asked and handles
+  reports of them. An app Tela has not reviewed is shown as "Not reviewed by Tela" with its
+  developer's handle, holds at most 100 members across its developer's unreviewed apps, and can't
+  ask for an email address; only Tela's own apps may say "Tela". `MIN_CLIENT` 6.
+
 - **Full posts from blogs you don't follow are counted** (ADR 0066). A member reads as many posts
   as they like from blogs they subscribe to, and 100 a day in full from any other blog, on the
   web and in their apps together; opening one again that day, its translation or its images cost

@@ -3,7 +3,8 @@
 How Tela is provisioned, deployed and kept running: three Cloudflare Workers, D1, R2 and Queues
 (ADRs 0020–0027), at https://telaread.com. The old address, tela.ainaive.com, redirects there
 through a fourth Worker (*The address*, ADR 0042), and a fifth, tela-gateway, serves the API for
-approved apps at https://api.telaread.com (*tela-gateway*, *Approved apps*, ADRs 0064–0066).
+approved apps at https://api.telaread.com (*tela-gateway*, *Apps members register*, ADRs
+0064–0067).
 
 ## Environments
 
@@ -379,9 +380,21 @@ The account is on Workers Paid. Run wrangler from a real terminal (`wrangler log
        - the console has an Apps area, and its Settings list `member.unsubscribedPostsPerDay`
          (100) and `apps.enabled` (on);
        - the gateway answers as in step 4, then the mainland check (*tela-gateway*);
-       - a draft app registered to your own account connects and pulls (*Approved apps*).
+       - a draft app registered to your own account connects and pulls (*Apps members register*).
      - Run `bun run restore-drill` after the next nightly export, so `apps` and `app_grants` are
        covered.
+   - Apps members register (ADR 0067, migration 0016) bump `MIN_CLIENT` to 6: the consent page
+     must say when an app is not reviewed, which a protocol-5 shell cannot. Migration 0016 adds
+     plain columns to `apps` and rebuilds `reports` for the target kind `app`:
+     - **Take a Time Travel bookmark first** (`wrangler d1 time-travel info tela`), since the
+       migration rebuilds a table; then apply it, then deploy tela-web, then tela-api within
+       minutes. tela-jobs and tela-gateway are unchanged.
+     - Rolling back: tela-api and tela-web go back together. A tela-api from before this release
+       knows nothing of reviews: every app would be treated as the operator's, with no cap, no
+       email ban and no developer standing check. The migration can stay.
+     - After deploy, check that Settings → Developer registers an app on your account and connects
+       it in Testing, that the console's Apps area opens on *To review*, and that `bun run admin
+       settings` lists `apps.unreviewedMaxConnections` (100) and `apps.perMember` (5).
    - Protocol 2 (2026-09-29) keeps each device's copy in IndexedDB `tela-2`; earlier shells use
      `tela`, which the newer shell empties at each boot and marks as seen. A tela-web rollback
      leaves the `tela-2` copies in place, and the older shell starts over in `tela`. On the way
@@ -1217,35 +1230,47 @@ tela-api over the network, unlike the rest of the reader, and every change it ma
   imported feeds stay and arrive once it is lifted. Lift it from People › Suspended. An admin is
   never suspended.
 
-## Approved apps
+## Apps members register
 
-Third-party apps act for members through `api.telaread.com` (ADRs 0064, 0065), only once the
-operator registers them. What a developer reads is `docs/api/` in this repository; they write to
-the operator to get an app approved.
+Third-party apps act for members through `api.telaread.com` (ADRs 0064, 0065). Any member
+registers their own in Settings → Developer (ADR 0067); the operator reviews apps when their
+developers ask, and handles reports of them. What a developer reads is `docs/api/` in this
+repository.
 
-- **Before telling any developer**, deploy the round (*Provisioning*, step 7) and let a day pass:
-  a shell cached before tela-web's deploy has no `/connect` page, and shows Not found to a member
-  an app sends there until the tab reloads (its first sync is told to upgrade, which reloads it).
-- **What to ask a developer for** (`docs/api/README.md` says the same): the app's name and who
-  makes it; a contact address that receives mail (members never see it); an https homepage and an
-  https privacy policy, both shown on the consent page; the redirect URIs, loopback
-  (`http://127.0.0.1/<path>` or `http://[::1]/<path>`, any port matches) or a reverse-DNS scheme
-  (`com.example.app:/callback`), never `localhost` or https; the most it needs, read or write, and
-  whether it needs the member's email address, and why; their Tela handle, for the draft; and
-  their expected traffic if it is past the defaults. Read the privacy policy before approving.
-- **Register** in the console: Members › Apps › *Register app*. The form checks every field as
-  tela-api will (`parseAppSettings`), and the app starts as a **draft** with its `client_id`
-  (`tela_app_…`, on the record, selectable): send that to the developer. A draft connects only for
-  its owner's account, so the developer tests on production with their own; the consent page tells
-  them it is not yet approved. With no owner, a draft connects for nobody.
+- **Before announcing**, deploy the round and let a day pass: a shell cached before tela-web's
+  deploy has no `/connect` or Settings → Developer until the tab reloads (its first sync is told
+  to upgrade, which reloads it).
+- **A member's app** starts in **Testing** (`draft`: only its developer connects it) and goes
+  **Live** (`approved`) when its developer says so, once it has a privacy policy. Until reviewed it
+  is shown as "Not reviewed by Tela" with its developer's handle, holds at most
+  `apps.unreviewedMaxConnections` (100) members at once across that developer's unreviewed apps,
+  and can't ask for the email address. A member holds at most `apps.perMember` (5) apps, and
+  registers or edits at most 10 a day (`appRegister`). Neither the app's name nor its developer
+  may say "Tela"; only the console's own registration can.
+- **Reviews:** Members › Apps opens on *To review*, the apps whose developers asked, with their
+  note and whether they want the email address. Read the privacy policy, try the app if it is
+  cheap to, then **Review** (optionally granting email) or **Dismiss the request**; both undo. A
+  review lifts the cap and the email ban. The developer changing the name, redirect URIs or scope
+  clears it, and the app comes back to the queue when they ask again.
+- **Reports of apps** land in Members › Reports with the app named and its developer as the
+  member: **Cut off**, **End all connections**, or act on the developer's account (suspending them
+  cuts off all their apps, until lifted). A developer can't delete an app that is cut off or has
+  an open report.
+- **Developer contacts**, for the preview's 14-day notice and any deprecation:
+  `bun run admin app-contacts` lists the contact address of every Live app.
+- **The operator's own registration** (Members › Apps › *Register app*) is for partners: the app
+  is reviewed at once and may use "Tela" in its name. The form checks every field as tela-api
+  will (`parseAppSettings`); the app starts in Testing with its `client_id` on the record, for
+  its owner's account (the owner field; locked on a member's app, whose developer is its owner).
 - **Approve** when the developer is ready: any member can connect it from then on. **Edit**
   changes the settings at any time; lowering what it may do, or taking the email away, reaches its
   live tokens at once. Its limits are requests a minute per member (120 when empty) and in all
   (6,000 when empty), and the members connected at once (no limit when empty); 0 is none. Each of
   these has an undo; an edit's undo puts back everything but the contact address, which an audit
   row never holds.
-- **Cut off** (suspend) refuses every token the app holds on its next call: 401 to its access
-  tokens, `invalid_grant` to its refresh tokens, and the consent page refuses it. Its images stop
+- **Cut off** (suspend) refuses every token the app holds on its next call: 403 `app_suspended`
+  to its access tokens, `unauthorized_client` to its refresh tokens (both tell the app to keep
+  them), and the consent page refuses it. Its images stop
   within a minute (the gateway's cache). Connections are kept, so **Restore** brings it back for
   the members who connected it; both undo. Write to the developer's contact address when you cut
   an app off, and why.
