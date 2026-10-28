@@ -5,7 +5,17 @@
  * (`emailAllowed`), its developer's standing, and what closing the developer's account ends.
  */
 import { beforeEach, describe, expect, test } from 'bun:test'
-import { approveConnection, effectiveMaxConnections, exchangeCode, first } from '@tela/data'
+import {
+  approveConnection,
+  closeAccount,
+  closedEmail,
+  effectiveMaxConnections,
+  exchangeCode,
+  first,
+  newGroupId,
+  reapplyClosures,
+  writeClosure,
+} from '@tela/data'
 import type { Connection, ConnectRequest } from '@tela/shared'
 import { sql } from 'drizzle-orm'
 import {
@@ -284,5 +294,65 @@ describe('a developer out of good standing', () => {
     await suspend(dev, api.clock.now())
     expect((await gateway(api, '/v1/me', { token: own.access_token })).status).toBe(403)
     expect(await meStatus(api, annTokens.access_token)).toBe(200)
+  })
+})
+
+describe('closing a developer’s account', () => {
+  test('ends every connection to their apps and leaves no contact address, again after a restore', async () => {
+    const app = await devApp({ status: 'approved' })
+    const other = await devApp({ status: 'approved' })
+    const devTokens = await connect(api, dev, app)
+    const annTokens = await connect(api, ann, app)
+    const boTokens = await connect(api, bo, other)
+    const unrelated = await registerApp(api)
+    const cyTokens = await connect(api, cy, unrelated)
+    const close = () =>
+      closeAccount(api.db, {
+        userId: dev.userId,
+        actor: dev.userId,
+        action: 'account.delete',
+        group: newGroupId(),
+        now: api.clock.now(),
+      })
+    await writeClosure(api.blobs, dev.userId, api.clock.now())
+    expect(await close()).toBe('closed')
+
+    for (const tokens of [devTokens, annTokens, boTokens]) {
+      expect(await meStatus(api, tokens.access_token)).toBe(401)
+    }
+    expect(await meStatus(api, cyTokens.access_token)).toBe(200)
+    expect(
+      await api.db.all(sql`select g.user_id, g.end_reason from app_grants g
+        where g.app_id in (${app.id}, ${other.id}) order by g.id`),
+    ).toEqual([
+      { user_id: dev.userId, end_reason: 'closed' },
+      { user_id: ann.userId, end_reason: 'appEnded' },
+      { user_id: bo.userId, end_reason: 'appEnded' },
+    ])
+    const contacts = () =>
+      api.db.all(sql`select contact_email from apps where developer_id = ${dev.userId}`)
+    expect(await contacts()).toEqual([
+      { contact_email: closedEmail(dev.userId) },
+      { contact_email: closedEmail(dev.userId) },
+    ])
+    expect(
+      await first<unknown>(api.db, sql`select contact_email from apps where id = ${unrelated.id}`),
+    ).toEqual({ contact_email: 'dev@app.example' })
+
+    // A restore from before the closure brings both back; re-applying the closure takes them again.
+    await api.db.batch([
+      api.db.run(sql`update apps set contact_email = 'dev@x.test'
+        where developer_id = ${dev.userId}`),
+      api.db.run(sql`update app_grants set ended_at = null, end_reason = null
+        where user_id = ${ann.userId}`),
+      api.db.run(sql`update app_tokens set ended_at = null, end_reason = null
+        where grant_id in (select id from app_grants where user_id = ${ann.userId})`),
+    ] as never)
+    await reapplyClosures(api.db, api.blobs, api.clock.now())
+    expect(await liveGrants(app)).toEqual([])
+    expect(await contacts()).toEqual([
+      { contact_email: closedEmail(dev.userId) },
+      { contact_email: closedEmail(dev.userId) },
+    ])
   })
 })

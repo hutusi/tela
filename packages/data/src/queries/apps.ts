@@ -57,19 +57,51 @@ export function endConnections(
   ] as const
 }
 
-/** End every live connection to one app, for everyone: the operator's "End all connections". */
-export function endAppConnections(db: TelaDb, appId: number, reason: AppEndReason, now: number) {
+/**
+ * End the live connections to the apps `apps` selects (a parenthesised SQL set of app ids), and
+ * each device's tokens under them, for `reason`: everyone's, or everyone's but `except`'s. Two
+ * statements, tokens first, for the caller's batch; `onlyIf` (true as SQL) holds both to a
+ * condition the batch decides.
+ */
+function endConnectionsTo(
+  db: TelaDb,
+  apps: SQL,
+  reason: AppEndReason,
+  now: number,
+  options: { except?: SQL; onlyIf?: SQL } = {},
+) {
+  const except = options.except ? sql`and user_id is not ${options.except}` : sql``
+  const onlyIf = options.onlyIf ?? sql`1`
   return [
     db.run(sql`
       update app_tokens set ended_at = ${now}, end_reason = ${reason}
-      where ended_at is null
-        and grant_id in (select id from app_grants where app_id = ${appId} and ended_at is null)
+      where ended_at is null and ${onlyIf} and grant_id in (select id from app_grants
+        where app_id in ${apps} and ended_at is null ${except})
     `),
     db.run(sql`
       update app_grants set ended_at = ${now}, end_reason = ${reason}, updated_at = ${now}
-      where app_id = ${appId} and ended_at is null
+      where app_id in ${apps} and ended_at is null ${except} and ${onlyIf}
     `),
   ] as const
+}
+
+/** End every live connection to one app, for everyone: the operator's "End all connections". */
+export function endAppConnections(db: TelaDb, appId: number, reason: AppEndReason, now: number) {
+  return endConnectionsTo(db, sql`(${appId})`, reason, now)
+}
+
+/**
+ * End every live connection to the apps a member registered (ADR 0067), as the operator's "End
+ * all connections" does: what closing the developer's account does to them.
+ */
+export function endDeveloperConnections(
+  db: TelaDb,
+  developerId: string,
+  reason: AppEndReason,
+  now: number,
+) {
+  const apps = sql`(select id from apps where developer_id = ${developerId})`
+  return endConnectionsTo(db, apps, reason, now)
 }
 
 /** `bytes` random bytes as unpadded base64url. Web Crypto: workerd, Node 24 and Bun alike. */
