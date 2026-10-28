@@ -41,7 +41,9 @@ import {
   DAY,
   EXCERPTS,
   editionStatement,
+  FEEDS_BY_MAIN,
   LANG,
+  mainFeed,
   POST_SITE,
   type PostSite,
   PUBLIC_LISTING,
@@ -50,6 +52,7 @@ import {
   profileIndexable,
   READER_COUNT,
   RECOMMENDERS_SHOWN,
+  REPEATED_POST,
   SITE_INDEXABLE,
   siteCard,
   TITLES,
@@ -559,6 +562,7 @@ async function readArticles(
       join feeds f on f.id = a.feed_id and f.merged_into is null
       join sites s on s.id = f.site_id
       where s.listing in ${PUBLIC_LISTING} and a.sort_at <= ${now} ${byTopic} ${byLang} ${after}
+        and not ${REPEATED_POST}
       order by a.sort_at desc, a.id desc
       limit ${ARTICLES_PAGE + 1} offset ${(page - 1) * ARTICLES_PAGE}
     `),
@@ -652,8 +656,8 @@ export async function readSitePage(
         ${SITE_INDEXABLE} as indexable, p.handle as "claimedBy", p.display_name as "claimantName", p.bio as "claimantBio",
         ${avatarOf('p')} as "claimantAvatar",
         (select count(*) from articles a join feeds f on f.id = a.feed_id
-          where f.site_id = s.id and f.merged_into is null and a.sort_at >= ${since})
-          as "postsLast30d"
+          where f.site_id = s.id and f.merged_into is null and a.sort_at >= ${since}
+            and not ${REPEATED_POST}) as "postsLast30d"
       from sites s left join profiles p on p.user_id = s.claimed_by and ${standingOk('p')}
       where s.id = ${siteId} and s.listing in ${PUBLIC_LISTING}
     `),
@@ -661,14 +665,16 @@ export async function readSitePage(
       select f.id, f.feed_url as "feedUrl", f.title from feeds f
       join sites s on s.id = f.site_id
       where f.site_id = ${siteId} and f.merged_into is null and s.listing in ${PUBLIC_LISTING}
-      order by f.id
+      order by ${FEEDS_BY_MAIN}
     `),
     // Posts as the reader holds them, so a member can open one from here. A merged feed's
-    // posts are duplicates of its target's (ADR 0028).
+    // posts are duplicates of its target's (ADR 0028), and a post two of its feeds hold is
+    // shown once (ADR 0068).
     db.all(sql`
       select ${PUBLIC_ARTICLE_COLUMNS}, ${TITLES}
       from articles a join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
       where f.site_id = ${siteId} and f.merged_into is null and s.listing in ${PUBLIC_LISTING}
+        and not ${REPEATED_POST}
       order by a.sort_at desc, a.id desc
       limit ${SITE_POSTS_PAGE + 1} offset ${(at - 1) * SITE_POSTS_PAGE}
     `),
@@ -1032,8 +1038,7 @@ export async function search(
   const [sites, articles] = (await db.batch([
     db.all(sql`
       select s.id, s.title, s.home_url as "homeUrl", s.description, s.favicon_key as "faviconKey",
-        ${publicReaderCount('s')} as "readerCount",
-        (select min(id) from feeds where site_id = s.id and merged_into is null) as "feedId"
+        ${publicReaderCount('s')} as "readerCount", ${mainFeed('s')} as "feedId"
       from sites s
       where (s.listing in ('listed', 'featured') or s.id in (
           select f.site_id from subscriptions sub join feeds f on f.id = sub.feed_id

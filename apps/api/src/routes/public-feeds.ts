@@ -29,12 +29,14 @@ import type { ApiEnv } from '../app'
 import type { ApiDeps } from '../deps'
 import {
   BLOGROLL_UPDATED_AT,
+  mainFeed,
   PROFILE_CACHE,
   PUBLIC_CACHE,
   PUBLIC_LISTING,
   parseLangMap,
   publicNotFound,
   READER_COUNT,
+  REPEATED_POST,
 } from './public-sql'
 
 /** Posts in a feed: about a month of a busy directory, and what readers expect of one. */
@@ -93,6 +95,7 @@ const postsStatement = (now: number, filter: SQL) => sql`
   join feeds f on f.id = a.feed_id and f.merged_into is null
   join sites s on s.id = f.site_id
   where s.listing in ${PUBLIC_LISTING} and a.sort_at <= ${now} and ${WEB_URL} ${filter}
+    and not ${REPEATED_POST}
   order by a.sort_at desc, a.id desc
   limit ${FEED_POSTS}
 `
@@ -201,8 +204,7 @@ export function publicFeedRoutes(deps: ApiDeps) {
         select s.id as "siteId", coalesce(s.title, f.title) as name, s.home_url as "homeUrl",
           f.feed_url as "feedUrl"
         from sites s
-        join feeds f on f.id = (
-          select min(f2.id) from feeds f2 where f2.site_id = s.id and f2.merged_into is null)
+        join feeds f on f.id = ${mainFeed('s')}
         where s.listing in ${PUBLIC_LISTING} ${byTopic}
         order by s.listing = 'featured' desc, s.claimed_by is not null desc,
           coalesce(${READER_COUNT}, 0) desc, s.id

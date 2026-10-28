@@ -16,6 +16,7 @@ import { type SQL, sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import type { ApiEnv } from '../app'
 import type { ApiDeps } from '../deps'
+import { mainFeed } from './public-sql'
 
 const DAY = 24 * 60 * 60 * 1000
 /** Entries per page of the feed: recommendations, and days of likes or subscriptions. */
@@ -203,8 +204,7 @@ export function socialRoutes(deps: ApiDeps) {
               tiebreak: sql`s.id`,
               columns: sql`s.id, s.title, s.home_url as "homeUrl", s.description,
                 s.favicon_key as "faviconKey", s.primary_lang as "primaryLang",
-                (select min(f2.id) from feeds f2 where f2.site_id = s.id and f2.merged_into is null)
-                  as "feedId"`,
+                ${mainFeed('s')} as "feedId"`,
               from: sql`${subsFrom} where ${subsWhere}`,
               shown: SUBSCRIBED_SHOWN,
             }) as never,

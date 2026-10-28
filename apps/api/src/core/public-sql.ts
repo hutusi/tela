@@ -27,6 +27,33 @@ export const PUBLIC_LISTING = sql.raw(`('listed', 'featured')`)
 /** A blog's reader count as anyone may see it (`publicReaderCount`), over `sites s`. */
 export const READER_COUNT = publicReaderCount('s')
 
+/** The order of a blog's feeds, over `feeds` aliased `alias`: the one with the most posts first. */
+const BY_MAIN = (alias: string) =>
+  `(select count(*) from articles mp where mp.feed_id = ${alias}.id) desc, ${alias}.id`
+
+/**
+ * A blog's main feed, over the sites table aliased `alias`: what Subscribe adds from its card, its
+ * page and Discover's OPML. The feed with the most posts, then the oldest (ADR 0068). A blog is an
+ * origin, so one read through feeds kept elsewhere may hold several (Anthropic's Research and
+ * Engineering), and the oldest was whichever a member happened to add first.
+ */
+export const mainFeed = (alias: string): SQL =>
+  sql.raw(`(select mf.id from feeds mf where mf.site_id = ${alias}.id and mf.merged_into is null
+    order by ${BY_MAIN('mf')} limit 1)`)
+
+/** A blog's feeds as its page lists them, over `feeds f`: its main feed first (`mainFeed`). */
+export const FEEDS_BY_MAIN = sql.raw(BY_MAIN('f'))
+
+/**
+ * A post another live feed of its blog stored first at the same address, over `articles a` and
+ * `feeds f` (ADR 0068). Two feeds of one blog that overlap without being one feed (ADR 0028), a
+ * section's feed beside the whole blog's, store a shared post once each: a public list shows it
+ * once, while a member's own list keeps the copy of each feed they follow.
+ */
+export const REPEATED_POST = sql.raw(`exists (select 1 from feeds rf join articles ra
+  on ra.feed_id = rf.id where rf.site_id = f.site_id and rf.id <> f.id
+    and rf.merged_into is null and ra.url = a.url and ra.id < a.id)`)
+
 /**
  * Whether search engines may index a public page (ADR 0060). What anyone can publish on Tela is
  * indexed only once someone has vouched for it, so an open sign-up cannot turn telaread.com into
@@ -174,7 +201,7 @@ export const postExtras = (since: number): SQL => sql`
 
 /**
  * A public blog as a Discover card shows it, over `sites s`: its reader count as anyone may see
- * it, its first live feed (what Subscribe adds), its newest post's title and date, and how many
+ * it, its main feed (what Subscribe adds), its newest post's title and date, and how many
  * posts it published since `since`, of the posts whose date has come by `now`. Never how it was
  * listed (ADR 0041).
  */
@@ -182,7 +209,7 @@ export const siteCard = (since: number, now: number): SQL => sql`
   s.id, s.title, s.home_url as "homeUrl", s.description, s.favicon_key as "faviconKey",
   s.primary_lang as "primaryLang", (s.claimed_by is not null) as claimed,
   ${READER_COUNT} as "readerCount",
-  (select min(f.id) from feeds f where f.site_id = s.id and f.merged_into is null) as "feedId",
+  ${mainFeed('s')} as "feedId",
   (select a.title from articles a join feeds f on f.id = a.feed_id where f.site_id = s.id
     and f.merged_into is null and a.sort_at <= ${now} order by a.sort_at desc limit 1)
     as "latestTitle",
@@ -190,7 +217,7 @@ export const siteCard = (since: number, now: number): SQL => sql`
     where f.site_id = s.id and f.merged_into is null and a.sort_at <= ${now}) as "latestAt",
   (select count(*) from articles a join feeds f on f.id = a.feed_id
     where f.site_id = s.id and f.merged_into is null and a.sort_at >= ${since}
-      and a.sort_at <= ${now}) as "postsLast30d"`
+      and a.sort_at <= ${now} and not ${REPEATED_POST}) as "postsLast30d"`
 
 /**
  * The front page's edition (ADR 0035): the newest post of each public blog, newest first, 60 at

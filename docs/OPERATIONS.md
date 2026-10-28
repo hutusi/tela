@@ -406,9 +406,11 @@ The account is on Workers Paid. Run wrangler from a real terminal (`wrangler log
        Add then says "No feed found" at a lab's address again.
      - After deploy, check that Discover shows the AI chip and `/discover/blogs?topic=ai` lists the
        labs and the writers; that Add, given `https://www.anthropic.com/engineering`, offers
-       Anthropic's three feeds; and, once OpenAI's posts are fetched, whether their extraction got
-       through (`select extract_state, count(*) from articles where url_host = 'openai.com' group
-       by 1`). If it was refused, its posts stay excerpts, as ADR 0068 accepts.
+       Anthropic's Research and Engineering feeds; that Anthropic's card in Discover subscribes to
+       Research, though Engineering was added first (`mainFeed`); and, once OpenAI's posts are
+       fetched, whether their extraction got through (`select extract_state, count(*) from
+       articles where url_host = 'openai.com' group by 1`). If it was refused, its posts stay
+       excerpts, as ADR 0068 accepts.
    - Protocol 2 (2026-09-29) keeps each device's copy in IndexedDB `tela-2`; earlier shells use
      `tela`, which the newer shell empties at each boot and marks as seen. A tela-web rollback
      leaves the `tela-2` copies in place, and the older shell starts over in `tela`. On the way

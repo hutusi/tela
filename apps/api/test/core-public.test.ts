@@ -93,3 +93,57 @@ describe("a writer's choices", () => {
     expect(titles).toEqual({ 1: 'Billet', 2: null })
   })
 })
+
+describe('a blog read through overlapping feeds (ADR 0068)', () => {
+  /**
+   * Blog 1 read through two section feeds kept elsewhere, as Anthropic's are: Engineering (11),
+   * added first with two posts, and Research (12) with three, one of them Engineering's too.
+   */
+  async function lab() {
+    const now = api.clock.now()
+    const feed = (id: number, name: string) =>
+      db.run(sql`insert into feeds (id, site_id, feed_url, host, title, next_fetch_at, created_at,
+          updated_at, seq)
+        values (${id}, 1, ${`https://feeds.example/${name}.xml`}, 'feeds.example', ${name}, 0, 0, 0,
+          ${currentSeq})`)
+    const post = (feedId: number, ago: number, slug: string) =>
+      db.run(sql`insert into articles (feed_id, dedup_key, url, title, title_hash, fetched_at,
+          sort_at, source_lang, content_key, seq)
+        values (${feedId}, ${slug}, ${`https://lab.example/research/${slug}`}, ${slug},
+          ${`h-${slug}`}, 0, ${now - 1000 * ago}, 'en', ${`c${feedId}-${slug}`}, ${currentSeq})`)
+    await db.batch([
+      bumpSeq(db),
+      db.run(sql`insert into sites (id, home_url, title, listing, created_at, updated_at, seq)
+        values (1, 'https://lab.example', 'Lab', 'listed', 0, 0, ${currentSeq})`),
+      feed(11, 'engineering'),
+      feed(12, 'research'),
+      post(11, 5, 'source-control'),
+      post(11, 4, 'agents'),
+      post(12, 3, 'source-control'),
+      post(12, 2, 'proteins'),
+      post(12, 1, 'verification'),
+    ] as never)
+  }
+
+  test('Subscribe adds the feed with the most posts, not the one a member added first', async () => {
+    await lab()
+    expect((await readSitePage(deps(), 1))?.feeds.map((f) => f.id)).toEqual([12, 11])
+    const blogs = await readDiscover(deps(), 'blogs')
+    expect(blogs.sites.map((s) => [s.id, s.feedId])).toEqual([[1, 12]])
+    const found = await search(deps(), reader, { q: 'Lab' })
+    expect(found.sites.map((s) => s.feedId)).toEqual([12])
+  })
+
+  test('a post both feeds hold is shown once, as the feed that stored it first has it', async () => {
+    await lab()
+    const shown = ['verification', 'proteins', 'agents', 'source-control']
+    const page = await readSitePage(deps(), 1)
+    expect(page?.posts.map((p) => p.title)).toEqual(shown)
+    expect(page?.posts.at(-1)?.feedId).toBe(11)
+    expect(page?.site.postsLast30d).toBe(4)
+    const articles = await readDiscover(deps(), 'articles')
+    expect(articles.posts.map((p) => p.article.title)).toEqual(shown)
+    const card = (await readDiscover(deps(), 'blogs')).sites[0]
+    expect(card?.postsLast30d).toBe(4)
+  })
+})

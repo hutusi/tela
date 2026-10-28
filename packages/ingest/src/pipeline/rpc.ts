@@ -97,7 +97,8 @@ function homesOf(url: string): string[] | null {
 
 /**
  * The live feeds of the blogs at `homes` that `which` picks, as discovery answers them: a row
- * with a null `url` is a blog with no such feed left. Active feeds first, then the oldest.
+ * with a null `url` is a blog with no such feed left. Active feeds first, then the blog's main
+ * feed as its Subscribe has it, the one with the most posts (ADR 0068), then the oldest.
  */
 async function keptFeeds(db: TelaDb, homes: string[], which: SQL) {
   const rows = await db.all<{
@@ -112,7 +113,7 @@ async function keptFeeds(db: TelaDb, homes: string[], which: SQL) {
     from sites s left join feeds f on f.site_id = s.id and f.merged_into is null
       and f.status <> 'dead'
     where ${which} and s.home_url in (select value from json_each(${JSON.stringify(homes)}))
-    order by f.status = 'active' desc, f.id
+    order by f.status = 'active' desc, items desc, f.id
   `)
   const formatOf = (f: string | null): FeedFormat =>
     (FEED_FORMATS as readonly string[]).includes(f ?? '') ? (f as FeedFormat) : 'rss'

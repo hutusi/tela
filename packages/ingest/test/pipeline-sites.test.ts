@@ -369,7 +369,7 @@ describe('discovery on a blog in Discover with no feed of its own (ADR 0068)', (
     expect(await ingest.startClaim({ url: page, actorId: 'u1' })).toEqual({ error: 'not_a_feed' })
   })
 
-  test('answers a page with a feed of its own as before, and never offers a dead feed', async () => {
+  test('never offers a dead feed, puts the main one first, and leaves a page with its own alone', async () => {
     const { feedId, siteId } = await keptElsewhere()
     await db.run(sql`update sites set listing = 'listed' where id = ${siteId}`)
     const ingest = createIngest({ db, http, now: () => clock.now() })
@@ -378,6 +378,18 @@ describe('discovery on a blog in Discover with no feed of its own (ADR 0068)', (
     expect(await ingest.discover({ url: server.url('/engineering') })).toEqual({ feeds: [] })
 
     await db.run(sql`update feeds set status = 'active' where id = ${feedId}`)
+    // A second section's feed, added later with more posts, is the blog's main feed: first.
+    const more = await registerFeed(db, {
+      feedUrl: 'https://feeds.example/lab-research.xml',
+      homeUrl: server.url('/research'),
+      now: NOW,
+    })
+    await db.run(sql`insert into articles (feed_id, dedup_key, title, fetched_at, sort_at)
+      values (${more.feedId}, 'a', 'A', 0, 0), (${more.feedId}, 'b', 'B', 0, 0)`)
+    expect(await ingest.discover({ url: server.url('/engineering') })).toMatchObject({
+      feeds: [{ url: 'https://feeds.example/lab-research.xml' }, { url: ELSEWHERE }],
+    })
+
     server.text('/own.xml', rss({ link: server.url('/'), items: [] }))
     serveHtml('/news', `<link rel="alternate" type="application/rss+xml" href="/own.xml">`)
     const found = await ingest.discover({ url: server.url('/news') })
