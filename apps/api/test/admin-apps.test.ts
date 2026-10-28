@@ -577,6 +577,13 @@ describe('the contacts of live apps (ADR 0067)', () => {
     const cut = await register({ name: 'Cut', contactEmail: 'cut@x.example' })
     await act({ action: 'app.approve', ids: [cut] })
     await act({ action: 'app.suspend', ids: [cut] })
+    // A live app of a suspended developer is cut off too, so it is no one to write to.
+    const mara = await signedIn(api, 'mara@x.test')
+    await api.db.run(sql`insert into apps (client_id, name, developer, contact_email, status,
+        developer_id, owner_user_id, created_at, updated_at)
+      values ('tela_app_suspended01', 'Barred', 'Mara', 'mara@x.example', 'approved',
+        ${mara.userId}, ${mara.userId}, 0, 0)`)
+    await api.db.run(sql`update profiles set suspended_at = 1 where user_id = ${mara.userId}`)
 
     const res = await contacts()
     expect(res.status).toBe(200)

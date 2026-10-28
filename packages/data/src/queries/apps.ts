@@ -287,6 +287,23 @@ const issued = (pair: Minted, row: { scope: AppScope; email: number }): IssuedTo
   email: row.email === 1,
 })
 
+/**
+ * What a freshly minted pair may do now, as `resolveToken` will decide it on its first call: the
+ * lowest of the device's, the connection's and the app's ceiling, and the email permission only
+ * where all three allow it and Tela reviewed the app (`emailAllowed`). The token answer says this,
+ * not what the token row was minted with, so an app whose review was cleared is not told it may
+ * still see the address. The last statement of the batch that minted it, read by its access hash.
+ */
+function mintedNow(db: TelaDb, accessHash: string) {
+  return db.all<{ scope: AppScope; email: number }>(sql`
+    select case when t.scope = 'write' and g.scope = 'write' and a.max_scope = 'write'
+        then 'write' else 'read' end as scope,
+      (t.email = 1 and g.email = 1 and ${emailAllowed('a')}) as email
+    from app_tokens t join app_grants g on g.id = t.grant_id join apps a on a.id = g.app_id
+    where t.access_hash = ${accessHash}
+  `)
+}
+
 // ---------------------------------------------------------------------------------------------
 // The consent page
 
@@ -515,9 +532,17 @@ export async function exchangeCode(
       where hash = ${hash} and minted_token_id is null
         and exists (select 1 from app_tokens where access_hash = ${pair.accessHash})
     `),
-  ])) as unknown as [unknown, unknown, { id: number; scope: AppScope; email: number }[], unknown]
+    mintedNow(db, pair.accessHash),
+  ])) as unknown as [
+    unknown,
+    unknown,
+    { id: number; scope: AppScope; email: number }[],
+    unknown,
+    { scope: AppScope; email: number }[],
+  ]
   const token = results[2][0]
-  return token ? issued(pair, token) : null
+  const minted = results[4][0]
+  return token && minted ? issued(pair, minted) : null
 }
 
 /**
@@ -596,9 +621,16 @@ export async function rotateRefresh(
         and not exists (select 1 from app_tokens n where n.refresh_hash = ${pair.refreshHash})
       returning id
     `),
-  ])) as unknown as [unknown, { id: number; scope: AppScope; email: number }[], { id: number }[]]
+    mintedNow(db, pair.accessHash),
+  ])) as unknown as [
+    unknown,
+    { id: number; scope: AppScope; email: number }[],
+    { id: number }[],
+    { scope: AppScope; email: number }[],
+  ]
   const token = results[1][0]
-  if (token) return { ok: true, tokens: issued(pair, token) }
+  const minted = results[3][0]
+  if (token && minted) return { ok: true, tokens: issued(pair, minted) }
   return { ok: false, reuse: results[2].length > 0 }
 }
 

@@ -49,10 +49,11 @@ export function shownTarget(key: ReportKey): SQL {
         where r.user_id = ${key.userId} and r.article_id = ${key.articleId}
           and r.deleted_at is null and r.note is not null and r.note <> '' and ${standingOk('p')}`
     case 'app':
-      // Any app members can be shown on the consent page or hold in Connected apps, until it is
-      // cut off (ADR 0067).
+      // A Live app, the one kind other members are shown or hold (ADR 0067). An app in Testing is
+      // its developer's alone, and an open report blocks its delete: accepting one would let anyone
+      // who learnt a client_id pin someone's unfinished app. A cut-off app needs no report.
       return sql`select 1 from apps a where a.client_id = ${key.clientId}
-        and a.status <> 'suspended'`
+        and a.status = 'approved'`
   }
 }
 

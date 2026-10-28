@@ -10,7 +10,14 @@
  * 0039), so the developer's contact address is left out of what an edit records: undoing an edit
  * puts back everything else, and the address stays as the edit left it.
  */
-import { audit, endAppConnections, historyOf, newClientId, type TelaDb } from '@tela/data'
+import {
+  audit,
+  developerOk,
+  endAppConnections,
+  historyOf,
+  newClientId,
+  type TelaDb,
+} from '@tela/data'
 import type { AppScope, AppStatus } from '@tela/shared'
 import {
   ADMIN_FILTERS,
@@ -747,8 +754,9 @@ export async function liveAppContacts(
   db: TelaDb,
 ): Promise<{ clientId: string; name: string; contactEmail: string }[]> {
   const rows = await db.all<{ client_id: string; name: string; contact_email: string }>(sql`
-    select client_id, name, contact_email from apps
-    where status = 'approved' and contact_email <> '' order by name, id
+    select client_id, name, contact_email from apps a
+    where a.status = 'approved' and a.contact_email <> '' and ${developerOk('a')}
+    order by a.name, a.id
   `)
   return rows.map((r) => ({ clientId: r.client_id, name: r.name, contactEmail: r.contact_email }))
 }

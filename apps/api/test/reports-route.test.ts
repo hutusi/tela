@@ -125,8 +125,13 @@ describe('reporting', () => {
     expect(await reportRows()).toEqual([])
   })
 
-  test('an app by its client id, until it is cut off (ADR 0067)', async () => {
+  test('a Live app by its client id, never one in Testing or cut off (ADR 0067)', async () => {
     const app = await registerApp(api, { status: 'draft', reviewed: false })
+    // In Testing it is its developer's alone, and a report would block its delete.
+    expect(
+      (await report({ targetKind: 'app', targetKey: app.clientId, reason: 'spam' })).status,
+    ).toBe(404)
+    await db.run(sql`update apps set status = 'approved' where id = ${app.id}`)
     expect(
       (await report({ targetKind: 'app', targetKey: app.clientId, reason: 'spam' })).status,
     ).toBe(200)
