@@ -3,6 +3,7 @@
  * and what the toast says about an answer. Pure, so the tests read them as they are; `t` is the
  * `admin.shell` translator, passed in.
  */
+import { DEVELOPER_ACTIONS, type DeveloperAction } from '@tela/shared'
 import {
   ACTION_CONFIRM,
   ACTION_INPUT,
@@ -18,6 +19,12 @@ import {
 } from '@tela/shared/admin'
 
 export type Translate = (key: string, values?: Record<string, string | number>) => string
+
+const DEVELOPER: ReadonlySet<string> = new Set<string>(DEVELOPER_ACTIONS)
+
+function isDeveloperAction(action: string): action is DeveloperAction {
+  return DEVELOPER.has(action)
+}
 
 /** Actions that take something away, drawn in `danger` wherever they are offered. */
 const DANGER: ReadonlySet<AdminActionName> = new Set([
@@ -145,6 +152,11 @@ export function historyWords(
   if (action === 'admin.grant') return t('audit.grant')
   if (action === 'admin.ungrant') return t('audit.ungrant')
   if (action === 'account.delete') return t('audit.accountDelete')
+  // A member's change to an app they registered (ADR 0067): nested by the name's second part,
+  // since use-intl reads the dot in `developer.live` as a path.
+  if (isDeveloperAction(action)) {
+    return t(`audit.developer.${action.slice('developer.'.length)}`)
+  }
   // A newer server's action this build has no words for: its name beats a missing message.
   return isAdminAction(action) ? t(`actions.${action}.done`) : String(action)
 }

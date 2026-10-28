@@ -3,7 +3,7 @@
  * toast, History and the health line say, in the console's own English and Simplified Chinese.
  */
 import { describe, expect, test } from 'bun:test'
-import { REPORT_REASONS, REPORT_STATES, REPORT_TARGETS } from '@tela/shared'
+import { DEVELOPER_ACTIONS, REPORT_REASONS, REPORT_STATES, REPORT_TARGETS } from '@tela/shared'
 import {
   ACTION_CONFIRM,
   ADMIN_ACTIONS,
@@ -389,6 +389,31 @@ describe('what an audit entry says', () => {
     expect(historyWords(t, { action: 'admin.grant' })).toBe('Made an admin')
     expect(historyWords(t, { action: 'admin.ungrant' })).toBe('No longer an admin')
     expect(historyWords(t, { action: 'site.retire' as never })).toBe('site.retire')
+  })
+
+  // A member's change to their own app (ADR 0067) lands in the app's History beside the console's
+  // own actions; without words it would show `developer.live`, or `admin.shell.audit…` with a
+  // flat key, which use-intl reads as a path.
+  test.each(['en', 'zh-Hans', 'zh-Hant'] as const)(
+    '%s words every change a developer makes to their app',
+    (lang) => {
+      const words = translator(lang)
+      const seen = new Set<string>()
+      for (const action of DEVELOPER_ACTIONS) {
+        const text = historyWords(words, { action })
+        expect({ action, text }).not.toEqual({ action, text: action })
+        expect(text).not.toContain('admin.shell')
+        seen.add(text)
+      }
+      expect(seen.size).toBe(DEVELOPER_ACTIONS.length)
+    },
+  )
+
+  test('a developer’s change, in English and Chinese', () => {
+    expect(historyWords(t, { action: 'developer.live' })).toBe('Made live by its developer')
+    expect(historyWords(translator('zh-Hans'), { action: 'developer.register' })).toBe(
+      '开发者登记了应用',
+    )
   })
 })
 

@@ -427,7 +427,15 @@
   "audit": {
     "grant": "Made an admin",
     "ungrant": "No longer an admin",
-    "accountDelete": "Deleted by its member"
+    "accountDelete": "Deleted by its member",
+    "developer": {
+      "register": "Registered by its developer",
+      "edit": "Edited by its developer",
+      "live": "Made live by its developer",
+      "testing": "Put back in testing by its developer",
+      "review": "Review requested by its developer",
+      "delete": "Deleted by its developer"
+    }
   },
   "overview": {
     "waiting": "{n, plural, one {# decision waiting} other {# decisions waiting}} across four queues.",
