@@ -3,6 +3,7 @@
  * listing, readers and translation. The queues link here. The pieces the other library areas
  * share (a blog's tile and name, a member's, a link to another record) live here too.
  */
+import { isTopic } from '@tela/shared'
 import {
   type AdminClaimRow,
   type AdminFeedRow,
@@ -114,9 +115,12 @@ export function restoreDone(t: Translate, listing: unknown, action: string) {
   return undefined
 }
 
-/** A blog's topics in words, in Discover's order. */
+/** A blog's topics in words, in Discover's order; one this build has no word for is left out. */
 export const topicWords = (t: Translate, topics: readonly string[]) =>
-  topics.map((topic) => t(`topics.${topic}`)).join(t('listSeparator'))
+  topics
+    .filter(isTopic)
+    .map((topic) => t(`topics.${topic}`))
+    .join(t('listSeparator'))
 
 /** The short name of what went wrong with a feed, from its stored error (`kind: message`). */
 export function feedErrorLabel(t: Translate, lastError: string | null): string {

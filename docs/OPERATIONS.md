@@ -395,6 +395,20 @@ The account is on Workers Paid. Run wrangler from a real terminal (`wrangler log
      - After deploy, check that Settings → Developer registers an app on your account and connects
        it in Testing, that the console's Apps area opens on *To review*, and that `bun run admin
        settings` lists `apps.unreviewedMaxConnections` (100) and `apps.perMember` (5).
+   - The AI topic and the AI labs (ADR 0068) bump `MIN_CLIENT` to 7: a protocol-6 shell shows a
+     blog's topic `ai` as its key. No migration (`site_topics` has no CHECK).
+     - Deploy tela-jobs first (Add's discovery offering a listed blog's feeds runs there), then
+       tela-web, then tela-api within minutes; tela-gateway is unchanged.
+     - Then `bun run admin curate`, never before tela-api: curate drops a topic tela-api does not
+       know, and a lab listed under AI alone would be listed under nothing.
+     - Rolling back: tela-api and tela-web go back together. The labs stay listed; an older build
+       shows them under All only, and `?topic=ai` reads as no topic. tela-jobs may go back alone:
+       Add then says "No feed found" at a lab's address again.
+     - After deploy, check that Discover shows the AI chip and `/discover/blogs?topic=ai` lists the
+       labs and the writers; that Add, given `https://www.anthropic.com/engineering`, offers
+       Anthropic's three feeds; and, once OpenAI's posts are fetched, whether their extraction got
+       through (`select extract_state, count(*) from articles where url_host = 'openai.com' group
+       by 1`). If it was refused, its posts stay excerpts, as ADR 0068 accepts.
    - Protocol 2 (2026-09-29) keeps each device's copy in IndexedDB `tela-2`; earlier shells use
      `tela`, which the newer shell empties at each boot and marks as seen. A tela-web rollback
      leaves the `tela-2` copies in place, and the older shell starts over in `tela`. On the way

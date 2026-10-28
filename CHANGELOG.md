@@ -9,6 +9,12 @@ everything so far sits under `[Unreleased]`.
 
 ### Changed
 
+- **AI in Discover** (ADR 0068). A tenth topic, AI, holds the independent AI writers and the AI
+  labs: OpenAI, Google DeepMind, Google Research, Hugging Face, Microsoft Research, Mistral,
+  Anthropic and Cohere, the one exception to Discover's blogs written by people, never featured.
+  A lab with no feed of its own is read through a maintained one elsewhere, never RSSHub, and Add
+  finds it from the lab's own address: typing `anthropic.com/engineering` offers Anthropic's
+  feeds. OpenAI's posts may stay summaries, since openai.com turns bots away. `MIN_CLIENT` 7.
 - **Members register their own apps** (ADR 0067), in Settings → Developer, as on GitHub: Testing
   for the developer alone, then Live for everyone. The operator reviews apps when asked and handles
   reports of them. An app Tela has not reviewed is shown as "Not reviewed by Tela" with its

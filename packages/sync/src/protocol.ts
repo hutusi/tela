@@ -46,8 +46,11 @@ export const TITLE_IDS_MAX = 1000
  * - 6: an app a member registered may be unreviewed (ADR 0067), and the consent page must say so
  *   ("Not reviewed by Tela", the developer's handle in place of the name they typed). A
  *   protocol-5 shell would show such an app's own words with nothing to say Tela never checked it.
+ * - 7: a blog may carry the topic `ai` (ADR 0068), which a protocol-6 shell labelled with its key
+ *   ("topics.ai") on the blog's page. From 7 a shell leaves out a topic it has no word for, so the
+ *   next topic needs no bump.
  */
-export const MIN_CLIENT = 6
+export const MIN_CLIENT = 7
 /**
  * The first protocol whose clients name the member (`MEMBER_HEADER`). Signing out checks that name
  * from here on, whatever `MIN_CLIENT` has become: a tab told to reload may still sign out, and a
