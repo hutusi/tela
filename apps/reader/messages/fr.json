@@ -1235,7 +1235,7 @@
       "privacy_required": "Ajoutez d’abord une politique de confidentialité : la page où les membres connectent l’application y renvoie, et l’application ne peut donc pas être mise en ligne sans elle.",
       "cut_off": "Tela a coupé cette application : elle ne peut être ni modifiée ni supprimée.",
       "reported": "Quelqu’un a signalé cette application : elle ne peut être ni modifiée ni supprimée tant que Tela n’a pas examiné le signalement.",
-      "handle": "Votre identifiant contient « Tela », que seules les applications de Tela peuvent afficher. Changez-le dans Réglages → Profil pour enregistrer une application ou la mettre en ligne."
+      "handle": "Votre identifiant contient « Tela », que seules les applications de Tela peuvent afficher. Changez-le dans Paramètres → Profil pour enregistrer une application ou la mettre en ligne."
     }
   },
   "connect": {
