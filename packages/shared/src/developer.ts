@@ -42,15 +42,26 @@ const LOOKALIKES: Record<string, string> = {
 }
 
 /**
+ * A capital I (Latin, Cyrillic І or Greek Ι) after a lowercase letter, where a sans-serif face
+ * draws it as an `l`: `TeIa` reads as "Tela", and lowercasing would make it an `i`. Only there, so
+ * `TEIA` (Portuguese for "web"), whose I stands beside capitals and reads as one, is left alone.
+ */
+const CAPITAL_I_AS_L = /(?<=\p{Ll})[I\u0406\u0399]/gu
+
+/**
  * Whether a name says "Tela", which only the operator may use (ADR 0067): on Tela's own consent
  * page, "Tela Sync wants to read and write your account" reads as Tela itself. Any word that
  * starts with it, in any case, once the text is NFKC-normalised, stripped of what a reader cannot
- * see, and its look-alike letters read as Latin: so `TelaSync`, `Ｔｅｌａ`, `my-tela`, `T\u00ADela`
- * and `Tеla` (a Cyrillic е) all count, and `Hotela` does not.
+ * see, and its look-alike letters read as Latin: so `TelaSync`, `Ｔｅｌａ`, `my-tela`, `T\u00ADela`,
+ * `Tеla` (a Cyrillic е) and `TeIa` (a capital I) all count, and `Hotela` does not.
  */
 export function mentionsTela(text: string): boolean {
   const skeleton = [
-    ...text.normalize('NFKC').toLowerCase().replace(new RegExp(INVISIBLE, 'gu'), ''),
+    ...text
+      .normalize('NFKC')
+      .replace(new RegExp(INVISIBLE, 'gu'), '')
+      .replace(CAPITAL_I_AS_L, 'l')
+      .toLowerCase(),
   ]
     .map((c) => LOOKALIKES[c] ?? c)
     .join('')

@@ -45,7 +45,8 @@ the email permission the developer asked for.
 
 **Only the operator may use the word "Tela"** in an app's name or developer name (`mentionsTela`:
 any word starting with it, in any case, after NFKC normalisation, with invisible characters
-removed and Cyrillic and Greek look-alikes read as Latin).
+removed, Cyrillic and Greek look-alikes read as Latin, and a capital I after a lowercase letter
+read as the `l` a sans-serif face draws it as, so `TeIa` counts and `TEIA` does not).
 - **Invisible characters** (format characters such as soft hyphens, zero-width spaces and
   bidirectional overrides, and blank fillers) are refused in a member's app name and developer
   name outright.

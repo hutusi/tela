@@ -38,6 +38,17 @@ describe('the word only the operator may use (ADR 0067)', () => {
     }
   })
 
+  test('a capital I counts as an l after a lowercase letter, where it is drawn as one', () => {
+    // Latin I, Cyrillic І and Greek Ι, and one behind a soft hyphen.
+    for (const name of ['TeIa Sync', 'my TeIa', 'Te\u0406a', 'Te\u0399a', 'Te\u00ADIa']) {
+      expect([JSON.stringify(name), mentionsTela(name)]).toEqual([JSON.stringify(name), true])
+    }
+    // Beside capitals it reads as an I: TEIA is a word, and nothing like TELA.
+    for (const name of ['TEIA Reader', 'Teia', 'TEIa', 'Insta']) {
+      expect([name, mentionsTela(name)]).toEqual([name, false])
+    }
+  })
+
   test('a name or developer with an invisible character is refused, whatever it says', () => {
     expect(hasInvisible('Loom‮')).toBe(true)
     expect(hasInvisible('Loom Labs')).toBe(false)
