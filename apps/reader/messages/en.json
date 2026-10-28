@@ -1245,7 +1245,7 @@
       "join": "Join Tela"
     },
     "draft": "In testing: only its developer can connect it, and it is registered to your account. It isn’t live for anyone else yet.",
-    "heading": "Connect {app} to your Tela account?",
+    "heading": "Connect <name>{app}</name> to your Tela account?",
     "by": "By {developer}",
     "byWithHome": "By {developer} · <home>Website</home>",
     "byHandle": "By <member>@{handle}</member>",

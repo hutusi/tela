@@ -1245,7 +1245,7 @@
       "join": "Rejoindre Tela"
     },
     "draft": "En test : seul son développeur peut la connecter, et elle est enregistrée sur votre compte. Elle n’est encore en ligne pour personne d’autre.",
-    "heading": "Connecter {app} à votre compte Tela ?",
+    "heading": "Connecter <name>{app}</name> à votre compte Tela ?",
     "by": "Par {developer}",
     "byWithHome": "Par {developer} · <home>Site web</home>",
     "byHandle": "Par <member>@{handle}</member>",

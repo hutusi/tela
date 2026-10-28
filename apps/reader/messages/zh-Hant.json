@@ -1245,7 +1245,7 @@
       "join": "加入 Tela"
     },
     "draft": "測試中：只有它的開發者能連線它，它登記在你的帳號下，還沒有對其他人上線。",
-    "heading": "把 {app} 連線到你的 Tela 帳號？",
+    "heading": "把 <name>{app}</name> 連線到你的 Tela 帳號？",
     "by": "開發者：{developer}",
     "byWithHome": "開發者：{developer} · <home>網站</home>",
     "byHandle": "開發者：<member>@{handle}</member>",

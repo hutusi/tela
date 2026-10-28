@@ -16,13 +16,45 @@ import {
 } from './apps'
 
 /**
+ * Characters a reader cannot see: format characters (soft hyphen, zero-width spaces and joiners,
+ * the word joiner, bidirectional overrides) and the blank fillers fonts draw as nothing. A name
+ * holding one could say "Tela" to the eye and not to a check, or turn the consent page's sentence
+ * around it backwards, so a member's app may use none (ADR 0067).
+ */
+const INVISIBLE = /\p{Cf}|\u034F|[\u115F\u1160\u17B4\u17B5\u180E\u2800\u3164\uFFA0]/u
+
+/** Whether text holds a character a reader cannot see. */
+export const hasInvisible = (text: string): boolean => INVISIBLE.test(text)
+
+/**
+ * Letters of other scripts drawn like the Latin `t`, `e`, `l` and `a` (Unicode's confusables,
+ * UTS #39, for the four that matter here), compared once lowercased: Cyrillic т е ӏ а and Greek τ ε
+ * α, whose capitals Т Е А Τ Ε Α read as "TELA".
+ */
+const LOOKALIKES: Record<string, string> = {
+  т: 't',
+  е: 'e',
+  ӏ: 'l',
+  а: 'a',
+  τ: 't',
+  ε: 'e',
+  α: 'a',
+}
+
+/**
  * Whether a name says "Tela", which only the operator may use (ADR 0067): on Tela's own consent
  * page, "Tela Sync wants to read and write your account" reads as Tela itself. Any word that
- * starts with it, in any case, once the text is NFKC-normalised, so `TelaSync`, `Ｔｅｌａ` and
- * `my-tela` all count, and `Hotela` does not.
+ * starts with it, in any case, once the text is NFKC-normalised, stripped of what a reader cannot
+ * see, and its look-alike letters read as Latin: so `TelaSync`, `Ｔｅｌａ`, `my-tela`, `T\u00ADela`
+ * and `Tеla` (a Cyrillic е) all count, and `Hotela` does not.
  */
 export function mentionsTela(text: string): boolean {
-  return /(?:^|[^\p{L}\p{N}])tela/u.test(text.normalize('NFKC').toLowerCase())
+  const skeleton = [
+    ...text.normalize('NFKC').toLowerCase().replace(new RegExp(INVISIBLE, 'gu'), ''),
+  ]
+    .map((c) => LOOKALIKES[c] ?? c)
+    .join('')
+  return /(?:^|[^\p{L}\p{N}])tela/u.test(skeleton)
 }
 
 /** What a member registers their app with, and edits. */
@@ -53,9 +85,13 @@ export function parseDeveloperApp(
   if (typeof value !== 'object' || value === null) return { ok: false, field: 'name' }
   const v = value as Record<string, unknown>
   const name = appText(v.name, APP_NAME_MAX)
-  if (name === undefined || mentionsTela(name)) return { ok: false, field: 'name' }
+  if (name === undefined || hasInvisible(name) || mentionsTela(name)) {
+    return { ok: false, field: 'name' }
+  }
   const developer = appText(v.developer, APP_TEXT_MAX)
-  if (developer === undefined || mentionsTela(developer)) return { ok: false, field: 'developer' }
+  if (developer === undefined || hasInvisible(developer) || mentionsTela(developer)) {
+    return { ok: false, field: 'developer' }
+  }
   const contactEmail = appText(v.contactEmail, APP_TEXT_MAX)
   if (contactEmail === undefined || !APP_EMAIL.test(contactEmail)) {
     return { ok: false, field: 'contactEmail' }

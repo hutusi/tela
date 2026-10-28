@@ -68,7 +68,7 @@ const consent = (request: ConnectRequest, account: typeof MARA | null = MARA, lo
 describe('the consent page', () => {
   test('says who asks, as whom, for what, and where the answer goes', () => {
     const html = consent(REQUEST)
-    expect(html).toContain('Connect Loom to your Tela account?')
+    expect(html).toContain('Connect <bdi>Loom</bdi> to your Tela account?')
     expect(html).toContain('By Loom Labs')
     expect(html).toContain('href="https://loom.example"')
     // The account answering, and a way to answer as another.

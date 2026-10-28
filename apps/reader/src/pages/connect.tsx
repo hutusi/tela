@@ -250,7 +250,14 @@ function Developer({ app }: { app: ConnectRequest['app'] }) {
   const handle = app.reviewed ? null : app.developerHandle
   if (handle) {
     const member = (chunks: React.ReactNode) => (
-      <a href={`/@${handle}`} target="_blank" rel="noopener" className="text-ink underline">
+      // noreferrer: a same-origin Referer would carry the whole authorization request, `state`
+      // and all, to the edge that renders the profile.
+      <a
+        href={`/@${handle}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-ink underline"
+      >
         {chunks}
       </a>
     )
@@ -327,7 +334,8 @@ export function ConsentForm({
           </p>
         ) : null}
         <h1 className="m-0 font-serif text-[30px] leading-[1.15] font-medium tracking-[-0.015em] [overflow-wrap:anywhere]">
-          {t('heading', { app: app.name })}
+          {/* Isolated: a name in a right-to-left script must not reorder the sentence around it. */}
+          {t.rich('heading', { app: app.name, name: (chunks) => <bdi>{chunks}</bdi> })}
         </h1>
         {/* A div, not a p: the report's sheet opens inside it. */}
         <div className="text-[14px] [overflow-wrap:anywhere] text-muted">
@@ -479,7 +487,12 @@ export function ConsentForm({
           {t.rich('later', {
             // Apart from this page, which holds the request the app is waiting on.
             link: (chunks) => (
-              <a href="/privacy#apps" target="_blank" rel="noopener" className="text-ink underline">
+              <a
+                href="/privacy#apps"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-ink underline"
+              >
                 {chunks}
               </a>
             ),
