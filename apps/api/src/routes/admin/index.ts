@@ -81,6 +81,11 @@ export function parseAct(body: unknown): AdminActRequest | null {
     if (JSON.stringify(a.app).length > 10_000) return null
     parsed.app = a.app
   }
+  if (a.allowEmail !== undefined) {
+    // Whether a reviewed app may ask for the email address (`app.review`).
+    if (typeof a.allowEmail !== 'boolean') return null
+    parsed.allowEmail = a.allowEmail
+  }
   if ('value' in a) {
     // A setting's value (`setting.set`): any JSON value, small; its key's rule checks it.
     if (JSON.stringify(a.value ?? null).length > 1000) return null

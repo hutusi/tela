@@ -273,6 +273,16 @@
         "label": "断开所有连接",
         "short": "断开连接",
         "done": "连接已全部断开"
+      },
+      "review": {
+        "label": "审核",
+        "short": "审核",
+        "done": "已审核"
+      },
+      "dismissReview": {
+        "label": "忽略审核申请",
+        "short": "忽略",
+        "done": "已忽略审核申请"
       }
     },
     "report": {

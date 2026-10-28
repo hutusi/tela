@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import {
+  ACTION_INPUT,
   ADMIN_FILTERS,
   actionsCrossing,
   actionsWriting,
@@ -72,7 +73,8 @@ describe('an app’s actions (ADR 0064)', () => {
       'app.restore',
       'app.suspend',
     ])
-    expect(actionsCrossing('app.edit')).toEqual(['app.edit'])
+    // An edit and a review both write the email permission: a later one stands in the way.
+    expect(actionsCrossing('app.edit').sort()).toEqual(['app.edit', 'app.review'])
     // A feed's pause writes its own status, never an app's.
     expect(actionsCrossing('feed.pause')).not.toContain('app.suspend')
   })
@@ -80,6 +82,21 @@ describe('an app’s actions (ADR 0064)', () => {
   test('ending the connections is one-shot: nothing gives a member’s grant back', () => {
     expect(UNDOABLE_ACTIONS).not.toContain('app.endConnections' as never)
     expect(writesOf('app.endConnections')).toEqual([])
-    expect(ADMIN_FILTERS.apps[0]).toBe('approved')
+  })
+
+  test('a review and its dismissal answer one request, and the area opens on the queue (ADR 0067)', () => {
+    expect(ADMIN_FILTERS.apps[0]).toBe('review')
+    expect(UNDOABLE_ACTIONS).toContain('app.review')
+    expect(UNDOABLE_ACTIONS).toContain('app.dismissReview')
+    expect(actionsCrossing('app.review').sort()).toEqual([
+      'app.dismissReview',
+      'app.edit',
+      'app.review',
+    ])
+    expect(actionsCrossing('app.dismissReview').sort()).toEqual(['app.dismissReview', 'app.review'])
+    // A blog's review for Discover is another thing altogether.
+    expect(actionsCrossing('app.review')).not.toContain('site.dismiss')
+    // Its own input, never the address `email` asks for.
+    expect(ACTION_INPUT['app.review']).toBe('review')
   })
 })

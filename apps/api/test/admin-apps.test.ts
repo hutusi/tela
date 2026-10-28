@@ -1,7 +1,8 @@
 /**
- * The console's Apps area (ADRs 0039, 0064): registering an app, approving it, cutting it off and
- * restoring it, editing what it may do, and ending every connection to it; each audited, and
- * every action but the last with an undo. An audit row never holds the developer's address.
+ * The console's Apps area (ADRs 0039, 0064, 0067): registering an app, approving it, cutting it
+ * off and restoring it, editing what it may do, ending every connection to it, and reviewing the
+ * apps members register; each audited, and every action but ending connections with an undo. An
+ * audit row never holds the developer's address.
  */
 import { beforeEach, describe, expect, test } from 'bun:test'
 import { first } from '@tela/data'
@@ -15,6 +16,7 @@ import type {
 } from '@tela/shared/admin'
 import { sql } from 'drizzle-orm'
 import { parseAct } from '../src/routes/admin'
+import { registerApp } from './apps-helpers'
 import { ADMIN_TOKEN, createTestApi, type SignedIn, signedIn, type TestApi } from './helpers'
 
 let api: TestApi
@@ -109,7 +111,7 @@ describe('registering', () => {
   test('makes a draft with a client id of its own, listed with what can be done to it', async () => {
     const id = await register({ redirectUris: ['http://127.0.0.1/cb', 'com.loom.app:/oauth'] })
     const list = await apps('draft')
-    expect(list.counts).toEqual({ approved: 0, draft: 1, suspended: 0 })
+    expect(list.counts).toEqual({ review: 0, approved: 0, draft: 1, suspended: 0 })
     const row = list.rows[0]
     expect(row).toMatchObject({
       id,
@@ -127,6 +129,14 @@ describe('registering', () => {
       actions: ['app.approve', 'app.edit', 'app.suspend'],
     })
     expect(row?.clientId.startsWith(CLIENT_ID_PREFIX)).toBe(true)
+    // The operator's own registration is reviewed as it is made (ADR 0067), and no member's.
+    expect(row).toMatchObject({
+      registeredBy: null,
+      termsAt: null,
+      reviewedAt: api.clock.now(),
+      reviewedBy: { id: ops.userId },
+      reviewRequestedAt: null,
+    })
     const detail = await get<AdminAppDetail>(`apps/${id}`)
     expect(detail.app.clientId).toBe(row?.clientId ?? '')
     expect(detail.history.map((h) => h.action)).toEqual(['app.create'])
@@ -355,5 +365,200 @@ describe('ending every connection', () => {
     ])
     const history = (await get<AdminAppDetail>(`apps/${id}`)).history
     expect(history[0]).toMatchObject({ action: 'app.endConnections', from: { connections: 2 } })
+  })
+})
+
+describe('reviewing an app a member registered (ADR 0067)', () => {
+  /** Mara's app, registered in Settings → Developer, live, and asking for a review. */
+  async function marasApp(over: { wantsEmail?: boolean; note?: string | null } = {}) {
+    const mara = await signedIn(api, 'mara@x.test')
+    const app = await registerApp(api, {
+      developerId: mara.userId,
+      ownerUserId: mara.userId,
+      reviewed: false,
+    })
+    const asked = api.clock.now()
+    await api.db.run(sql`update apps set review_requested_at = ${asked},
+        review_note = ${over.note === undefined ? 'A desktop reader.' : over.note},
+        review_wants_email = ${over.wantsEmail ? 1 : 0}, terms_at = ${asked - 1000}
+      where id = ${app.id}`)
+    return { mara, id: String(app.id), asked }
+  }
+
+  const reviewOf = (id: string) =>
+    first<{
+      reviewed_at: number | null
+      reviewed_by: string | null
+      review_requested_at: number | null
+      allow_email: number
+    }>(
+      api.db,
+      sql`select reviewed_at, reviewed_by, review_requested_at, allow_email from apps
+        where id = ${Number(id)}`,
+    )
+
+  test('the area opens on the queue, with who registered it and what they asked', async () => {
+    const { mara, id, asked } = await marasApp({ wantsEmail: true })
+    await register()
+    const opened = await get<AdminList<AdminAppRow, 'apps'>>('apps')
+    expect(opened.counts).toEqual({ review: 1, approved: 1, draft: 1, suspended: 0 })
+    expect(opened.rows.map((r) => r.id)).toEqual([id])
+    expect(opened.rows[0]).toMatchObject({
+      status: 'approved',
+      registeredBy: { id: mara.userId },
+      owner: { id: mara.userId },
+      termsAt: asked - 1000,
+      reviewedAt: null,
+      reviewedBy: null,
+      reviewRequestedAt: asked,
+      reviewNote: 'A desktop reader.',
+      reviewWantsEmail: true,
+      // The likeliest first: review it, or say there is nothing to review.
+      actions: ['app.review', 'app.dismissReview', 'app.edit', 'app.suspend'],
+    })
+    // Searched within the queue too.
+    const searched = await api.request('/api/v1/admin/apps', {
+      as: ops,
+      body: { f: 'review', q: 'Loom' },
+    })
+    expect(((await searched.json()) as AdminList<AdminAppRow, 'apps'>).rows).toEqual([])
+  })
+
+  test('a review lifts it, granting the email if the operator says so, with an undo', async () => {
+    const { id, asked } = await marasApp({ wantsEmail: true })
+    // Whether it may ask for the email is the operator's answer, and must be given.
+    expect((await act({ action: 'app.review', ids: [id] })).failed).toEqual([
+      { id, error: 'invalid' },
+    ])
+    expect(parseAct({ action: 'app.review', ids: [id], args: { allowEmail: 'yes' } })).toBeNull()
+
+    const reviewed = await act({ action: 'app.review', ids: [id], args: { allowEmail: true } })
+    expect(reviewed.done).toEqual([id])
+    expect(await reviewOf(id)).toEqual({
+      reviewed_at: api.clock.now(),
+      reviewed_by: ops.userId,
+      review_requested_at: null,
+      allow_email: 1,
+    })
+    expect((await apps('review')).rows).toEqual([])
+    const row = (await apps('approved')).rows.find((r) => r.id === id)
+    expect(row).toMatchObject({ reviewedBy: { id: ops.userId }, allowEmail: true })
+    expect(row?.actions).toEqual(['app.edit', 'app.suspend'])
+    // Reviewed already: nothing to change.
+    expect(
+      (await act({ action: 'app.review', ids: [id], args: { allowEmail: false } })).failed,
+    ).toEqual([{ id, error: 'not_applicable' }])
+
+    expect((await undo(reviewed.undo?.group ?? '')).status).toBe(200)
+    expect(await reviewOf(id)).toEqual({
+      reviewed_at: null,
+      reviewed_by: null,
+      review_requested_at: asked,
+      allow_email: 0,
+    })
+    expect((await apps('review')).rows.map((r) => r.id)).toEqual([id])
+  })
+
+  test('an edit since stands in the way of undoing a review: both write the email', async () => {
+    const { id } = await marasApp()
+    const reviewed = await act({ action: 'app.review', ids: [id], args: { allowEmail: false } })
+    const row = (await get<AdminAppDetail>(`apps/${id}`)).app
+    const edit = await act({
+      action: 'app.edit',
+      ids: [id],
+      args: {
+        app: settings({
+          name: row.name,
+          developer: row.developer,
+          contactEmail: row.contactEmail,
+          redirectUris: row.redirectUris,
+          allowEmail: true,
+          owner: row.owner?.handle ?? null,
+        }),
+      },
+    })
+    expect(edit.done).toEqual([id])
+    expect((await undo(reviewed.undo?.group ?? '')).status).toBe(409)
+    expect((await reviewOf(id))?.reviewed_at).toBe(api.clock.now())
+  })
+
+  test('a dismissal answers the request and leaves it unreviewed, with an undo', async () => {
+    const { id, asked } = await marasApp()
+    const dismissed = await act({ action: 'app.dismissReview', ids: [id] })
+    expect(dismissed.done).toEqual([id])
+    expect(await reviewOf(id)).toMatchObject({ reviewed_at: null, review_requested_at: null })
+    expect((await apps('review')).rows).toEqual([])
+    // Not reviewed, so the operator can still review it; nothing is left to dismiss.
+    expect((await apps('approved')).rows.find((r) => r.id === id)?.actions).toEqual([
+      'app.edit',
+      'app.suspend',
+      'app.review',
+    ])
+    expect((await act({ action: 'app.dismissReview', ids: [id] })).failed).toEqual([
+      { id, error: 'not_applicable' },
+    ])
+    expect((await undo(dismissed.undo?.group ?? '')).status).toBe(200)
+    expect((await reviewOf(id))?.review_requested_at).toBe(asked)
+
+    // Reviewed after a dismissal, the dismissal can no longer be undone.
+    const again = await act({ action: 'app.dismissReview', ids: [id] })
+    await act({ action: 'app.review', ids: [id], args: { allowEmail: false } })
+    expect((await undo(again.undo?.group ?? '')).status).toBe(409)
+    const history = (await get<AdminAppDetail>(`apps/${id}`)).history.map((h) => h.action)
+    expect(history.slice(0, 2)).toEqual(['app.review', 'app.dismissReview'])
+  })
+
+  test('a cut-off app is not reviewed, though its request can be dismissed', async () => {
+    const { id } = await marasApp()
+    await act({ action: 'app.suspend', ids: [id] })
+    const listed = (await apps('review')).rows.find((r) => r.id === id)
+    expect(listed?.actions).toEqual(['app.dismissReview', 'app.restore', 'app.edit'])
+    expect(
+      (await act({ action: 'app.review', ids: [id], args: { allowEmail: false } })).failed,
+    ).toEqual([{ id, error: 'not_applicable' }])
+  })
+
+  test('its owner is its developer, whatever an edit names', async () => {
+    const { mara, id } = await marasApp()
+    await signedIn(api, 'ned@x.test')
+    const ned = (
+      await first<{ handle: string }>(
+        api.db,
+        sql`select p.handle from profiles p join user u on u.id = p.user_id
+          where u.email = 'ned@x.test'`,
+      )
+    )?.handle
+    const row = (await get<AdminAppDetail>(`apps/${id}`)).app
+    const edited = await act({
+      action: 'app.edit',
+      ids: [id],
+      args: {
+        app: settings({
+          name: 'Renamed',
+          developer: row.developer,
+          contactEmail: row.contactEmail,
+          redirectUris: row.redirectUris,
+          owner: ned ?? null,
+        }),
+      },
+    })
+    expect(edited.done).toEqual([id])
+    expect(await appRow(id)).toMatchObject({ name: 'Renamed', owner_user_id: mara.userId })
+    // Nor can it be taken away.
+    const cleared = await act({
+      action: 'app.edit',
+      ids: [id],
+      args: {
+        app: settings({
+          name: 'Renamed again',
+          developer: row.developer,
+          contactEmail: row.contactEmail,
+          redirectUris: row.redirectUris,
+          owner: null,
+        }),
+      },
+    })
+    expect(cleared.done).toEqual([id])
+    expect((await appRow(id))?.owner_user_id).toBe(mara.userId)
   })
 })

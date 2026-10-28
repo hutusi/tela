@@ -1,6 +1,6 @@
 /**
- * The console's Apps area (ADRs 0039, 0064): the apps the operator registers, approves and cuts
- * off, and the rule every registration is held to. The rule is here, beside the types, so the
+ * The console's Apps area (ADRs 0039, 0064, 0067): the apps the operator registers, approves, cuts
+ * off and reviews, and the rule every registration of theirs is held to. The rule is here, beside the types, so the
  * console's form refuses what tela-api would, field by field, before anything is sent.
  */
 
@@ -59,6 +59,21 @@ export type AdminAppRow = AdminRowBase &
     connections: number
     /** When it last acted for anyone, to the hour; null if never. */
     lastUsedAt: number | null
+    /**
+     * The member who registered it in Settings → Developer (ADR 0067), and so its owner, whom an
+     * edit cannot change; null for an app the operator registered.
+     */
+    registeredBy: AdminPerson | null
+    /** When its developer accepted the developer rules; null for the operator's own. */
+    termsAt: number | null
+    /** When Tela reviewed it, and who; null for an app not reviewed. */
+    reviewedAt: number | null
+    reviewedBy: AdminPerson | null
+    /** When its developer asked for a review not yet answered; null otherwise. */
+    reviewRequestedAt: number | null
+    /** The developer's words with the request, and whether it asks for the email permission. */
+    reviewNote: string | null
+    reviewWantsEmail: boolean
   }
 
 export type AdminAppDetail = { app: AdminAppRow; history: AdminHistoryEntry[] }

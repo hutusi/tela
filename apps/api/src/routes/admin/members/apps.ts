@@ -1,8 +1,10 @@
 /**
- * Apps (ADRs 0039, 0064): the third-party clients the operator registers, approves and cuts off.
- * A draft connects only for its owner's account, so a developer tests on production with their
- * own; an approved app for any member; a suspended one for no one, every token refused at once
- * while its connections are kept for a restore.
+ * Apps (ADRs 0039, 0064, 0067): the third-party clients the operator registers, approves and cuts
+ * off, and those members register in Settings → Developer. A draft connects only for its owner's
+ * account, so a developer tests on production with their own; an approved app for any member; a
+ * suspended one for no one, every token refused at once while its connections are kept for a
+ * restore. A review is optional: the queue holds the apps whose developers asked for one, and a
+ * review lifts the limits an app nobody reviewed is held to.
  *
  * Each write is one batch with its audit row. An audit row never holds an email address (ADR
  * 0039), so the developer's contact address is left out of what an edit records: undoing an edit
@@ -11,12 +13,14 @@
 import { audit, endAppConnections, historyOf, newClientId, type TelaDb } from '@tela/data'
 import type { AppScope, AppStatus } from '@tela/shared'
 import {
+  ADMIN_FILTERS,
   ADMIN_LIST_LIMIT,
   type AdminActionName,
   type AdminAppDetail,
   type AdminAppRow,
   type AdminAppSettings,
   type AdminList,
+  type AdminPerson,
   isAdminFilter,
   parseAppSettings,
 } from '@tela/shared/admin'
@@ -62,17 +66,42 @@ type AppRaw = {
   suspended_at: number | null
   connections: number
   last_used_at: number | null
+  developer_id: string | null
+  developer_handle: string | null
+  developer_name: string | null
+  terms_at: number | null
+  reviewed_at: number | null
+  reviewed_by: string | null
+  reviewer_handle: string | null
+  reviewer_name: string | null
+  review_requested_at: number | null
+  review_note: string | null
+  review_wants_email: number
 }
 
-/** Apps aliased `a`, with their owner's card, who is connected now, and when they last acted. */
+/**
+ * Apps aliased `a`, with the cards of their owner, the member who registered them and whoever
+ * reviewed them, who is connected now, and when they last acted.
+ */
 const appSelect = sql`
   select a.id, a.client_id, a.name, a.developer, a.contact_email, a.homepage_url, a.privacy_url,
     a.redirect_uris, a.max_scope, a.allow_email, a.status, a.owner_user_id,
     op.handle as owner_handle, op.display_name as owner_name, a.per_member_per_min,
     a.per_app_per_min, a.max_connections, a.created_at, a.approved_at, a.suspended_at,
     (select count(*) from app_grants g where g.app_id = a.id and g.ended_at is null) as connections,
-    (select max(g.last_used_at) from app_grants g where g.app_id = a.id) as last_used_at
-  from apps a left join profiles op on op.user_id = a.owner_user_id`
+    (select max(g.last_used_at) from app_grants g where g.app_id = a.id) as last_used_at,
+    a.developer_id, dp.handle as developer_handle, dp.display_name as developer_name, a.terms_at,
+    a.reviewed_at, a.reviewed_by, rp.handle as reviewer_handle, rp.display_name as reviewer_name,
+    a.review_requested_at, a.review_note, a.review_wants_email
+  from apps a left join profiles op on op.user_id = a.owner_user_id
+    left join profiles dp on dp.user_id = a.developer_id
+    left join profiles rp on rp.user_id = a.reviewed_by`
+
+/** Over `apps a`: its developer asked for a review nobody has answered (ADR 0067). */
+const WAITING_REVIEW = sql`(a.review_requested_at is not null and a.reviewed_at is null)`
+
+const personOf = (id: string | null, handle: string | null, name: string | null) =>
+  id && handle ? ({ id, handle, name } satisfies AdminPerson) : null
 
 function uris(json: string): string[] {
   try {
@@ -86,18 +115,28 @@ function uris(json: string): string[] {
 /**
  * What applies to an app now. A draft is approved or cut off; an approved app cut off; a cut-off
  * app restored to where it was. Any app's settings can be edited, and its connections ended while
- * it has any.
+ * it has any. An app nobody reviewed can be, unless it is cut off; one whose developer asked is
+ * reviewed or its request dismissed first, as the likeliest answer (ADR 0067).
  */
 function actionsFor(r: AppRaw): AdminActionName[] {
   const end = r.connections > 0 ? (['app.endConnections'] as const) : []
-  switch (r.status) {
-    case 'draft':
-      return ['app.approve', 'app.edit', 'app.suspend', ...end]
-    case 'approved':
-      return ['app.edit', 'app.suspend', ...end]
-    default:
-      return ['app.restore', 'app.edit', ...end]
+  const standing: AdminActionName[] =
+    r.status === 'draft'
+      ? ['app.approve', 'app.edit', 'app.suspend']
+      : r.status === 'approved'
+        ? ['app.edit', 'app.suspend']
+        : ['app.restore', 'app.edit']
+  if (r.reviewed_at !== null) return [...standing, ...end]
+  const reviewable = r.status !== 'suspended'
+  if (r.review_requested_at === null) {
+    return [...standing, ...(reviewable ? (['app.review'] as const) : []), ...end]
   }
+  return [
+    ...(reviewable ? (['app.review'] as const) : []),
+    'app.dismissReview',
+    ...standing,
+    ...end,
+  ]
 }
 
 export function toApp(r: AppRaw): AdminAppRow {
@@ -127,6 +166,13 @@ export function toApp(r: AppRaw): AdminAppRow {
     suspendedAt: r.suspended_at,
     connections: r.connections,
     lastUsedAt: r.last_used_at,
+    registeredBy: personOf(r.developer_id, r.developer_handle, r.developer_name),
+    termsAt: r.terms_at,
+    reviewedAt: r.reviewed_at,
+    reviewedBy: personOf(r.reviewed_by, r.reviewer_handle, r.reviewer_name),
+    reviewRequestedAt: r.review_requested_at,
+    reviewNote: r.review_note,
+    reviewWantsEmail: r.review_wants_email === 1,
   }
 }
 
@@ -149,20 +195,27 @@ export function appRoutes(deps: ApiDeps) {
   const list = async (f: string, q: string) => {
     if (!isAdminFilter('apps', f)) return null
     const matches = appMatches(q)
+    // The queue is no status: an app in any status may wait for a review, the oldest first.
+    const [filter, order] =
+      f === 'review'
+        ? [WAITING_REVIEW, sql`a.review_requested_at, a.id`]
+        : [sql`a.status = ${f}`, sql`a.created_at desc, a.id desc`]
     const [counts, rows] = await db.batch([
-      db.all<{ approved: number; draft: number; suspended: number }>(sql`
-        select coalesce(sum(a.status = 'approved'), 0) as approved,
+      db.all<{ review: number; approved: number; draft: number; suspended: number }>(sql`
+        select coalesce(sum(${WAITING_REVIEW}), 0) as review,
+          coalesce(sum(a.status = 'approved'), 0) as approved,
           coalesce(sum(a.status = 'draft'), 0) as draft,
           coalesce(sum(a.status = 'suspended'), 0) as suspended
         from apps a where ${matches}
       `),
       db.all<AppRaw>(sql`
-        ${appSelect} where a.status = ${f} and ${matches}
-        order by a.created_at desc, a.id desc limit ${ADMIN_LIST_LIMIT + 1}
+        ${appSelect} where ${filter} and ${matches}
+        order by ${order} limit ${ADMIN_LIST_LIMIT + 1}
       `),
     ])
     const answer: AdminList<AdminAppRow, 'apps'> = {
       counts: {
+        review: counts[0]?.review ?? 0,
         approved: counts[0]?.approved ?? 0,
         draft: counts[0]?.draft ?? 0,
         suspended: counts[0]?.suspended ?? 0,
@@ -174,12 +227,12 @@ export function appRoutes(deps: ApiDeps) {
   }
 
   routes.get('/apps', async (c) => {
-    const answer = await list(c.req.query('f') ?? 'approved', '')
+    const answer = await list(c.req.query('f') ?? ADMIN_FILTERS.apps[0], '')
     return answer ? c.json(answer) : c.json({ error: 'invalid' }, 400)
   })
   routes.post('/apps', async (c) => {
     const body = await searchBody(c.req.raw)
-    const answer = body && (await list(body.f ?? 'approved', body.q))
+    const answer = body && (await list(body.f ?? ADMIN_FILTERS.apps[0], body.q))
     return answer ? c.json(answer) : c.json({ error: 'invalid' }, 400)
   })
 
@@ -291,7 +344,8 @@ async function ownerOf(db: TelaDb, handle: string | null): Promise<string | null
 
 /**
  * Register an app, as a draft: it connects only for its owner until it is approved. Its
- * `client_id` is made here, and is the app's public name in every authorization request.
+ * `client_id` is made here, and is the app's public name in every authorization request. The
+ * operator's own registration is reviewed as it is made (ADR 0067): nobody else need check it.
  */
 const createApp: ActHandler = async (ctx, _id, args) => {
   const parsed = parseAppSettings(args.app)
@@ -306,11 +360,11 @@ const createApp: ActHandler = async (ctx, _id, args) => {
     db.all(sql`
       insert into apps (client_id, name, developer, contact_email, homepage_url, privacy_url,
         redirect_uris, max_scope, allow_email, status, owner_user_id, per_member_per_min,
-        per_app_per_min, max_connections, created_at, updated_at)
+        per_app_per_min, max_connections, reviewed_at, reviewed_by, created_at, updated_at)
       values (${clientId}, ${s.name}, ${s.developer}, ${s.contactEmail}, ${s.homepageUrl},
         ${s.privacyUrl}, ${JSON.stringify(s.redirectUris)}, ${s.maxScope}, ${s.allowEmail ? 1 : 0},
         'draft', ${owner}, ${s.perMemberPerMin}, ${s.perAppPerMin}, ${s.maxConnections},
-        ${ctx.now}, ${ctx.now})
+        ${ctx.now}, ${ctx.actor}, ${ctx.now}, ${ctx.now})
       returning id
     `),
     audit(
@@ -334,7 +388,8 @@ const createApp: ActHandler = async (ctx, _id, args) => {
  * Change an app's settings: its name and developer, where it may send members back to, how much
  * it may ask for, whose draft it is, and its limits. Lowering its scope or taking away the email
  * reaches its live tokens at once, since each request reads the app's ceiling. Saving what it
- * already holds changes nothing (`not_applicable`).
+ * already holds changes nothing (`not_applicable`). A member's app stays its developer's to test
+ * (ADR 0067): its owner is them, whatever the form names.
  */
 const editApp: ActHandler = async (ctx, id, args) => {
   const appId = appOf(id)
@@ -343,7 +398,12 @@ const editApp: ActHandler = async (ctx, id, args) => {
   if (!parsed.ok) return 'invalid'
   const s = parsed.value
   const { db } = ctx.deps
-  const owner = await ownerOf(db, s.owner)
+  // Who registered it never changes once it is made, so reading it apart from the batch is safe.
+  const [held] = await db.all<{ developer_id: string | null }>(
+    sql`select developer_id from apps where id = ${appId}`,
+  )
+  if (!held) return 'not_found'
+  const owner = held.developer_id ?? (await ownerOf(db, s.owner))
   if (owner === undefined) return 'invalid'
   const recorded = recordedOf(s, owner)
   const target = sql`id = ${appId}
@@ -499,6 +559,127 @@ const restoreStanding: Inverse = (db, change, now) => {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Reviews (ADR 0067)
+
+/** Over `apps`: its review, the request it answers and the email permission, as audited. */
+const REVIEW = sql`json_object('reviewedAt', reviewed_at, 'reviewedBy', reviewed_by,
+  'reviewRequestedAt', review_requested_at,
+  'allowEmail', json(case when allow_email then 'true' else 'false' end))`
+
+type Review = {
+  reviewedAt: number | null
+  reviewedBy: string | null
+  reviewRequestedAt: number | null
+  allowEmail: boolean
+}
+
+function reviewFrom(value: unknown): Review | null {
+  if (typeof value !== 'object' || value === null) return null
+  const v = value as Record<string, unknown>
+  const at = (x: unknown) => x === null || (typeof x === 'number' && Number.isInteger(x))
+  if (!at(v.reviewedAt) || !at(v.reviewRequestedAt)) return null
+  if (v.reviewedBy !== null && typeof v.reviewedBy !== 'string') return null
+  if (typeof v.allowEmail !== 'boolean') return null
+  return v as Review
+}
+
+/** Over `apps`: whether it holds exactly this review. */
+const holdsReview = (r: Review) => sql`(reviewed_at is ${r.reviewedAt}
+  and reviewed_by is ${r.reviewedBy} and review_requested_at is ${r.reviewRequestedAt}
+  and allow_email is ${r.allowEmail ? 1 : 0})`
+
+/**
+ * Review an app nobody reviewed: it is held to its own limits from now on, no longer to those of
+ * an unreviewed app, and may ask for the email address if the operator says so (`allowEmail`,
+ * required: the developer may have asked, but the answer is the operator's). It answers any
+ * request its developer made. A cut-off app is restored first, then reviewed.
+ */
+const review: ActHandler = async (ctx, id, args) => {
+  const appId = appOf(id)
+  if (appId === null) return 'not_found'
+  if (typeof args.allowEmail !== 'boolean') return 'invalid'
+  const { db } = ctx.deps
+  const to: Review = {
+    reviewedAt: ctx.now,
+    reviewedBy: ctx.actor,
+    reviewRequestedAt: null,
+    allowEmail: args.allowEmail,
+  }
+  const target = sql`id = ${appId} and reviewed_at is null and status <> 'suspended'`
+  const results = await runBatch(db, [
+    audit(
+      db,
+      {
+        group: ctx.group,
+        actor: ctx.actor,
+        action: 'app.review',
+        targetKind: 'app',
+        targetKey: String(appId),
+        at: ctx.now,
+      },
+      { from: REVIEW, to },
+      sql`from apps where ${target}`,
+    ),
+    db.all(sql`update apps set reviewed_at = ${ctx.now}, reviewed_by = ${ctx.actor},
+        review_requested_at = null, allow_email = ${to.allowEmail ? 1 : 0}, updated_at = ${ctx.now}
+      where ${target} returning id`),
+    db.all(sql`select id from apps where id = ${appId}`),
+  ])
+  if (returned(results[1]).length > 0) return 'done'
+  return returned(results[2]).length > 0 ? 'not_applicable' : 'not_found'
+}
+
+/**
+ * Answer a request for a review with none: the app stays as it is, held to an unreviewed app's
+ * limits, and its developer may ask again. Their note stays with the app.
+ */
+const dismissReview: ActHandler = async (ctx, id) => {
+  const appId = appOf(id)
+  if (appId === null) return 'not_found'
+  const { db } = ctx.deps
+  const target = sql`id = ${appId} and review_requested_at is not null and reviewed_at is null`
+  const results = await runBatch(db, [
+    audit(
+      db,
+      {
+        group: ctx.group,
+        actor: ctx.actor,
+        action: 'app.dismissReview',
+        targetKind: 'app',
+        targetKey: String(appId),
+        at: ctx.now,
+      },
+      { from: REVIEW, to: sql`json_set(${REVIEW}, '$.reviewRequestedAt', null)` },
+      sql`from apps where ${target}`,
+    ),
+    db.all(sql`update apps set review_requested_at = null, updated_at = ${ctx.now}
+      where ${target} returning id`),
+    db.all(sql`select id from apps where id = ${appId}`),
+  ])
+  if (returned(results[1]).length > 0) return 'done'
+  return returned(results[2]).length > 0 ? 'not_applicable' : 'not_found'
+}
+
+/** Take a review or a dismissal back while the app still holds what it left. */
+const unreview: Inverse = (db, change, now) => {
+  const to = reviewFrom(change.to)
+  const from = reviewFrom(change.from)
+  const id = appOf(change.targetKey)
+  if (!to || !from || id === null) return { changed: sql`1`, restore: [], synced: false }
+  const holds = sql`id = ${id} and ${holdsReview(to)}`
+  return {
+    changed: sql`not exists (select 1 from apps where ${holds})`,
+    restore: [
+      db.run(sql`update apps set reviewed_at = ${from.reviewedAt}, reviewed_by = ${from.reviewedBy},
+          review_requested_at = ${from.reviewRequestedAt}, allow_email = ${from.allowEmail ? 1 : 0},
+          updated_at = ${now}
+        where ${holds}`),
+    ],
+    synced: false,
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
 // End all connections
 
 /**
@@ -544,6 +725,8 @@ export const appActions = {
   'app.suspend': suspend,
   'app.restore': restore,
   'app.endConnections': endConnections,
+  'app.review': review,
+  'app.dismissReview': dismissReview,
 }
 
 export const appInverses = {
@@ -551,4 +734,6 @@ export const appInverses = {
   'app.approve': restoreStanding,
   'app.suspend': restoreStanding,
   'app.restore': restoreStanding,
+  'app.review': unreview,
+  'app.dismissReview': unreview,
 }

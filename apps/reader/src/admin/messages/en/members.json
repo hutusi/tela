@@ -183,6 +183,7 @@
   },
   "apps": {
     "filters": {
+      "review": "To review",
       "approved": "Approved",
       "draft": "Drafts",
       "suspended": "Cut off"
@@ -202,6 +203,9 @@
     "connected": "{n, plural, =0 {Nobody} one {# member} other {# members}}",
     "never": "Never",
     "noOwner": "Nobody",
+    "operator": "The operator",
+    "notReviewed": "Not reviewed",
+    "reviewedBy": "{when}, by @{handle}",
     "scope": {
       "read": "Read only",
       "write": "Read and write"
@@ -218,6 +222,9 @@
     "kv": {
       "clientId": "Client ID",
       "developer": "Developer",
+      "registeredBy": "Registered by",
+      "terms": "Rules accepted",
+      "reviewed": "Reviewed",
       "contact": "Contact",
       "homepage": "Homepage",
       "privacy": "Privacy policy",
@@ -238,7 +245,20 @@
       "draft": "A draft: only its owner’s account can connect it, so its developer can test it. Approve it to offer it to every member.",
       "approved": "Any member can connect it. Lowering what it may do, or taking the email away, reaches its live tokens at once.",
       "suspended": "Cut off: every token it holds is refused. Its connections are kept, so Restore brings it back for the members who connected it.",
+      "unreviewed": "Not reviewed: members connected to its developer’s unreviewed apps share one cap, its developer’s own connection aside, and it never sees an email address. A review lifts both.",
       "private": "The console counts who connected an app, never who they are."
+    },
+    "request": {
+      "label": "Review asked for",
+      "when": "Asked {when}",
+      "noNote": "No note.",
+      "wantsEmail": "Asks to see members’ email addresses",
+      "noEmail": "Doesn’t ask for email addresses"
+    },
+    "review": {
+      "body": "A review lifts what holds an app nobody has reviewed: the cap on members its developer’s unreviewed apps share, and the ban on email addresses. Changing its name, redirects or scope takes the review away again.",
+      "email": "Let it ask to see members’ email addresses",
+      "submit": "Review"
     },
     "history": {
       "created": "Registered",
@@ -258,6 +278,7 @@
       "allowEmail": "May ask to see the member’s email address",
       "owner": "Owner’s handle",
       "ownerHint": "The account a draft connects for, so its developer can test it. Optional.",
+      "ownerLocked": "The developer’s own account: an app a member registered stays theirs to test.",
       "perMemberPerMin": "Requests a minute, per member",
       "perAppPerMin": "Requests a minute, in all",
       "maxConnections": "Members connected at once",

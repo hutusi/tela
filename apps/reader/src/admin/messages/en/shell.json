@@ -273,6 +273,16 @@
         "label": "End all connections",
         "short": "End connections",
         "done": "Connections ended"
+      },
+      "review": {
+        "label": "Review",
+        "short": "Review",
+        "done": "Reviewed"
+      },
+      "dismissReview": {
+        "label": "Dismiss the request",
+        "short": "Dismiss",
+        "done": "Review request dismissed"
       }
     },
     "report": {

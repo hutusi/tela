@@ -1,7 +1,8 @@
 /**
- * The Apps ledger (ADRs 0039, 0064): the apps other developers made, which members connect to
- * their Tela account. A draft connects only for its owner, so its developer can test it; an
- * approved app for any member; a cut-off app for no one, its connections kept for a restore. The
+ * The Apps ledger (ADRs 0039, 0064, 0067): the apps other developers made, which members connect
+ * to their Tela account. A draft connects only for its owner, so its developer can test it; an
+ * approved app for any member; a cut-off app for no one, its connections kept for a restore. It
+ * opens on the review queue: the apps members registered whose developers asked for a review. The
  * record counts who connected an app and never names them: tela-api never sends who.
  */
 import { APP_DEFAULT_PER_APP_PER_MIN, APP_DEFAULT_PER_MEMBER_PER_MIN } from '@tela/shared'
@@ -18,6 +19,7 @@ import { Swatch } from '../../components/swatch'
 import { displayHost, personColor, relativeTime } from '../../lib/format'
 import { adminGet, adminSearch } from '../api'
 import type { AnyAreaSpec, AreaSpec, RecordProps, Status } from '../area'
+import type { AppFormStart } from '../components/app-form'
 import { History, KeyValues, Note, Section } from '../components/record'
 import { fullDate, type MembersT, PersonLink } from './people'
 
@@ -102,13 +104,47 @@ function AppRecord({ row, detail, open }: RecordProps<AdminAppRow, AdminAppDetai
   const homepage = app.homepageUrl ? <Out href={app.homepageUrl} /> : null
   const privacy = app.privacyUrl ? <Out href={app.privacyUrl} /> : null
   const owner = app.owner ? <PersonLink person={app.owner} open={open} /> : t('apps.noOwner')
+  const registeredBy = app.registeredBy ? (
+    <PersonLink person={app.registeredBy} open={open} />
+  ) : (
+    t('apps.operator')
+  )
+  const reviewed =
+    app.reviewedAt === null
+      ? t('apps.notReviewed')
+      : app.reviewedBy
+        ? t('apps.reviewedBy', {
+            when: fullDate(app.reviewedAt, locale),
+            handle: app.reviewedBy.handle,
+          })
+        : fullDate(app.reviewedAt, locale)
+  const asked = app.reviewRequestedAt !== null && app.reviewedAt === null
   return (
     <div className="flex flex-col gap-5">
       <Note>{t(`apps.notes.${app.status}`)}</Note>
+      {app.reviewedAt === null ? <Note>{t('apps.notes.unreviewed')}</Note> : null}
+      {asked ? (
+        <Section label={t('apps.request.label')}>
+          <div className="flex flex-col gap-1 text-[13.5px]" data-testid="admin-app-request">
+            <span className="text-muted">
+              {t('apps.request.when', { when: fullDate(app.reviewRequestedAt ?? 0, locale) })}
+            </span>
+            <p className="m-0 whitespace-pre-line [overflow-wrap:anywhere] text-body">
+              {app.reviewNote ?? t('apps.request.noNote')}
+            </p>
+            <span className="text-ink-2">
+              {app.reviewWantsEmail ? t('apps.request.wantsEmail') : t('apps.request.noEmail')}
+            </span>
+          </div>
+        </Section>
+      ) : null}
       <KeyValues
         rows={[
           [t('apps.kv.clientId'), clientId],
           [t('apps.kv.developer'), app.developer],
+          [t('apps.kv.registeredBy'), registeredBy],
+          [t('apps.kv.terms'), app.termsAt === null ? null : fullDate(app.termsAt, locale)],
+          [t('apps.kv.reviewed'), reviewed],
           [t('apps.kv.contact'), app.contactEmail],
           [t('apps.kv.homepage'), homepage],
           [t('apps.kv.privacy'), privacy],
@@ -191,7 +227,19 @@ export function useAppsArea(): AnyAreaSpec {
       ],
       status: (row) => appStatus(t, row),
       Record: AppRecord,
-      initial: (row, action) => (action === 'app.edit' ? { app: settingsOfRow(row) } : undefined),
+      initial: (row, action) => {
+        if (action === 'app.edit') {
+          // A member's app stays theirs to test: the form shows its owner, and cannot change it.
+          const app: AppFormStart = {
+            ...settingsOfRow(row),
+            ownerLocked: row.registeredBy !== null,
+          }
+          return { app }
+        }
+        // A review starts from what the app may do now, or what its developer asked for.
+        if (action === 'app.review') return { allowEmail: row.allowEmail || row.reviewWantsEmail }
+        return undefined
+      },
       bulk: [],
       create: ['app.create'],
     }
