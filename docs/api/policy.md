@@ -63,10 +63,11 @@ cut off, for every member at once, and its developer's account suspended.
 
 - **Your app is yours.** Registering it doesn't make Tela responsible for it. Tela doesn't check an
   app before it goes Live; a review, when you ask for one, checks that it does what it says, and
-  lifts the limits on unreviewed apps (see [README.md](README.md#reviews)). Changing a reviewed
-  app's name, redirect URIs or scope clears its review.
+  lifts the limits on unreviewed apps (see [README.md](README.md#reviews)). Changing anything
+  members read on a reviewed app (name, developer, homepage, privacy policy, redirect URIs or
+  scope) clears its review.
 - **Don't pass for Tela.** Only Tela's own apps may use the word "Tela" in their name or
-  developer.
+  developer, or write it with look-alike letters or hidden characters.
 
 - **Be who you say you are.** The name, developer, homepage and privacy policy members see on the
   consent page are yours, and accurate.

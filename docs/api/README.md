@@ -50,7 +50,8 @@ as any member.
 Sign in to <https://telaread.com> and open **Settings → Developer**. Register the app with:
 
 - its name, and who makes it (a person or a company). Only Tela's own apps may use the word
-  "Tela" in either;
+  "Tela" in either, and neither may hold invisible characters. Your Tela handle is shown beside an
+  unreviewed app, so a handle that says "Tela" can't register one either;
 - a contact address that receives mail: changes to the API and anything about your app are sent
   there. Members never see it;
 - a homepage and a privacy policy, both `https://`. Members see both before they connect, and an
@@ -61,7 +62,8 @@ Sign in to <https://telaread.com> and open **Settings → Developer**. Register 
 - the most it needs, `read` or `write`.
 
 You accept the developer rules ([policy.md](policy.md#rules-for-developers)) when you register. A
-member may hold up to 5 apps.
+member may hold up to 5 apps, and make ten changes to them a day (registering, editing, Live,
+Testing, review requests and deletes together).
 
 ## Testing, then Live
 
@@ -84,9 +86,12 @@ Tela's operator doesn't check apps before they go Live. An app Tela has not revi
 
 Ask for a review in Settings → Developer, with a note on what the app does and whether it needs
 members' email addresses, and why. A review lifts the limit and may allow the email permission.
-Changing a reviewed app's name, redirect URIs or scope clears its review, and you can ask again.
+Changing anything members read on a reviewed app (its name, developer, homepage, privacy policy,
+redirect URIs or scope) clears its review, and you can ask again. Members already connected stay
+connected.
 
-Members can report an app from the page where they connect it and from their connected apps. The
+Members can report a Live app from the page where they connect it and from their connected apps.
+While a report is open, the app can't be edited or deleted. The
 operator may cut an app off for everyone at once: its tokens are refused until it is restored
 (see [authorization.md](authorization.md)).
 

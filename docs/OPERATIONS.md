@@ -1250,12 +1250,14 @@ repository.
 - **Reviews:** Members › Apps opens on *To review*, the apps whose developers asked, with their
   note and whether they want the email address. Read the privacy policy, try the app if it is
   cheap to, then **Review** (optionally granting email) or **Dismiss the request**; both undo. A
-  review lifts the cap and the email ban. The developer changing the name, redirect URIs or scope
-  clears it, and the app comes back to the queue when they ask again.
+  review lifts the cap and the email ban. It covers the version you read: an edit since refuses it, and
+  you look again. The developer changing anything members read (name, developer, homepage,
+  privacy policy, redirect URIs, scope) clears it, and the app comes back to the queue when they
+  ask again.
 - **Reports of apps** land in Members › Reports with the app named and its developer as the
   member: **Cut off**, **End all connections**, or act on the developer's account (suspending them
-  cuts off all their apps, until lifted). A developer can't delete an app that is cut off or has
-  an open report.
+  cuts off all their apps, until lifted). Only Live apps can be reported. A developer can't edit
+  or delete an app that is cut off or has an open report.
 - **Developer contacts**, for the preview's 14-day notice and any deprecation:
   `bun run admin app-contacts` lists the contact address of every Live app.
 - **The operator's own registration** (Members › Apps › *Register app*) is for partners: the app

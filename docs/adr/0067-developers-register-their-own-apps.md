@@ -36,23 +36,37 @@ and poor for phishing.
 **A review** (the console's Apps area, `app.review`) lifts the cap and the email ban, and may grant
 the email permission the developer asked for.
 - **It is optional.** The queue holds the apps whose developers asked.
-- **Changing an app's name, redirects or scope clears its review,** and the developer is warned
-  first.
+- **It covers the version the operator read:** the console names the app's `updatedAt`, and an
+  edit since refuses the review.
+- **Changing anything members read clears it:** the name, developer, homepage, privacy policy,
+  redirects or scope. The developer is warned first.
+- **Members already connected stay connected** when a review is cleared, over the cap if they
+  were; the cap holds new connections from then on.
 
 **Only the operator may use the word "Tela"** in an app's name or developer name (`mentionsTela`:
-any word starting with it, in any case, after NFKC normalisation). Members don't otherwise have
-name rules.
+any word starting with it, in any case, after NFKC normalisation, with invisible characters
+removed and Cyrillic and Greek look-alikes read as Latin).
+- **Invisible characters** (format characters such as soft hyphens, zero-width spaces and
+  bidirectional overrides, and blank fillers) are refused in a member's app name and developer
+  name outright.
+- **Handles:** a member whose handle says "Tela" can't register an app or make one Live, because
+  the consent page shows their handle beside it.
+- Members don't otherwise have name rules.
 
 **A developer's standing is their apps'.**
 - **Suspended:** their apps answer as a Cut off app does (403 `app_suspended`, refreshes
   `unauthorized_client`, consent `app_unavailable`), and work again when the suspension is lifted.
 - **Account closed:** their apps' connections end.
 
-**Members report apps** from the consent page and from Settings → Connected apps (a report target
-of its own, `app`). The Reports area offers Cut off and End all connections on the app, and the
-member actions on its developer.
-- **Delete:** a developer may delete their app, ending its connections. Deleting is refused while
-  the app is cut off or has an open report, so it can't be used to escape one and register again.
+**Members report Live apps** from the consent page and from Settings → Connected apps (a report
+target of its own, `app`). An app in Testing is its developer's alone, and can't be reported.
+The Reports area offers Cut off and End all connections on the app, and the member actions on
+its developer.
+- **Delete and edit:** a developer may delete their app, ending its connections. Deleting and
+  editing are refused while the app is cut off or has an open report, so neither can be used to
+  escape a report or hide what it named.
+- **Limits:** every write a developer makes (registering, editing, Live, Testing, review requests,
+  deletes) counts against the same ten a day, so none can flood the console's history.
 
 **The status names stay `draft`, `approved` and `suspended`,** shown as Testing, Live and Cut off,
 with `approved` now meaning live.
