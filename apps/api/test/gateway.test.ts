@@ -518,6 +518,18 @@ describe('a bearer token', () => {
     // The operator taking the permission away reaches the live token.
     await api.db.run(sql`update apps set allow_email = 0 where id = ${mailer.id}`)
     expect(await body(await probe()('GET', tokens.access_token))).toMatchObject({ email: false })
+    // And the next refresh says so, rather than what the token was minted with (ADR 0067).
+    const swapped = await json<{ scope: string }>(await refresh(api, mailer, tokens.refresh_token))
+    expect(swapped.scope).toBe('write')
+  })
+
+  test('a review cleared since is no email in the token answer', async () => {
+    const mailer = await registerApp(api, { allowEmail: true })
+    const tokens = await connect(api, ann, mailer, { scope: 'read email', email: true })
+    expect(tokens.scope).toBe('read email')
+    await api.db.run(sql`update apps set reviewed_at = null where id = ${mailer.id}`)
+    const swapped = await json<{ scope: string }>(await refresh(api, mailer, tokens.refresh_token))
+    expect(swapped.scope).toBe('read')
   })
 
   test('is refused while its app is cut off, told to keep its tokens, and works again once restored', async () => {

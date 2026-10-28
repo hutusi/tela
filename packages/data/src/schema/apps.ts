@@ -63,6 +63,22 @@ export const apps = sqliteTable(
     updatedAt: ms().notNull(),
     approvedAt: ms(),
     suspendedAt: ms(),
+    /**
+     * The member who registered it in Settings → Developer (ADR 0067); null for an app the
+     * operator registered. No foreign key: adding one would rebuild this table, and a rebuild's
+     * DROP TABLE cascades into every connection on D1. Accounts are never deleted, only closed.
+     */
+    developerId: text(),
+    /** When the operator reviewed it, and who; null for an app not reviewed. */
+    reviewedAt: ms(),
+    reviewedBy: text(),
+    /** Its developer asked for a review, with a note (at most 500, checked in code). */
+    reviewRequestedAt: ms(),
+    reviewNote: text(),
+    /** The review asked for the email permission too. */
+    reviewWantsEmail: flag(),
+    /** When its developer accepted the developer rules. */
+    termsAt: ms(),
   },
   (t) => [
     check('apps_status_check', oneOf(t.status, APP_STATUSES)),
@@ -80,6 +96,7 @@ export const apps = sqliteTable(
         and coalesce(length(${t.privacyUrl}), 0) <= ${sql.raw(String(APP_URL_MAX))}`,
     ),
     index('apps_status_idx').on(t.status),
+    index('apps_developer_idx').on(t.developerId),
   ],
 )
 

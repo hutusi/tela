@@ -6,6 +6,7 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 import { ACTION_LIMITS, currentSeq, type TelaDb } from '@tela/data'
 import { sql } from 'drizzle-orm'
+import { registerApp } from './apps-helpers'
 import { createTestApi, type SignedIn, signedIn, type TestApi } from './helpers'
 import { ANNA, BEA, ROLL, seedAnna, write as writeTo } from './standing-fixture'
 
@@ -122,6 +123,30 @@ describe('reporting', () => {
       expect({ body, status: res.status }).toEqual({ body, status: 404 })
     }
     expect(await reportRows()).toEqual([])
+  })
+
+  test('a Live app by its client id, never one in Testing or cut off (ADR 0067)', async () => {
+    const app = await registerApp(api, { status: 'draft', reviewed: false })
+    // In Testing it is its developer's alone, and a report would block its delete.
+    expect(
+      (await report({ targetKind: 'app', targetKey: app.clientId, reason: 'spam' })).status,
+    ).toBe(404)
+    await db.run(sql`update apps set status = 'approved' where id = ${app.id}`)
+    expect(
+      (await report({ targetKind: 'app', targetKey: app.clientId, reason: 'spam' })).status,
+    ).toBe(200)
+    expect(await reportRows()).toEqual([
+      expect.objectContaining({ target_kind: 'app', target_key: app.clientId, state: 'open' }),
+    ])
+    await db.run(sql`update apps set status = 'suspended' where id = ${app.id}`)
+    expect(
+      (await report({ targetKind: 'app', targetKey: app.clientId, reason: 'spam' }, other)).status,
+    ).toBe(404)
+    expect(
+      (await report({ targetKind: 'app', targetKey: 'tela_app_nobodys0001', reason: 'spam' }))
+        .status,
+    ).toBe(404)
+    expect((await report({ targetKind: 'app', targetKey: '7', reason: 'spam' })).status).toBe(400)
   })
 
   test('one open report per member per thing; a repeat is answered alike and changes nothing', async () => {

@@ -9,12 +9,13 @@ import {
   bumpSeq,
   consumeLimit,
   currentSeq,
+  emailAllowed,
   first,
   gravatarOn,
   restampTranslations,
   standingOk,
 } from '@tela/data'
-import { isTopic, isValidHandle } from '@tela/shared'
+import { isTopic, isValidHandle, mentionsTela } from '@tela/shared'
 import { sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import type { ApiEnv } from '../app'
@@ -59,17 +60,30 @@ export function memberRoutes(deps: ApiDeps) {
     }
     if (sets.length === 0) return c.json({ ok: true })
     // Taken handles are refused in the statement itself, so two members racing for one cannot
-    // both win and neither sees a constraint error.
+    // both win and neither sees a constraint error. So is a handle that says "Tela" while the
+    // member holds an app (ADR 0067), since the consent page shows a developer's handle beside
+    // their unreviewed apps; registering and going Live hold to it from the other side.
+    const saysTela = handle !== undefined && mentionsTela(handle)
     const [, updated] = (await db.batch([
       bumpSeq(db),
       db.all(sql`
         update profiles set ${sql.join(sets, sql`, `)}, updated_at = ${now}, seq = ${currentSeq}
         where user_id = ${member.id}
           ${handle === undefined ? sql`` : sql`and not exists (select 1 from profiles p2 where p2.handle = ${handle} and p2.user_id <> ${member.id})`}
+          ${saysTela ? sql`and not exists (select 1 from apps where developer_id = ${member.id})` : sql``}
         returning handle
       `),
     ] as never)) as unknown as [unknown, { handle: string }[]]
-    if (updated.length === 0) return c.json({ error: 'handle_taken' }, 409)
+    if (updated.length === 0) {
+      if (saysTela) {
+        const holds = await first<{ x: number }>(
+          db,
+          sql`select 1 as x from apps where developer_id = ${member.id} limit 1`,
+        )
+        if (holds) return c.json({ error: 'handle_reserved' }, 400)
+      }
+      return c.json({ error: 'handle_taken' }, 409)
+    }
     return c.json({ ok: true, handle: updated[0]?.handle })
   })
 
@@ -298,6 +312,7 @@ export function memberRoutes(deps: ApiDeps) {
       joinedBy,
       reads,
       apps,
+      registered,
     ] = (await db.batch([
       db.all(sql`
         select p.handle, p.display_name as "displayName", p.bio, p.reading_lang as "readingLang",
@@ -394,12 +409,25 @@ export function memberRoutes(deps: ApiDeps) {
         order by coalesce(st.read_at, st.read_updated_at) desc, st.article_id
       `),
       // The apps they connected and still hold (ADR 0064): what each may do and when it last
-      // acted for them. Never a token, which Tela keeps only as a hash.
+      // acted for them, and whether it sees their address as `/v1/me` would answer it now
+      // (`emailAllowed`, ADR 0067). Never a token, which Tela keeps only as a hash.
       db.all(sql`
         select a.name as "app", a.developer, a.homepage_url as "homepage", g.scope,
-          g.email as "seesEmail", g.created_at as "connectedAt", g.last_used_at as "lastUsedAt"
+          (g.email = 1 and ${emailAllowed('a')}) as "seesEmail", g.created_at as "connectedAt",
+          g.last_used_at as "lastUsedAt"
         from app_grants g join apps a on a.id = g.app_id
         where g.user_id = ${id} and g.ended_at is null order by g.created_at, g.id
+      `),
+      // The apps they registered in Settings → Developer (ADR 0067), as Tela keeps them: the
+      // contact address and the review request included, which the Privacy page names.
+      db.all(sql`
+        select a.client_id as "clientId", a.name, a.developer, a.contact_email as "contactEmail",
+          a.homepage_url as "homepage", a.privacy_url as "privacyPolicy",
+          a.redirect_uris as "redirectUris", a.max_scope as "maxScope", a.status,
+          (a.reviewed_at is not null) as "reviewed", a.review_requested_at as "reviewRequestedAt",
+          a.review_note as "reviewNote", a.terms_at as "rulesAcceptedAt",
+          a.created_at as "registeredAt"
+        from apps a where a.developer_id = ${id} order by a.created_at, a.id
       `),
     ] as never)) as unknown as Record<string, unknown>[][]
     const profile = profiles?.[0]
@@ -445,6 +473,13 @@ export function memberRoutes(deps: ApiDeps) {
       connectedApps: (apps ?? []).map(({ seesEmail, ...app }) => ({
         ...app,
         seesEmail: seesEmail === 1,
+      })),
+      registeredApps: (registered ?? []).map(({ redirectUris, reviewed, status, ...app }) => ({
+        ...app,
+        // Members read Testing, Live and Cut off; the stored names stay (ADR 0067).
+        status: status === 'draft' ? 'testing' : status === 'approved' ? 'live' : 'cutOff',
+        reviewed: reviewed === 1,
+        redirectUris: JSON.parse(String(redirectUris ?? '[]')),
       })),
     }
     return new Response(JSON.stringify(body, null, 2), {

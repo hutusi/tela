@@ -5,6 +5,8 @@
  * the console translates every word it shows.
  */
 
+import type { DeveloperAction } from '../developer'
+
 /** The console's areas, in the order the sidebar lists them. */
 export const ADMIN_AREAS = [
   'overview',
@@ -36,8 +38,10 @@ export const ADMIN_FILTERS = {
   // `suspended`: members an operator suspended (ADR 0059), who are in neither of the others.
   people: ['admins', 'members', 'suspended'],
   invites: ['codes', 'waiting', 'revoked'],
-  // Approved apps (ADR 0064): what members may connect, what only an owner tests, what is cut off.
-  apps: ['approved', 'draft', 'suspended'],
+  // Apps (ADRs 0064, 0067): `review`, the queue, holds those whose developers asked for a review
+  // nobody has answered, in any status, so it is not one; then what members may connect, what
+  // only an owner tests, and what is cut off.
+  apps: ['review', 'approved', 'draft', 'suspended'],
   translation: ['blogs', 'jobs', 'models'],
   system: ['dead', 'retrying', 'resolved'],
   // Every runtime setting (ADR 0056), and those a stored row overrides.
@@ -115,6 +119,8 @@ export const ADMIN_ACTIONS = [
   'app.suspend',
   'app.restore',
   'app.endConnections',
+  'app.review',
+  'app.dismissReview',
 ] as const
 export type AdminActionName = (typeof ADMIN_ACTIONS)[number]
 
@@ -157,6 +163,8 @@ export const UNDOABLE_ACTIONS = [
   'app.approve',
   'app.suspend',
   'app.restore',
+  'app.review',
+  'app.dismissReview',
 ] as const satisfies readonly AdminActionName[]
 
 /**
@@ -215,11 +223,16 @@ export const ACTION_WRITES = {
   // An app's registration (ADR 0064): its settings, and where it stands. Ending its connections
   // ends members' grants, which nothing gives back.
   'app.create': 'app',
-  'app.edit': 'appSettings',
+  // An edit may change whether it may ask for the email address, which a review grants too.
+  'app.edit': ['appSettings', 'appEmail'],
   'app.approve': 'appStatus',
   'app.suspend': 'appStatus',
   'app.restore': 'appStatus',
   'app.endConnections': null,
+  // A review (ADR 0067): whether Tela reviewed it and the request it answers, with the email
+  // permission it may grant; a dismissal answers the same request.
+  'app.review': ['appReview', 'appEmail'],
+  'app.dismissReview': 'appReview',
 } as const satisfies Record<AdminActionName, string | readonly string[] | null>
 
 /** What an action writes that an undo would restore, as a list (empty for none). */
@@ -254,6 +267,9 @@ export const ACTION_INPUT = {
   'invite.address': 'email',
   'app.create': 'app',
   'app.edit': 'app',
+  // Whether the app may ask for the email address from now on: a choice of its own, never `email`,
+  // which is an address.
+  'app.review': 'review',
 } as const satisfies Partial<Record<AdminActionName, string>>
 
 /** Actions the console confirms before sending: hard to take back, or felt by someone else. */
@@ -294,6 +310,10 @@ export type AdminActArgs = {
   value?: unknown
   /** `app.create`, `app.edit`: the app's settings, checked by `parseAppSettings`. */
   app?: unknown
+  /** `app.review`: whether the app may ask to see a member's email address from now on. */
+  allowEmail?: boolean
+  /** `app.review`: the app's `updatedAt` as the console showed it; a later edit refuses it. */
+  seen?: number
 }
 
 export type AdminActRequest = {
@@ -332,8 +352,9 @@ export type AdminUndoResponse = { restored: number } | { error: 'not_found' | 'c
 export type AdminPerson = { id: string; handle: string; name: string | null }
 
 /**
- * What an audit row records: a console action, an undo, the CLI granting the console, or a member
- * closing their own account (ADR 0058), which the console shows beside an operator's deletion.
+ * What an audit row records: a console action, an undo, the CLI granting the console, a member
+ * closing their own account (ADR 0058), which the console shows beside an operator's deletion, or
+ * a member changing an app they registered (ADR 0067), which the app's history shows.
  */
 export type AdminAuditAction =
   | AdminActionName
@@ -341,6 +362,7 @@ export type AdminAuditAction =
   | 'admin.grant'
   | 'admin.ungrant'
   | 'account.delete'
+  | DeveloperAction
 
 /** One audit row: who did what to which target, and what it replaced. */
 export type AdminHistoryEntry = {

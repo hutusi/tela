@@ -30,6 +30,10 @@ export async function registerApp(
     perMemberPerMin?: number | null
     perAppPerMin?: number | null
     maxConnections?: number | null
+    /** False for an app no operator reviewed (ADR 0067); the operator's own are reviewed. */
+    reviewed?: boolean
+    /** The member who registered it in Settings → Developer; none for the operator's. */
+    developerId?: string | null
   } = {},
 ): Promise<TestApp> {
   const clientId = newClientId()
@@ -38,13 +42,15 @@ export async function registerApp(
     api.db,
     sql`insert into apps (client_id, name, developer, contact_email, homepage_url, privacy_url,
         redirect_uris, grant_types, max_scope, allow_email, status, owner_user_id,
-        per_member_per_min, per_app_per_min, max_connections, created_at, updated_at)
+        per_member_per_min, per_app_per_min, max_connections, reviewed_at, developer_id,
+        created_at, updated_at)
       values (${clientId}, ${`App ${++made}`}, 'Dev Ltd', 'dev@app.example',
         'https://app.example', 'https://app.example/privacy',
         ${JSON.stringify(input.redirectUris ?? [REDIRECT])}, ${JSON.stringify(input.grantTypes ?? ['code'])},
         ${input.maxScope ?? 'write'}, ${input.allowEmail ? 1 : 0}, ${input.status ?? 'approved'},
         ${input.ownerUserId ?? null}, ${input.perMemberPerMin ?? null}, ${input.perAppPerMin ?? null},
-        ${input.maxConnections ?? null}, ${now}, ${now})
+        ${input.maxConnections ?? null}, ${input.reviewed === false ? null : now},
+        ${input.developerId ?? null}, ${now}, ${now})
       returning id`,
   )
   if (!row) throw new Error('app not registered')

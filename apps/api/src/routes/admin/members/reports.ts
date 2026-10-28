@@ -3,7 +3,8 @@
  * it, and what an operator decided. Resolve says it was acted on, Dismiss that there was nothing
  * to do; either closes every open report of the thing at once, and an undo opens those again.
  * Acting on the thing itself is another area's action, offered beside it (hide a blog or a
- * blogroll from Discover, suspend or delete a member), each on the id that action takes.
+ * blogroll from Discover, cut an app off or end its connections, suspend or delete a member),
+ * each on the id that action takes.
  *
  * A row shows what anyone could see on the page it was reported from: a blogroll's name only
  * while it is public (as History names one), and a note only while it is not taken back. The
@@ -11,6 +12,7 @@
  */
 import { audit, historyOf, type TelaDb } from '@tela/data'
 import {
+  type AppStatus,
   isReportTarget,
   REPORT_REASONS,
   type ReportKey,
@@ -49,16 +51,21 @@ export function reportTargetOf(id: string): { kind: ReportTarget; key: string } 
   return { kind, key }
 }
 
-/** The member a report's key names, over `reports r`: the profile's, a note's author, a blogroll's owner. */
+/**
+ * The member a report's key names, over `reports r`: the profile's, a note's author, a blogroll's
+ * owner, an app's developer (ADR 0067; none for an app the operator registered).
+ */
 const MEMBER_OF = sql.raw(`(case r.target_kind
   when 'profile' then r.target_key
   when 'recommendation' then substr(r.target_key, 1, instr(r.target_key, ':') - 1)
   when 'blogroll' then (select b.user_id from blogrolls b where b.id = r.target_key)
+  when 'app' then (select a.developer_id from apps a where a.client_id = r.target_key)
   end)`)
 
 /**
  * A search over what was reported, by its name (a member's handle or name, a blog's title or
- * address, a blogroll's name) or the words a reporter gave; everything without one.
+ * address, a blogroll's name, an app's name, developer or client id) or the words a reporter
+ * gave; everything without one. Never an app's contact address, which reports never show.
  */
 function reportMatches(q: string): SQL {
   if (!q.trim()) return sql`1`
@@ -70,7 +77,10 @@ function reportMatches(q: string): SQL {
       where sx.id = cast(r.target_key as integer)
         and (${like(sql`sx.title`, p)} or ${like(sql`sx.home_url`, p)})))
     or (r.target_kind = 'blogroll' and exists (select 1 from blogrolls bx
-      where bx.id = r.target_key and bx.is_public = 1 and ${like(sql`bx.name`, p)})))`
+      where bx.id = r.target_key and bx.is_public = 1 and ${like(sql`bx.name`, p)}))
+    or (r.target_kind = 'app' and exists (select 1 from apps ax
+      where ax.client_id = r.target_key and (${like(sql`ax.name`, p)}
+        or ${like(sql`ax.developer`, p)} or ${like(sql`ax.client_id`, p)}))))`
 }
 
 type GroupRaw = {
@@ -161,17 +171,21 @@ export async function describeTargets(
   db: TelaDb,
   wanted: { kind: ReportTarget; key: string }[],
 ): Promise<Map<string, AdminReportTarget>> {
-  const keys = { profile: [], blogroll: [], site: [], recommendation: [] } as Record<
-    ReportTarget,
-    ReportKey[]
-  >
+  // Every kind named, never cast: a kind missing here was a crash at runtime, not a type error.
+  const keys: Record<ReportTarget, ReportKey[]> = {
+    profile: [],
+    blogroll: [],
+    site: [],
+    recommendation: [],
+    app: [],
+  }
   for (const w of wanted) {
     const key = reportKeyOf(w.kind, w.key)
     if (key) keys[w.kind].push(key)
   }
   const json = (values: unknown[]) => JSON.stringify(values)
   const none = sql`select 1 where false`
-  const [profiles, blogrolls, sites, notes] = (await runBatch(db, [
+  const [profiles, blogrolls, sites, notes, apps] = (await runBatch(db, [
     keys.profile.length
       ? db.all(sql`select ${PERSON} from profiles p where p.user_id in (select value
           from json_each(${json(keys.profile.map((k) => (k.kind === 'profile' ? k.userId : '')))}))`)
@@ -201,6 +215,18 @@ export async function describeTargets(
           left join recommendations r on r.user_id = p.user_id
             and r.article_id = json_extract(j.value, '$[1]')`)
       : db.all(none),
+    // An app with its developer's card, when a member registered it (ADR 0067), and whether
+    // anyone is connected to it now.
+    keys.app.length
+      ? db.all(sql`select a.id as app_id, a.client_id, a.name, a.status,
+          exists (select 1 from app_grants g where g.app_id = a.id and g.ended_at is null)
+            as connected,
+          ${PERSON}
+          from apps a left join profiles p on p.user_id = a.developer_id
+          where a.client_id in (select value from json_each(${json(
+            keys.app.map((k) => (k.kind === 'app' ? k.clientId : '')),
+          )}))`)
+      : db.all(none),
   ])) as Record<string, unknown>[][]
 
   const out = new Map<string, AdminReportTarget>()
@@ -211,6 +237,7 @@ export async function describeTargets(
     path: null,
     member: null,
     siteId: null,
+    appId: null,
     actions: [],
   })
   for (const w of wanted) out.set(reportRowId(w.kind, w.key), blank(w.kind, w.key))
@@ -282,6 +309,31 @@ export async function describeTargets(
       actions: memberActions(n),
     })
   }
+  for (const raw of apps ?? []) {
+    const a = raw as Omit<PersonRaw, 'user_id' | 'handle'> & {
+      user_id: string | null
+      handle: string | null
+      app_id: number
+      client_id: string
+      name: string
+      status: AppStatus
+      connected: number
+    }
+    const developer = a.user_id !== null && a.handle !== null ? (a as PersonRaw) : null
+    const id = String(a.app_id)
+    out.set(reportRowId('app', a.client_id), {
+      ...blank('app', a.client_id),
+      // Shown on the consent page and in Connected apps, never on a public page of its own.
+      label: a.name,
+      appId: a.app_id,
+      member: developer ? memberOf(developer) : null,
+      actions: [
+        { action: a.status === 'suspended' ? 'app.restore' : 'app.suspend', id },
+        ...(a.connected === 1 ? [{ action: 'app.endConnections' as const, id }] : []),
+        ...(developer ? memberActions(developer) : []),
+      ],
+    })
+  }
   return out
 }
 
@@ -311,6 +363,7 @@ function toRow(
       path: null,
       member: null,
       siteId: null,
+      appId: null,
       actions: [],
     },
     state,

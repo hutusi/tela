@@ -66,6 +66,8 @@ export const APP_TEXT_MAX = 300
 export const APP_URL_MAX = 500
 /** Redirect URIs one app may register. */
 export const APP_REDIRECTS_MAX = 10
+/** The longest note a developer may send with a review request (ADR 0067). */
+export const REVIEW_NOTE_MAX = 500
 
 /** Requests an app may make per member, and in all, per minute, unless the operator sets others. */
 export const APP_DEFAULT_PER_MEMBER_PER_MIN = 120
@@ -138,6 +140,16 @@ export type ConnectRequest = {
     privacyUrl: string | null
     /** A draft is shown only to its owner, and says so. */
     status: Extract<AppStatus, 'draft' | 'approved'>
+    /**
+     * The handle of the member who registered it (ADR 0067), shown in place of the free-text
+     * developer name on an app Tela has not reviewed; null for one the operator registered.
+     */
+    developerHandle: string | null
+    /**
+     * Whether Tela reviewed it. An unreviewed app is shown with "Not reviewed by Tela"; a missing
+     * value (a tela-api from before ADR 0067) reads as reviewed, which every app then was.
+     */
+    reviewed: boolean
   }
   /** What it asks for; the member may lower `write` to `read`. */
   scope: AppScope
@@ -177,7 +189,16 @@ export type ConnectDecision = AuthorizationParams & {
 /** `GET /api/v1/connections`: the member's live connections, for Settings → Connected apps. */
 export type Connection = {
   id: number
-  app: { name: string; developer: string; homepageUrl: string | null }
+  app: {
+    name: string
+    developer: string
+    homepageUrl: string | null
+    /** Its public `client_id`, which a report of it names (ADR 0067). */
+    clientId: string
+    /** See `ConnectRequest`: a missing value reads as reviewed. */
+    reviewed: boolean
+    developerHandle: string | null
+  }
   scope: AppScope
   email: boolean
   createdAt: number

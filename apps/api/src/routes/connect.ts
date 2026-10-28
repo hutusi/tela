@@ -86,7 +86,8 @@ async function check(
   const redirectUri = value('redirect_uri')
   const redirect = redirectUri ? matchRedirect(app.redirectUris, redirectUri) : null
   if (!redirectUri || !redirect) return refused('invalid_redirect')
-  if (app.status === 'suspended') return refused('app_unavailable')
+  // Cut off by the operator, or with its developer suspended or closed (ADR 0067).
+  if (app.cutOff) return refused('app_unavailable')
   const responseType = value('response_type')
   if (responseType !== 'code') {
     return refused(responseType ? 'unsupported_response_type' : 'invalid_request')
@@ -103,9 +104,9 @@ async function check(
   ) {
     return refused('invalid_request')
   }
-  if (!app.connected && app.maxConnections !== null && app.connections >= app.maxConnections) {
-    return refused('max_connections')
-  }
+  // The app's own cap, or for an app Tela has not reviewed, the one its developer's unreviewed
+  // apps share (ADR 0067); its developer and a member it already counts always have room.
+  if (!app.room) return refused('max_connections')
   return {
     ok: true,
     app,
@@ -119,7 +120,8 @@ async function check(
       code_challenge_method: 'S256',
     },
     scope: lowerScope(asked.scope, app.maxScope),
-    email: asked.email && app.allowEmail,
+    // Never for an app Tela has not reviewed, whatever it asks (ADR 0067).
+    email: asked.email && app.emailAllowed,
     redirect,
   }
 }
@@ -150,6 +152,8 @@ export function connectRoutes(deps: ApiDeps, auth: Auth) {
         homepageUrl: app.homepageUrl,
         privacyUrl: app.privacyUrl,
         status: app.status === 'draft' ? 'draft' : 'approved',
+        developerHandle: app.developerHandle,
+        reviewed: app.reviewed,
       },
       scope: checked.scope,
       email: checked.email,

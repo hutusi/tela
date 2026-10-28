@@ -10,6 +10,9 @@
  * - Approve or Decline posts the answer, and the browser follows the address tela-api gives back
  *   with `location.assign`, never a form, which the site's `form-action 'self'` would stop.
  * - A visitor signs in through the sheet and stays here (`STAY_PAGES`), a joiner too.
+ * - An app Tela has not reviewed (ADR 0067) says so, and names its developer by their handle, a
+ *   name Tela vouches is a member's, in place of the words they typed. Any app can be reported
+ *   from here, by its `client_id`, without the query that carries the request.
  *
  * The page is the app's alone: the edge never renders it and tela-web never sees it (it is not in
  * `run_worker_first`), so the request in its query reaches no Worker's logs, and the plain shell
@@ -23,6 +26,7 @@ import { useFrontDoor } from '../components/front-door'
 import { MemberLanguage, VisitorLanguage } from '../components/language-menu'
 import { LogoMark } from '../components/logo'
 import { PersonAvatar } from '../components/person-avatar'
+import { ReportLink } from '../components/report-link'
 import { askConnect, type ConnectProblem, decideConnect, requestParams } from '../lib/apps-api'
 import { useTitle } from '../lib/title'
 import { useSession } from '../session'
@@ -225,6 +229,47 @@ function Asking(props: AskingProps) {
   )
 }
 
+/**
+ * Who made it, and their website. An app Tela has not reviewed is named by its developer's handle,
+ * linked to their profile, never by the developer name they typed: on Tela's own page, a name of
+ * their choosing could claim to be anyone (ADR 0067). Links open apart from this page, which holds
+ * the request the app is waiting on.
+ */
+function Developer({ app }: { app: ConnectRequest['app'] }) {
+  const t = useTranslations('connect')
+  const home = (chunks: React.ReactNode) => (
+    <a
+      href={app.homepageUrl ?? undefined}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-ink underline"
+    >
+      {chunks}
+    </a>
+  )
+  const handle = app.reviewed ? null : app.developerHandle
+  if (handle) {
+    const member = (chunks: React.ReactNode) => (
+      // noreferrer: a same-origin Referer would carry the whole authorization request, `state`
+      // and all, to the edge that renders the profile.
+      <a
+        href={`/@${handle}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-ink underline"
+      >
+        {chunks}
+      </a>
+    )
+    return app.homepageUrl
+      ? t.rich('byHandleWithHome', { handle, member, home })
+      : t.rich('byHandle', { handle, member })
+  }
+  return app.homepageUrl
+    ? t.rich('byWithHome', { developer: app.developer, home })
+    : t('by', { developer: app.developer })
+}
+
 /** Who is answering: the member's card, which the device's profile row holds. */
 export type ConsentAccount = { handle: string; displayName: string | null; avatar: string | null }
 
@@ -289,25 +334,36 @@ export function ConsentForm({
           </p>
         ) : null}
         <h1 className="m-0 font-serif text-[30px] leading-[1.15] font-medium tracking-[-0.015em] [overflow-wrap:anywhere]">
-          {t('heading', { app: app.name })}
+          {/* Isolated: a name in a right-to-left script must not reorder the sentence around it. */}
+          {t.rich('heading', { app: app.name, name: (chunks) => <bdi>{chunks}</bdi> })}
         </h1>
-        <p className="m-0 text-[14px] [overflow-wrap:anywhere] text-muted">
-          {app.homepageUrl
-            ? t.rich('byWithHome', {
-                developer: app.developer,
-                home: (chunks) => (
-                  <a
-                    href={app.homepageUrl ?? undefined}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-ink underline"
-                  >
-                    {chunks}
-                  </a>
-                ),
-              })
-            : t('by', { developer: app.developer })}
-        </p>
+        {/* A div, not a p: the report's sheet opens inside it. */}
+        <div className="text-[14px] [overflow-wrap:anywhere] text-muted">
+          <Developer app={app} />
+          {' · '}
+          <ReportLink
+            subject={{ kind: 'app', key: app.clientId }}
+            path="/connect"
+            member
+            withoutQuery
+          />
+        </div>
+        {app.reviewed ? null : (
+          <div
+            role="note"
+            className="mt-2 flex items-start gap-2.5 rounded-xl border border-warn bg-surface px-4 py-3"
+            data-testid="connect-unreviewed"
+          >
+            <span
+              aria-hidden="true"
+              className="mt-[7px] size-[8px] shrink-0 rounded-full bg-warn"
+            />
+            <div className="flex flex-col gap-1">
+              <p className="m-0 text-[14.5px] font-medium text-ink">{t('unreviewed.title')}</p>
+              <p className="m-0 text-[13.5px] text-ink-2">{t('unreviewed.body')}</p>
+            </div>
+          </div>
+        )}
       </header>
 
       {account ? (
@@ -431,7 +487,12 @@ export function ConsentForm({
           {t.rich('later', {
             // Apart from this page, which holds the request the app is waiting on.
             link: (chunks) => (
-              <a href="/privacy#apps" target="_blank" rel="noopener" className="text-ink underline">
+              <a
+                href="/privacy#apps"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-ink underline"
+              >
                 {chunks}
               </a>
             ),

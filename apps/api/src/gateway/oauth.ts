@@ -8,6 +8,7 @@
  * Every answer here is form-in, JSON-out, `no-store`, and refusals use RFC 6749 §5.2's codes.
  */
 import {
+  appCutOff,
   consumeLimit,
   exchangeCode,
   first,
@@ -97,11 +98,12 @@ export function oauthRoutes(deps: ApiDeps, auth: Auth) {
   ): Promise<{ clientId: string; suspended: boolean } | Response> => {
     const clientId = form.get('client_id')
     if (!clientId) return refuse(c, 'invalid_request')
-    const found = await first<{ enabled: number; app_id: number | null; status: string | null }>(
+    // Cut off by the operator, or with its developer suspended or closed (ADR 0067).
+    const found = await first<{ enabled: number; app_id: number | null; cut_off: number | null }>(
       db,
       sql`select (${settingSql('apps.enabled')} = 'on') as enabled,
         (select id from apps where client_id = ${clientId}) as app_id,
-        (select status from apps where client_id = ${clientId}) as status`,
+        (select ${appCutOff('a')} from apps a where a.client_id = ${clientId}) as cut_off`,
     )
     if (found?.enabled !== 1) return appsPaused(c)
     if (found.app_id === null) return refuse(c, 'invalid_client', 401)
@@ -115,7 +117,7 @@ export function oauthRoutes(deps: ApiDeps, auth: Auth) {
       String(found.app_id),
     )
     if (!limited.allowed) return rateLimited(c, limited.retryAfterSec)
-    return { clientId, suspended: found.status === 'suspended' }
+    return { clientId, suspended: found.cut_off === 1 }
   }
 
   /**

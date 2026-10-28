@@ -381,9 +381,10 @@ profile*, a claim's "handle taken") names `/settings/profile`, so no form is edi
 width. Below `sm` a `SettingRow`'s label gives way first (it grows from nothing with a 96 px
 minimum; `gap-x-4 py-4`, a 12.5 px hint), so the size, measure and theme switches sit beside their
 labels at 360 px; a control too wide still wraps under it, and the rows built by hand use
-`SETTING_LABEL` and `SETTING_HINT`. Connected apps, Invites and Account are the three sections that read live answers from
+`SETTING_LABEL` and `SETTING_HINT`. Connected apps, Developer, Invites and Account are the four sections that read live answers from
 tela-api instead of the synced tables, on purpose: an invite list is counted by the server and holds
-other people's state, and how a member signs in, or which apps act for them, is security state.
+other people's state, how a member signs in, or which apps act for them, is security state, and an
+app's record (its contact address included) is on no device.
 Connected apps (ADR 0064, `pages/settings-apps.tsx`), between Privacy and Invites, opens with a
 muted intro saying Tela approves every app, then a row per app above a `line`: the app's name (a
 link to its homepage when it has one), "By <developer>" muted, its level (*Read only*, *Read and
@@ -432,6 +433,32 @@ what goes and what stays, with a link to the export, *Email me a code*, then a c
 danger-filled *Delete my account*. Settings › Language shows how many of the day's new
 translations are used; Settings › Subscriptions shows imports that wait and the cap (ADR 0063).
 Settings › Invites is hidden while sign-up is open (ADR 0056).
+
+Settings › Developer (ADR 0067, `pages/settings-developer.tsx`), after Connected apps, is where a
+member registers apps of their own. A muted intro links the API guide on GitHub, then *Register an
+app* (the filled button) opens the form in place, above the list, behind a `line`. A row per app:
+its name (linked to its homepage) beside its status, a `thumb`-bordered pill with a 7 px dot as the
+console draws it (*Testing* `info`, *Live* `ok`, *Cut off* `danger`) and a line under it saying what
+that means ("Only you can connect it."); *Reviewed by Tela* with a check, or *Not reviewed* and,
+once asked, "review requested <day>"; "37 of 100 members connected · registered <day>" muted (no
+"of" for a reviewed app, which has no cap); the client ID in mono, selectable, with a small *Copy*
+pill. Then its actions as quiet pills: *Go live* (a draft; refused at once, in `danger`, with no
+privacy policy) or *Back to testing* (Live), *Request a review* while unreviewed and not yet asked,
+and muted *Edit* and *Delete*; a cut-off app offers none. *Back to testing* and *Delete* open an
+inline question in a `surface` box, as Disconnect does, saying the connections of everyone but the
+developer (or everyone) end at once, with a danger pill and a muted *Cancel*. *Request a review*
+opens a `surface` form: what a review lifts (the cap, the email ban), a note of up to 500
+characters, and "It needs members' email addresses". The form is the reader's own, never the
+console's: name, developer, contact address (the account's address as its placeholder, and empty
+means that address), homepage, privacy policy, redirect URIs one a line in mono, the most it may
+ask for as two radios, and, to register, a checkbox accepting the developer rules (linked). It is
+checked by `parseDeveloperApp` before it is sent; the first wrong field takes focus with its reason
+under it in `danger`, and a name or developer saying "Tela" is told only Tela's own apps may. While
+an edit to a reviewed app would clear its review (a new name, redirect URIs or scope), a
+`thumb`-bordered note says so and the button reads *Save and clear the review*. With no apps, the
+section says *No apps yet*, what an app is, a link to the guide, and that apps start in Testing and
+are limited until reviewed. At the foot, the cap unreviewed apps share (once, when it applies) and a
+link to the developer rules.
 
 Settings › Subscriptions (Tela Lists, ADRs 0048 and 0049) is two layouts, switched at `lg`. Both
 have a line saying "8 blogs in 3 folders.", or the plain count while there are no folders, beside

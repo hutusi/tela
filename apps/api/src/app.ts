@@ -36,6 +36,7 @@ import { fromOperator } from './operator'
 import { accountRoutes } from './routes/account'
 import { adminRoutes } from './routes/admin'
 import { runBatch } from './routes/admin/framework'
+import { liveAppContacts } from './routes/admin/members/apps'
 import { applySetting, settingRows } from './routes/admin/running/settings'
 import { avatarRoutes } from './routes/avatars'
 import { blogrollRoutes } from './routes/blogrolls'
@@ -43,6 +44,7 @@ import { claimRoutes } from './routes/claims'
 import { clientErrorRoutes } from './routes/client-errors'
 import { connectRoutes } from './routes/connect'
 import { curate } from './routes/curate'
+import { developerRoutes } from './routes/developer'
 import { discoverRoutes } from './routes/discover'
 import { edgeRoutes } from './routes/edge'
 import { feedRoutes } from './routes/feeds'
@@ -126,13 +128,15 @@ function protocolOf(header: string | undefined): number {
 
 /**
  * The member calls that read the account's standing from D1 first (ADRs 0058, 0059): who is signed
- * in, the pull, the export, and every call that writes. Other reads trust the session as ever;
- * the next pull, a minute away at most, signs the tab out.
+ * in, the pull, the export, the apps they registered (each with its contact address, ADR 0067),
+ * and every call that writes. Other reads trust the session as ever; the next pull, a minute away
+ * at most, signs the tab out.
  */
 const STANDING_READS: ReadonlySet<string> = new Set([
   '/api/v1/me',
   '/api/v1/sync',
   '/api/v1/export',
+  '/api/v1/developer/apps',
 ])
 export const guarded = (method: string, path: string) =>
   (method !== 'GET' && method !== 'HEAD') ||
@@ -344,6 +348,15 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
   })
 
   /**
+   * Every live app's name and contact address (`bun run admin app-contacts`, ADR 0067), for the
+   * notices the API's developer rules promise: a preview's break, a deprecation.
+   */
+  app.get('/api/admin/apps/contacts', async (c) => {
+    if (!fromOperator(c, deps.config.adminToken)) return c.json({ error: 'forbidden' }, 403)
+    return c.json({ apps: await liveAppContacts(deps.db) }, 200, { 'cache-control': 'no-store' })
+  })
+
+  /**
    * Close again every account closed since a restore's backup (`bun run admin closures`, ADR
    * 0058): a Time Travel rollback or a restored export brings closed accounts back with it, and
    * `closures/<id>` in R2 says which. Idempotent; run it before the restored database serves
@@ -532,6 +545,8 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
   app.route('/api/v1/account', accountRoutes(deps, auth))
   // The consent page's questions, and Settings → Connected apps (ADR 0064).
   app.route('/api/v1', connectRoutes(deps, auth))
+  // Settings → Developer: the apps a member registers themselves (ADR 0067).
+  app.route('/api/v1/developer/apps', developerRoutes(deps))
 
   return { app, auth }
 }

@@ -74,8 +74,9 @@ https://telaread.com/connect
 
 The member signs in if they need to, and stays on the page. It shows the account they are signed
 in as (with a way to switch), your app's name, developer, homepage and privacy policy, where the
-answer goes, the level asked for, the email line when you asked and the operator allows it, and
-what no app can do. A draft app says it is not yet approved. The page always asks, even when the
+answer goes, the level asked for, the email line when you asked and Tela has reviewed your app and
+allows it, and what no app can do. An app in Testing says so. An app Tela has not reviewed is
+shown as "Not reviewed by Tela", with your Tela handle in place of the developer name you typed. The page always asks, even when the
 member has connected your app before: a `client_id` is public, so any program on the computer can
 use it (RFC 8252 §8.6).
 
@@ -83,8 +84,9 @@ The member may lower `write` to `read`, and may leave the email unticked. What t
 back in the token response's `scope`.
 
 **A request Tela cannot answer is never redirected.** An unknown `client_id`, a `redirect_uri`
-that was not registered, a malformed request, a scope Tela does not offer, a draft opened by
-anyone but its owner, a cut-off app, or an app at its limit of connected members: the page says
+that was not registered, a malformed request, a scope Tela does not offer, an app in Testing
+opened by anyone but its developer, a cut-off app or one whose developer's account is suspended,
+or an app at its limit of connected members (100 across your unreviewed apps): the page says
 so to the member, and your redirect URI hears nothing. Give up after a while and let the member
 try again.
 

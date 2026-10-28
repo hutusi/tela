@@ -100,6 +100,8 @@ export const ACTION_LIMITS = {
   appToken: { limit: 30, windowSec: 60 },
   /** Consent answers per member: room to connect and reconnect apps, not to mint codes in bulk. */
   appConnect: { limit: 30, windowSec: 3600 },
+  /** A member registering or editing their apps (ADR 0067): room to build, not to churn apps. */
+  appRegister: { limit: 10, windowSec: 86_400 },
 } as const satisfies Record<string, ActionLimit>
 
 export type LimitedAction = keyof typeof ACTION_LIMITS

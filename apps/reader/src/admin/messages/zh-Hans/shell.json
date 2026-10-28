@@ -273,6 +273,16 @@
         "label": "断开所有连接",
         "short": "断开连接",
         "done": "连接已全部断开"
+      },
+      "review": {
+        "label": "审核",
+        "short": "审核",
+        "done": "已审核"
+      },
+      "dismissReview": {
+        "label": "忽略审核申请",
+        "short": "忽略",
+        "done": "已忽略审核申请"
       }
     },
     "report": {
@@ -417,7 +427,15 @@
   "audit": {
     "grant": "设为管理员",
     "ungrant": "取消管理员",
-    "accountDelete": "成员自己删除了账号"
+    "accountDelete": "成员自己删除了账号",
+    "developer": {
+      "register": "开发者登记了应用",
+      "edit": "开发者修改了设置",
+      "live": "开发者将应用上线",
+      "testing": "开发者将应用改回测试",
+      "review": "开发者申请了审核",
+      "delete": "开发者删除了应用"
+    }
   },
   "overview": {
     "waiting": "四个队列中共有 {n} 项待处理。",

@@ -23,7 +23,7 @@ import type { TelaDb } from '../db'
 import { isFenceRefusal } from '../leases'
 import { bumpSeq, currentSeq } from '../seq'
 import { audit, newGroupId } from './admin'
-import { endConnections } from './apps'
+import { endConnections, endDeveloperConnections } from './apps'
 import { withdrawBodyRequests } from './translation'
 
 type Statement = ReturnType<TelaDb['run']>
@@ -167,7 +167,8 @@ export type Closed = 'closed' | 'already' | 'admin' | 'not_found'
  *    marked closed; the handle stays;
  * 6. every way in: sessions, the apps connected to it and their tokens (ADR 0064), passwords and
  *    providers, mailed codes and OAuth states, and Tela's own counts for the member and the
- *    address;
+ *    address; and every member's connection to the apps it registered (ADR 0067), whose contact
+ *    address, the account's own unless it gave another, is replaced as the account's is;
  * 7. its invitations: its codes revoked and their holds cancelled, and the address on the
  *    invitation it joined by replaced, so the record of who it invited, and who invited it, stays
  *    without the address; nobody else's invitation is touched;
@@ -256,6 +257,13 @@ export async function closeAccount(db: TelaDb, input: CloseAccount): Promise<Clo
     `),
     db.run(sql`delete from session where user_id = ${id}`),
     ...endConnections(db, id, 'closed', now),
+    // The apps it registered stop for everyone (as the console's "End all connections"), and
+    // already answer as cut off while it is closed; no address of its stays on them.
+    ...endDeveloperConnections(db, id, 'appEnded', now),
+    db.run(sql`
+      update apps set contact_email = ${closedEmail(id)}, updated_at = ${now}
+      where developer_id = ${id} and contact_email <> ${closedEmail(id)}
+    `),
     db.run(sql`delete from account where user_id = ${id}`),
     // Codes better-auth mailed the address (`<type>-otp-<address>`, Tela's own deletion code
     // among them) and an OAuth state naming the member, which holds their address. Compared

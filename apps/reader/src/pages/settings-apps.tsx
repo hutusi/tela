@@ -3,12 +3,15 @@
  * last acted for them, and a way to disconnect it. A live answer, like Account, never the synced
  * tables: a connection is security state, and the apps' own record is on no device. Disconnecting
  * asks first, inline, and stops the app on every device from its next request; what the app
- * already stored stays with it, which the question says.
+ * already stored stays with it, which the question says. An app Tela has not reviewed says so and
+ * is named by its developer's handle, as on the consent page, and every app can be reported
+ * (ADR 0067).
  */
 import type { Connection } from '@tela/shared'
 import { useState } from 'react'
 import { Link } from 'react-router'
 import { useTranslations } from 'use-intl'
+import { ReportLink } from '../components/report-link'
 import { disconnect, listConnections } from '../lib/apps-api'
 import { useLive } from '../lib/use-live'
 import { useUi } from '../ui'
@@ -141,8 +144,37 @@ export function ConnectionRow({
           )}
         </div>
         <div className="mt-[3px] text-[13px] [overflow-wrap:anywhere] text-muted">
-          {t('by', { developer: app.developer })}
+          {!app.reviewed && app.developerHandle
+            ? t.rich('byHandle', {
+                handle: app.developerHandle,
+                member: (chunks) => (
+                  <Link to={`/@${app.developerHandle}`} className="text-ink hover:underline">
+                    {chunks}
+                  </Link>
+                ),
+              })
+            : t('by', { developer: app.developer })}
+          {/* A tela-api from before ADR 0067 sends no client id, and a report needs one. */}
+          {app.clientId ? (
+            <>
+              {' · '}
+              <ReportLink
+                subject={{ kind: 'app', key: app.clientId }}
+                path="/settings/apps"
+                member
+              />
+            </>
+          ) : null}
         </div>
+        {app.reviewed ? null : (
+          <div
+            className="mt-1.5 flex items-center gap-1.5 text-[13px] text-ink-2"
+            data-testid="connection-unreviewed"
+          >
+            <span aria-hidden="true" className="size-[7px] shrink-0 rounded-full bg-warn" />
+            {t('notReviewed')}
+          </div>
+        )}
         <div className="mt-1.5 text-[13.5px] text-ink-2" data-testid="connection-level">
           {connection.email
             ? t('levelWithEmail', { level: t(`level.${connection.scope}`) })

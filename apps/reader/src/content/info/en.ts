@@ -151,6 +151,12 @@ export const en = {
               'Each app you connect: what you allowed it, when you connected it, and when it last acted for you ([below](#apps)).',
             ],
           },
+          { h: 'Apps you register' },
+          {
+            list: [
+              'If you register an app: its name, developer name, homepage, privacy policy, redirect addresses and the most it may ask for; the contact address you give for it; when you accepted the developer rules; and any review you asked for, with your note ([below](#apps)).',
+            ],
+          },
           { h: 'Technical records' },
           {
             list: [
@@ -282,14 +288,17 @@ export const en = {
         heading: 'Apps you connect',
         blocks: [
           {
-            p: "Apps made by other developers can connect to your Tela account if you let them. Tela approves each app before anyone can connect it. You connect one on a page of Tela's own, which shows what the app asks for, and the app never gets your password.",
+            p: "Apps made by other developers can connect to your Tela account if you let them. Any member can register an app, and Tela may review it ([Terms](/terms#apps)). You connect one on a page of Tela's own, which shows what the app asks for, and the app never gets your password.",
+          },
+          {
+            p: "That page shows the app's name, who made it, and links to its homepage and privacy policy. For an app Tela hasn't reviewed, it says so, and shows its developer's Tela handle rather than a name they chose.",
           },
           { h: 'What an app sees' },
           {
             list: [
               "Read only: your subscriptions and folders, posts and their full text, your likes, recommendations and highlights, your reading history, the people you follow, your reading preferences, and Tela's public pages. It can't change anything.",
               'Read and write: all of that, and it can make changes for you: mark posts read, like, recommend, highlight, subscribe, add feeds, file blogs in folders, follow people, change your reading preferences, and ask for translations, which count toward your daily translations ([Terms](/terms#limits)).',
-              'Your email address, only when the app asks for it, Tela allows it, and you agree when you connect it.',
+              'Your email address, only when the app asks for it, Tela has reviewed the app and allows it, and you agree when you connect it.',
               'No app can delete your account, change how you sign in, download your data, or do anything only the person who runs Tela can.',
             ],
           },
@@ -301,6 +310,16 @@ export const en = {
               "What an app stores is that app's responsibility, under its own privacy policy, which the page you connect it on links to.",
               "Disconnecting an app stops it at once, on all your devices. It doesn't delete what the app has already stored: ask the app to delete it.",
               "Every connection ends when you set, change or reset your password, link Google or GitHub, sign out everywhere, or delete your account. The person who runs Tela can also end an app's connections, or stop an app for everyone.",
+            ],
+          },
+          { h: 'If you register an app' },
+          {
+            list: [
+              'Members who connect your app see its name, the developer name you gave it or your @handle, and links to its homepage and privacy policy.',
+              'Tela keeps the contact address you give for the app, to write to you about it, and never shows it to anyone.',
+              'Settings → Developer shows how many members are connected to your app, never who they are.',
+              "What your app keeps about the members who connect it is your responsibility, under your app's privacy policy ([Terms](/terms#apps)).",
+              'Members can report an app, and Tela can cut it off.',
             ],
           },
         ],
@@ -338,6 +357,7 @@ export const en = {
               'A recommendation, highlight or blogroll you remove, or a blog you take out of a blogroll, stays in the database marked as removed, with its text, so your other devices catch up. Deleting your account removes them ([below](#delete)).',
               "The record of which posts you opened from blogs you don't subscribe to is deleted after two days.",
               'The record of an app you connected is kept until the connection ends, and deleted 30 days after that. Its tokens are kept only as hashes, and deleted once they can never be used again.',
+              'An app you register is kept until you delete it.',
               'Cloudflare keeps a 30-day restore point of the whole database, and Tela copies the database every night, keeping each copy 30 days. Something you change or remove can stay in either that long. The nightly copy leaves out sessions, sign-in codes, abuse counters, app tokens and the posts you opened.',
             ],
           },
@@ -356,6 +376,7 @@ export const en = {
               'Your handle is kept, unused, so nobody can take it to pass as you.',
               'Blogs you claimed are released. Their switches, such as translation, stay as they were.',
               'Invite codes you made stop working. Anyone who joined with one keeps their account.',
+              'Apps you registered stop working for everyone: their connections end, and the contact addresses you gave for them are deleted.',
               'Records of what translations cost are kept, no longer tied to you. Blogs you added stay on Tela for the people who read them.',
               'Backups keep a copy for up to 30 days ([How long we keep it](#keep)). Caches can show your old picture for up to 30 days, and your profile page for a few minutes.',
             ],
@@ -372,6 +393,7 @@ export const en = {
               'Choose what others see in Settings → Privacy. Your picture and Gravatar are in Settings → Profile; an uploaded picture you remove is deleted.',
               'Set or change a password, link or unlink Google and GitHub, and sign out everywhere in Settings → Account.',
               'See the apps you have connected, and disconnect any of them, in Settings → Connected apps.',
+              'Register apps, see how many members each has, and delete them, in Settings → Developer.',
               'While joining Tela needs an invitation, see the invite codes you made and who joined with them in Settings → Invites, and revoke one nobody has used.',
               'Change your handle, name and bio whenever you like.',
               'Remove a recommendation, highlight, like, follow or blogroll at any time. It disappears from Tela at once, and from public pages within a few minutes. Making a blogroll private takes it off public pages the same way.',
@@ -491,6 +513,19 @@ export const en = {
           },
         ],
       },
+      apps: {
+        heading: 'Apps you register',
+        blocks: [
+          {
+            list: [
+              "Any member can register apps that use Tela's API, in Settings → Developer. By registering one, you accept the [developer rules](https://github.com/hutusi/tela/blob/main/docs/api/policy.md), and you are responsible for your app: for what it does with the accounts members connect to it, and for what it keeps.",
+              "An app starts in Testing, where only you can connect it, and goes Live for everyone once it has a privacy policy. Until Tela reviews it, it can hold only a limited number of members and can't see their email addresses. A review is optional; changing an app's name, redirect addresses or the most it may ask for clears it.",
+              'Only Tela\'s own apps may use the word "Tela" in their name or as their developer.',
+              "We may cut off any app, for everyone, at any time, end its connections, or suspend the account that registered it. An app that is cut off, or has a report we haven't looked at yet, can't be deleted.",
+            ],
+          },
+        ],
+      },
       limits: {
         heading: 'Limits',
         blocks: [
@@ -531,8 +566,8 @@ export const en = {
         blocks: [
           {
             list: [
-              `If a profile, a blogroll, a blog or a recommendation's note on Tela breaks these terms, members can report it from its page, and anyone can write to ${CONTACT}.`,
-              'We look at each report and decide what to do: hide what was reported, suspend or delete the account behind it, or nothing.',
+              `If a profile, a blogroll, a blog, a recommendation's note or an app on Tela breaks these terms, members can report it from its page (an app, from the page where they connect it or from Settings → Connected apps), and anyone can write to ${CONTACT}.`,
+              'We look at each report and decide what to do: hide what was reported or cut off the app, suspend or delete the account behind it, or nothing.',
               'Only we see who sent a report. It is never shown to the person reported, or to anyone else.',
             ],
           },
@@ -553,7 +588,7 @@ export const en = {
             p: "Blogs are responsible for what they publish, not Tela. Tela comes without warranties of any kind, and as far as the law allows, we aren't liable for losses from using it.",
           },
           {
-            p: "Apps made by others that you connect to Tela aren't Tela's: their makers are responsible for them, and for what they keep.",
+            p: "Apps made by others that you connect to Tela aren't Tela's, even when Tela has reviewed them: their makers are responsible for them, and for what they keep.",
           },
         ],
       },

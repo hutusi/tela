@@ -100,7 +100,7 @@ export async function signInRequest(request: APIRequestContext, email: string): 
 }
 
 /** `MIN_CLIENT` (packages/sync/src/protocol.ts), as the app's calls carry it; raise it with a bump. */
-export const CLIENT = '5'
+export const CLIENT = '6'
 
 /**
  * What the app sends on every member call: the protocol it speaks and the account it holds, which

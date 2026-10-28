@@ -224,6 +224,18 @@
             "on": "On",
             "off": "Off"
           }
+        },
+        "unreviewedMaxConnections": {
+          "name": "Members per developer, before review",
+          "about": "Members connected at once to the apps of one developer that Tela hasn’t reviewed, counted across all of them. A review lifts it; the developer’s own connection is free.",
+          "value": "{n, plural, =0 {None} one {# member} other {# members}}",
+          "none": "No cap"
+        },
+        "perMember": {
+          "name": "Apps per member",
+          "about": "Apps one member may register in Settings → Developer. Admins are exempt.",
+          "value": "{n, plural, =0 {None} one {# app} other {# apps}}",
+          "none": "No limit"
         }
       }
     }

@@ -156,6 +156,12 @@ export const fr = {
               'Chaque application que vous connectez : ce que vous lui avez permis, quand vous l’avez connectée, et quand elle a agi pour vous pour la dernière fois ([voir plus bas](#apps)).',
             ],
           },
+          { h: 'Les applications que vous enregistrez' },
+          {
+            list: [
+              'Si vous enregistrez une application : son nom, le nom de son développeur, sa page d’accueil, sa politique de confidentialité, ses adresses de redirection et le plus qu’elle peut demander ; l’adresse de contact que vous donnez pour elle ; quand vous avez accepté les règles pour les développeurs ; et tout examen que vous avez demandé, avec votre mot ([voir plus bas](#apps)).',
+            ],
+          },
           { h: 'Données techniques' },
           {
             list: [
@@ -287,14 +293,17 @@ export const fr = {
         heading: 'Les applications que vous connectez',
         blocks: [
           {
-            p: 'Des applications faites par d’autres développeurs peuvent se connecter à votre compte Tela si vous le leur permettez. Tela approuve chaque application avant que quiconque puisse la connecter. Vous la connectez sur une page de Tela, qui montre ce que l’application demande, et l’application n’obtient jamais votre mot de passe.',
+            p: 'Des applications faites par d’autres développeurs peuvent se connecter à votre compte Tela si vous le leur permettez. Tout membre peut enregistrer une application, et Tela peut l’examiner ([Conditions](/terms#apps)). Vous la connectez sur une page de Tela, qui montre ce que l’application demande, et l’application n’obtient jamais votre mot de passe.',
+          },
+          {
+            p: 'Cette page montre le nom de l’application, qui l’a faite, et des liens vers sa page d’accueil et sa politique de confidentialité. Pour une application que Tela n’a pas examinée, elle le dit, et montre l’identifiant Tela de son développeur plutôt qu’un nom choisi librement.',
           },
           { h: 'Ce qu’une application voit' },
           {
             list: [
               'Lecture seule : vos abonnements et vos dossiers, les articles et leur texte en entier, vos coups de cœur, recommandations et surlignages, votre historique de lecture, les personnes que vous suivez, vos préférences de lecture, et les pages publiques de Tela. Elle ne peut rien modifier.',
               'Lecture et écriture : tout cela, et elle peut faire des changements pour vous : marquer des articles comme lus, donner un coup de cœur, recommander, surligner, s’abonner, ajouter des flux, classer des blogs dans des dossiers, suivre des personnes, changer vos préférences de lecture, et demander des traductions, qui comptent dans vos traductions du jour ([Conditions](/terms#limits)).',
-              'Votre adresse e-mail, seulement si l’application la demande, que Tela le lui permet et que vous l’acceptez en la connectant.',
+              'Votre adresse e-mail, seulement si l’application la demande, que Tela l’a examinée et le lui permet, et que vous l’acceptez en la connectant.',
               'Aucune application ne peut supprimer votre compte, changer votre façon de vous connecter, télécharger vos données, ni faire ce que seule la personne qui gère Tela peut faire.',
             ],
           },
@@ -306,6 +315,16 @@ export const fr = {
               'Ce qu’une application conserve relève de sa propre responsabilité, selon sa politique de confidentialité, que la page où vous la connectez indique.',
               'Déconnecter une application l’arrête aussitôt, sur tous vos appareils. Ce qu’elle a déjà conservé n’est pas supprimé pour autant : demandez-le à l’application.',
               'Toutes les connexions prennent fin quand vous définissez, changez ou réinitialisez votre mot de passe, associez Google ou GitHub, vous déconnectez partout, ou supprimez votre compte. La personne qui gère Tela peut aussi mettre fin aux connexions d’une application, ou l’arrêter pour tout le monde.',
+            ],
+          },
+          { h: 'Si vous enregistrez une application' },
+          {
+            list: [
+              'Les membres qui connectent votre application voient son nom, le nom de développeur que vous lui avez donné ou votre @identifiant, et des liens vers sa page d’accueil et sa politique de confidentialité.',
+              'Tela garde l’adresse de contact que vous donnez pour l’application, pour vous écrire à son sujet, et ne la montre jamais à personne.',
+              'Paramètres → Développeurs indique combien de membres sont connectés à votre application, jamais qui ils sont.',
+              'Ce que votre application conserve sur les membres qui la connectent relève de votre responsabilité, selon sa politique de confidentialité ([Conditions](/terms#apps)).',
+              'Les membres peuvent signaler une application, et Tela peut la couper.',
             ],
           },
         ],
@@ -343,6 +362,7 @@ export const fr = {
               'Une recommandation, un surlignage ou une blogroll que vous retirez, ou un blog que vous enlevez d’une blogroll, reste dans la base de données, marqué comme retiré et avec son texte, pour que vos autres appareils se mettent à jour. La suppression de votre compte les efface ([voir plus bas](#delete)).',
               'La trace des articles que vous avez ouverts depuis des blogs auxquels vous n’êtes pas abonné est supprimée au bout de deux jours.',
               'La trace d’une application que vous avez connectée est gardée jusqu’à la fin de la connexion, puis supprimée 30 jours plus tard. Ses jetons ne sont gardés que sous forme d’empreintes, et supprimés dès qu’ils ne peuvent plus jamais servir.',
+              'Une application que vous enregistrez est gardée jusqu’à ce que vous la supprimiez.',
               'Cloudflare conserve un point de restauration de toute la base de données sur 30 jours, et Tela copie la base chaque nuit en gardant chaque copie 30 jours. Ce que vous modifiez ou retirez peut subsister aussi longtemps dans l’un ou l’autre. La copie nocturne exclut les sessions, les codes de connexion, les compteurs d’abus, les jetons des applications et les articles que vous avez ouverts.',
             ],
           },
@@ -361,6 +381,7 @@ export const fr = {
               'Votre identifiant est conservé, inutilisé, pour que personne ne puisse le prendre et se faire passer pour vous.',
               'Les blogs que vous avez revendiqués sont libérés. Leurs réglages, comme la traduction, restent tels quels.',
               'Les codes d’invitation que vous avez créés ne fonctionnent plus. Les personnes qui s’en sont servies gardent leur compte.',
+              'Les applications que vous avez enregistrées cessent de fonctionner pour tout le monde : leurs connexions prennent fin, et les adresses de contact que vous avez données pour elles sont effacées.',
               'Les relevés de ce qu’ont coûté les traductions sont conservés, sans lien avec vous. Les blogs que vous avez ajoutés restent sur Tela pour ceux qui les lisent.',
               'Les sauvegardes en gardent une copie jusqu’à 30 jours ([Combien de temps nous les gardons](#keep)). Les caches peuvent montrer votre ancienne photo jusqu’à 30 jours, et votre page de profil quelques minutes.',
             ],
@@ -377,6 +398,7 @@ export const fr = {
               'Choisissez ce que les autres voient dans Paramètres → Confidentialité. Votre photo et votre Gravatar sont dans Paramètres → Profil ; une photo envoyée que vous retirez est supprimée.',
               'Définissez ou changez un mot de passe, associez ou dissociez Google et GitHub, et déconnectez-vous partout dans Paramètres → Compte.',
               'Retrouvez les applications que vous avez connectées, et déconnectez celle que vous voulez, dans Paramètres → Apps connectées.',
+              'Enregistrez des applications, voyez combien de membres chacune réunit, et supprimez-les, dans Paramètres → Développeurs.',
               'Tant que l’inscription à Tela demande une invitation, retrouvez les codes d’invitation que vous avez créés et les personnes qui s’en sont servies dans Paramètres → Invitations, et révoquez-en un que personne n’a utilisé.',
               'Changez votre identifiant, votre nom et votre bio quand vous voulez.',
               'Retirez une recommandation, un surlignage, un coup de cœur, un suivi ou une blogroll à tout moment. Chacun disparaît aussitôt de Tela, et des pages publiques en quelques minutes. Rendre une blogroll privée la retire des pages publiques de la même façon.',
@@ -496,6 +518,19 @@ export const fr = {
           },
         ],
       },
+      apps: {
+        heading: 'Les applications que vous enregistrez',
+        blocks: [
+          {
+            list: [
+              'Tout membre peut enregistrer des applications qui utilisent l’API de Tela, dans Paramètres → Développeurs. En en enregistrant une, vous acceptez les [règles pour les développeurs](https://github.com/hutusi/tela/blob/main/docs/api/policy.md), et vous êtes responsable de votre application : de ce qu’elle fait des comptes que les membres y connectent, et de ce qu’elle conserve.',
+              'Une application commence en test, où personne d’autre que vous ne peut la connecter, et peut être mise en ligne pour tous dès qu’elle a une politique de confidentialité. Tant que Tela ne l’a pas examinée, elle ne peut réunir qu’un nombre limité de membres et ne voit pas leur adresse e-mail. L’examen est facultatif ; changer le nom d’une application, ses adresses de redirection ou le plus qu’elle peut demander l’annule.',
+              'Seules les applications de Tela peuvent utiliser le mot « Tela » dans leur nom ou comme développeur.',
+              'Nous pouvons couper n’importe quelle application, pour tout le monde, à tout moment, mettre fin à ses connexions, ou suspendre le compte qui l’a enregistrée. Une application coupée, ou signalée sans que nous ayons encore examiné le signalement, ne peut pas être supprimée.',
+            ],
+          },
+        ],
+      },
       limits: {
         heading: 'Limites',
         blocks: [
@@ -536,8 +571,8 @@ export const fr = {
         blocks: [
           {
             list: [
-              `Si un profil, une blogroll, un blog ou le mot d’une recommandation enfreint ces conditions, les membres peuvent le signaler depuis sa page, et tout le monde peut écrire à ${CONTACT}.`,
-              'Nous examinons chaque signalement et décidons de la suite : masquer ce qui a été signalé, suspendre ou supprimer le compte concerné, ou ne rien faire.',
+              `Si un profil, une blogroll, un blog, le mot d’une recommandation ou une application enfreint ces conditions, les membres peuvent le signaler depuis sa page (une application, depuis la page où ils la connectent ou depuis Paramètres → Apps connectées), et tout le monde peut écrire à ${CONTACT}.`,
+              'Nous examinons chaque signalement et décidons de la suite : masquer ce qui a été signalé ou couper l’application, suspendre ou supprimer le compte concerné, ou ne rien faire.',
               'Nous seuls savons qui a envoyé un signalement. Ce n’est jamais montré à la personne signalée, ni à personne d’autre.',
             ],
           },
@@ -558,7 +593,7 @@ export const fr = {
             p: 'Les blogs sont responsables de ce qu’ils publient, pas Tela. Tela est fourni sans garantie d’aucune sorte et, dans les limites permises par la loi, nous ne sommes pas responsables des pertes liées à son utilisation.',
           },
           {
-            p: 'Les applications faites par d’autres que vous connectez à Tela n’appartiennent pas à Tela : leurs auteurs en sont responsables, comme de ce qu’elles conservent.',
+            p: 'Les applications faites par d’autres que vous connectez à Tela n’appartiennent pas à Tela, même quand Tela les a examinées : leurs auteurs en sont responsables, comme de ce qu’elles conservent.',
           },
         ],
       },

@@ -46,6 +46,13 @@ export const SETTINGS = {
   'member.unsubscribedPostsPerDay': { kind: 'limit', default: 100, max: 1_000_000 },
   /** Whether approved apps may act for members (ADR 0064): `off` stops every app at once. */
   'apps.enabled': { kind: 'choice', choices: APPS_SWITCH, default: 'on' },
+  /**
+   * Members connected at once to the apps of one developer that Tela has not reviewed (ADR
+   * 0067), counted across all of them; a review lifts it. The developer's own connection is free.
+   */
+  'apps.unreviewedMaxConnections': { kind: 'limit', default: 100, max: 1_000_000 },
+  /** Apps one member may register in Settings → Developer; admins are exempt on the web. */
+  'apps.perMember': { kind: 'limit', default: 5, max: 1_000 },
   /** Model tokens per UTC day, titles and bodies, everyone's together. */
   'translation.siteDailyTokens': { kind: 'limit', default: 10_000_000, max: 10_000_000_000 },
   /**

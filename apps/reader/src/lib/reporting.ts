@@ -26,6 +26,18 @@ export function reportMailto(subject: string, path: string): string {
   return `mailto:${REPORT_ADDRESS}?${query.toString().replace(/\+/g, '%20')}`
 }
 
+/**
+ * The page a member's report names, kept beside it for the operator: as the browser has it, or
+ * with no query or fragment where the query is not the page's to share. On `/connect` it is the
+ * app's authorization request, its `state` among it (ADR 0067).
+ */
+export function reportedAddress(
+  at: Pick<Location, 'href' | 'origin' | 'pathname'>,
+  withoutQuery: boolean,
+): string {
+  return withoutQuery ? `${at.origin}${at.pathname}` : at.href
+}
+
 /** How many characters the details hold, as tela-api counts them: in code points. */
 export const detailsLength = (text: string) => [...text.trim()].length
 

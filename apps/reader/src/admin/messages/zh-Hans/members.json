@@ -19,7 +19,11 @@
     },
     "search": "按用户名、昵称或邮箱搜索",
     "name": "成员",
-    "columns": { "role": "角色", "signIn": "登录方式", "joined": "加入时间" },
+    "columns": {
+      "role": "角色",
+      "signIn": "登录方式",
+      "joined": "加入时间"
+    },
     "role": {
       "admin": "管理员",
       "member": "成员",
@@ -59,10 +63,18 @@
     }
   },
   "invites": {
-    "filters": { "codes": "邀请码", "waiting": "等待中", "revoked": "已作废" },
+    "filters": {
+      "codes": "邀请码",
+      "waiting": "等待中",
+      "revoked": "已作废"
+    },
     "search": "按邀请码、邀请人或邮箱搜索",
     "name": "邀请码或邮箱",
-    "columns": { "createdBy": "创建者", "uses": "名额", "when": "创建或到期" },
+    "columns": {
+      "createdBy": "创建者",
+      "uses": "名额",
+      "when": "创建或到期"
+    },
     "operator": "运营者",
     "sub": {
       "operator": "运营者的邀请码",
@@ -119,7 +131,8 @@
       "profile": "个人页",
       "blogroll": "博客链",
       "site": "博客",
-      "recommendation": "推荐语"
+      "recommendation": "推荐语",
+      "app": "应用"
     },
     "sub": "{kind} · @{handle}",
     "gone": "已不再显示的{kind}",
@@ -152,6 +165,7 @@
       "what": "内容",
       "page": "公开页面",
       "member": "所属成员",
+      "developer": "开发者",
       "reasons": "举报原因",
       "reporters": "举报人数",
       "first": "首次举报",
@@ -161,6 +175,7 @@
     "notPublic": "现在没有对任何人显示",
     "decidedBy": "{when}，由 @{handle}",
     "openBlog": "打开这个博客的记录",
+    "openApp": "打开这个应用的记录",
     "actOn": "对它采取操作",
     "entries": "举报",
     "gonePerson": "账户已不存在的成员",
@@ -168,6 +183,7 @@
   },
   "apps": {
     "filters": {
+      "review": "待审核",
       "approved": "已批准",
       "draft": "草稿",
       "suspended": "已停用"
@@ -187,6 +203,9 @@
     "connected": "{n, plural, =0 {无人} other {# 位成员}}",
     "never": "从未",
     "noOwner": "无",
+    "operator": "运营者",
+    "notReviewed": "未审核",
+    "reviewedBy": "{when}，由 @{handle} 审核",
     "scope": {
       "read": "仅读取",
       "write": "读取和修改"
@@ -203,6 +222,9 @@
     "kv": {
       "clientId": "客户端 ID",
       "developer": "开发者",
+      "registeredBy": "登记者",
+      "terms": "接受规则",
+      "reviewed": "审核",
       "contact": "联系邮箱",
       "homepage": "主页",
       "privacy": "隐私政策",
@@ -223,7 +245,20 @@
       "draft": "草稿：只有所属账号能连接，供开发者测试。批准后所有成员都能连接。",
       "approved": "所有成员都能连接。降低它的权限或收回邮箱权限，会立即作用于它现有的令牌。",
       "suspended": "已停用：它持有的所有令牌都会被拒绝。连接会保留，恢复后已连接的成员可以继续使用。",
+      "unreviewed": "未审核：其开发者所有未审核应用的连接会员合计受同一上限约束（开发者自己的连接不计入），而且它看不到任何邮箱地址。审核后两项限制都会取消。",
       "private": "后台只统计有多少人连接了应用，不会显示是谁。"
+    },
+    "request": {
+      "label": "审核申请",
+      "when": "申请于 {when}",
+      "noNote": "没有附言。",
+      "wantsEmail": "申请查看会员的邮箱地址",
+      "noEmail": "不申请查看邮箱地址"
+    },
+    "review": {
+      "body": "审核会取消未审核应用受到的限制：其开发者所有未审核应用共用的会员上限，以及不能查看邮箱地址。之后若更改名称、重定向地址或权限范围，审核会随之失效。",
+      "email": "允许它申请查看会员的邮箱地址",
+      "submit": "审核"
     },
     "history": {
       "created": "已登记",
@@ -243,6 +278,7 @@
       "allowEmail": "可以请求查看成员的邮箱地址",
       "owner": "所属账号的用户名",
       "ownerHint": "草稿可以连接的账号，供开发者测试。可不填。",
+      "ownerLocked": "开发者本人的账号：会员登记的应用始终由其本人测试。",
       "perMemberPerMin": "每位成员每分钟的请求数",
       "perAppPerMin": "每分钟的请求总数",
       "maxConnections": "同时连接的成员上限",

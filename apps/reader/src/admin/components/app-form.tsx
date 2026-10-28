@@ -50,6 +50,12 @@ const EMPTY: Draft = {
   maxConnections: '',
 }
 
+/**
+ * What Edit starts from: an app's settings, and whether its owner is fixed, as a member's app's is
+ * (ADR 0067). tela-api keeps that owner whatever is sent; the form shows it cannot be changed.
+ */
+export type AppFormStart = AdminAppSettings & { ownerLocked?: boolean }
+
 /** The form's start: an app's settings as they are, for Edit; empty for a new app. */
 export function draftOf(app: unknown): Draft {
   const parsed = parseAppSettings(app)
@@ -113,6 +119,7 @@ export function AppForm({
   const t = useTranslations('admin.members')
   const id = useId()
   const [draft, setDraft] = useState<Draft>(() => draftOf(initial?.app))
+  const ownerLocked = (initial?.app as AppFormStart | undefined)?.ownerLocked === true
   const [wrong, setWrong] = useState<AppField | null>(null)
   const form = useRef<HTMLFormElement>(null)
   useEffect(() => {
@@ -139,7 +146,13 @@ export function AppForm({
 
   const text = (
     field: Exclude<AppField, 'maxScope' | 'allowEmail'>,
-    options: { type?: string; max?: number; hint?: string; mono?: boolean } = {},
+    options: {
+      type?: string
+      max?: number
+      hint?: string
+      mono?: boolean
+      readOnly?: boolean
+    } = {},
   ) => (
     <div className="flex flex-col gap-1">
       <label htmlFor={`${id}-${field}`} className={LABEL}>
@@ -154,11 +167,12 @@ export function AppForm({
         autoComplete="off"
         spellCheck={false}
         maxLength={options.max}
+        readOnly={options.readOnly}
         value={draft[field]}
         onChange={(e) => set(field, e.target.value)}
         aria-invalid={wrong === field}
         aria-describedby={options.hint ? `${id}-${field}-hint` : undefined}
-        className={`${FIELD} ${options.mono ? 'font-mono' : ''}`}
+        className={`${FIELD} ${options.mono ? 'font-mono' : ''} ${options.readOnly ? 'text-muted' : ''}`}
         data-field={field}
         data-testid={`app-form-${field}`}
       />
@@ -241,7 +255,11 @@ export function AppForm({
           />
           {t('apps.form.allowEmail')}
         </label>
-        {text('owner', { max: 31, hint: t('apps.form.ownerHint') })}
+        {text('owner', {
+          max: 31,
+          hint: ownerLocked ? t('apps.form.ownerLocked') : t('apps.form.ownerHint'),
+          readOnly: ownerLocked,
+        })}
         {text('perMemberPerMin', {
           type: 'number',
           hint: t('apps.form.limitHint', { n: APP_DEFAULT_PER_MEMBER_PER_MIN }),
@@ -264,6 +282,78 @@ export function AppForm({
       <div className="flex flex-wrap gap-2">
         <ActionButton type="submit" look="primary" disabled={busy} data-testid="admin-input-submit">
           {editing ? t('apps.form.save') : t('apps.form.register')}
+        </ActionButton>
+        <ActionButton look="ghost" onClick={onCancel}>
+          {t('apps.form.cancel')}
+        </ActionButton>
+      </div>
+    </form>
+  )
+}
+
+/**
+ * Reviewing an app (ADR 0067): what a review lifts, and whether the app may ask for the email
+ * address from now on, which the operator answers each time, whatever the developer asked for. It
+ * starts from what the app may do now, or what its developer asked.
+ */
+export function ReviewForm({
+  initial,
+  busy,
+  onAnswer,
+  onCancel,
+}: {
+  initial: AdminActArgs | undefined
+  busy: boolean
+  onAnswer: (args: AdminActArgs) => void
+  onCancel: () => void
+}) {
+  const t = useTranslations('admin.members')
+  const [allowEmail, setAllowEmail] = useState(initial?.allowEmail === true)
+  const submit = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    submit.current?.focus()
+  }, [])
+  return (
+    <form
+      className="flex flex-col gap-3"
+      data-testid="admin-input"
+      data-kind="review"
+      onSubmit={(e) => {
+        e.preventDefault()
+        // The version the operator read travels with the answer, so an edit since refuses it.
+        if (!busy) {
+          onAnswer({
+            allowEmail,
+            ...(typeof initial?.seen === 'number' ? { seen: initial.seen } : {}),
+          })
+        }
+      }}
+      onKeyDown={(e) => {
+        if (e.key !== 'Escape') return
+        e.preventDefault()
+        onCancel()
+      }}
+    >
+      <p className="m-0 text-[13.5px] leading-normal text-ink-2">{t('apps.review.body')}</p>
+      <label className="flex items-start gap-2 text-[14px] text-ink">
+        <input
+          type="checkbox"
+          className="mt-[3px]"
+          checked={allowEmail}
+          onChange={(e) => setAllowEmail(e.target.checked)}
+          data-testid="app-review-email"
+        />
+        {t('apps.review.email')}
+      </label>
+      <div className="flex flex-wrap gap-2">
+        <ActionButton
+          ref={submit}
+          type="submit"
+          look="primary"
+          disabled={busy}
+          data-testid="admin-input-submit"
+        >
+          {t('apps.review.submit')}
         </ActionButton>
         <ActionButton look="ghost" onClick={onCancel}>
           {t('apps.form.cancel')}
