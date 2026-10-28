@@ -889,6 +889,7 @@
       "subscriptions": "Abonnements",
       "privacy": "Confidentialité",
       "apps": "Apps connectées",
+      "developer": "Développeurs",
       "invites": "Invitations",
       "account": "Compte"
     },
@@ -1139,6 +1140,98 @@
     "errors": {
       "load": "Impossible de charger vos applications connectées. Réessayez plus tard.",
       "failed": "La déconnexion n’a pas abouti. Réessayez."
+    }
+  },
+  "developer": {
+    "intro": "Les applications que vous enregistrez pour l’API de Tela : des programmes que l’on connecte à son compte Tela pour le lire ou agir à sa place. <guide>Comment fonctionne l’API</guide>",
+    "register": "Enregistrer une application",
+    "none": "Aucune application pour l’instant",
+    "noneBody": "Une application est un programme, pour vous ou pour d’autres, qui se connecte à des comptes Tela : un lecteur dans le terminal, une application mobile, un script. <guide>Lisez le guide de l’API</guide> pour en faire une.",
+    "noneLimits": "Une application commence en test, où personne d’autre que vous ne peut la connecter, et peut être mise en ligne pour tous dès qu’elle a une politique de confidentialité. Tant que Tela ne l’a pas examinée, elle ne peut réunir qu’un nombre limité de membres, et ne peut pas leur demander leur adresse e-mail.",
+    "rules": "Chaque application est soumise aux <rules>règles pour les développeurs</rules>, et vous êtes responsable de la vôtre.",
+    "capNote": "Les applications que Tela n’a pas examinées partagent un plafond : {cap} membres connectés à la fois, sur l’ensemble de vos applications non examinées. Votre propre connexion ne compte pas. Un examen lève ce plafond.",
+    "status": {
+      "draft": "En test",
+      "approved": "En ligne",
+      "suspended": "Coupée"
+    },
+    "statusBody": {
+      "draft": "Personne d’autre que vous ne peut la connecter.",
+      "approved": "Tout membre de Tela peut la connecter.",
+      "suspended": "Tela l’a coupée : elle ne fonctionne pour personne, et ne peut être ni modifiée ni supprimée."
+    },
+    "reviewed": "Examinée par Tela",
+    "notReviewed": "Non examinée",
+    "reviewAsked": "examen demandé le {date}",
+    "connections": "{n, plural, one {# membre connecté} other {# membres connectés}}",
+    "connectionsOf": "Membres connectés : {n} sur {cap}",
+    "registered": "enregistrée le {date}",
+    "clientId": "ID client",
+    "copy": "Copier",
+    "copied": "Copié",
+    "actions": {
+      "live": "Mettre en ligne",
+      "testing": "Repasser en test",
+      "review": "Demander un examen",
+      "edit": "Modifier",
+      "delete": "Supprimer"
+    },
+    "testingConfirm": "Repasser {name} en test ? Tous les membres sauf vous en sont aussitôt déconnectés, et personne d’autre que vous ne peut la connecter avant qu’elle soit remise en ligne.",
+    "testingYes": "Repasser en test",
+    "deleteConfirm": "Supprimer {name} ? Tous les membres qui l’ont connectée en sont aussitôt déconnectés, et son ID client cesse de fonctionner pour de bon. C’est irréversible.",
+    "deleteYes": "Supprimer",
+    "cancel": "Annuler",
+    "reviewIntro": "Un examen est facultatif. Tela regarde l’application, sa page d’accueil et sa politique de confidentialité, et peut écrire à son adresse de contact. Une fois examinée, l’application n’est plus soumise au plafond de membres, et peut demander leur adresse e-mail aux membres.",
+    "reviewNote": "Ce que Tela devrait savoir (facultatif)",
+    "reviewNoteHint": "{n} caractères au plus.",
+    "reviewEmail": "Elle a besoin de l’adresse e-mail des membres",
+    "reviewSend": "Demander un examen",
+    "form": {
+      "title": "Une nouvelle application",
+      "name": "Nom",
+      "nameHint": "Ce que voient les membres en la connectant. Seules les applications de Tela peuvent utiliser le mot « Tela ».",
+      "developer": "Développée par",
+      "developerHint": "Qui la fait : vous, ou votre équipe. Tant que Tela ne l’a pas examinée, les membres voient votre @identifiant à la place.",
+      "contactEmail": "Adresse de contact",
+      "contactHint": "Là où Tela vous écrit au sujet de cette application. Les membres ne la voient jamais. Laissée vide, c’est l’adresse de votre compte.",
+      "contactPlaceholder": "L’adresse e-mail de votre compte",
+      "homepageUrl": "Page d’accueil",
+      "privacyUrl": "Politique de confidentialité",
+      "urlHint": "Les deux en https, et toutes deux liées sur la page où les membres connectent l’application. Elle ne peut pas être mise en ligne sans politique de confidentialité.",
+      "redirectUris": "URI de redirection",
+      "redirectHint": "Une par ligne, {n} au plus : http://127.0.0.1/… ou http://[::1]/… (n’importe quel port convient), ou le schéma propre à l’application, comme com.example.app:/callback. Jamais localhost.",
+      "maxScope": "Le plus qu’elle peut demander",
+      "scope": {
+        "read": "Lecture seule",
+        "write": "Lecture et écriture"
+      },
+      "terms": "J’accepte les <rules>règles pour les développeurs</rules>, et je suis responsable de cette application et de ce qu’elle fait des données des membres.",
+      "clearsReview": "Changer le nom, les URI de redirection ou le plus qu’elle peut demander annule l’examen de Tela : jusqu’à un nouvel examen, l’application est soumise au plafond de membres et ne voit aucune adresse e-mail.",
+      "register": "Enregistrer l’application",
+      "save": "Enregistrer les modifications",
+      "saveClearing": "Enregistrer et annuler l’examen",
+      "cancel": "Annuler",
+      "errors": {
+        "name": "Donnez-lui un nom de {name} caractères au plus.",
+        "nameTela": "Seules les applications de Tela peuvent utiliser le mot « Tela » dans leur nom, pour qu’aucune application ne soit prise pour Tela elle-même.",
+        "developer": "Dites qui la fait, en {text} caractères au plus.",
+        "developerTela": "Seules les applications de Tela peuvent se dire développées par Tela, pour qu’aucune application ne soit prise pour Tela elle-même.",
+        "contactEmail": "L’adresse de contact doit pouvoir recevoir du courrier.",
+        "homepageUrl": "La page d’accueil doit être une adresse https.",
+        "privacyUrl": "La politique de confidentialité doit être une adresse https.",
+        "redirectUris": "De une à {n} URI de redirection, toutes différentes : une adresse de bouclage en http, ou le schéma propre à l’application, en nom de domaine inversé. Jamais localhost, jamais https.",
+        "maxScope": "Choisissez le plus qu’elle peut demander.",
+        "terms": "Acceptez les règles pour les développeurs pour enregistrer une application."
+      }
+    },
+    "errors": {
+      "load": "Impossible de charger vos applications. Réessayez plus tard.",
+      "failed": "Cela n’a pas abouti. Réessayez.",
+      "app_limit": "Un compte peut enregistrer {limit, plural, one {# application} other {# applications}}, et vous en avez déjà autant. Supprimez-en une pour en enregistrer une autre.",
+      "rate_limited": "Vous avez enregistré ou modifié des applications aussi souvent qu’une journée le permet. Réessayez plus tard.",
+      "privacy_required": "Ajoutez d’abord une politique de confidentialité : la page où les membres connectent l’application y renvoie, et l’application ne peut donc pas être mise en ligne sans elle.",
+      "cut_off": "Tela a coupé cette application : elle ne peut pas être supprimée.",
+      "reported": "Cette application a été signalée : elle ne peut pas être supprimée tant que Tela n’a pas examiné le signalement."
     }
   },
   "connect": {

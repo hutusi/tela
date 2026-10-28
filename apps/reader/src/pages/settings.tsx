@@ -4,8 +4,9 @@
  * `/settings` is the list of sections and each is a page of its own behind a back bar; from `md` up
  * it is Profile, beside the side column. Everything here is the synced tables: a change made on
  * another device shows here. Most settings are mutations and take effect at once; the handle,
- * name and bio are an RPC, since a handle has to be unique. Invites, Account and Connected apps are
- * the exception, live answers on purpose (`settings-account.tsx`, `settings-apps.tsx`).
+ * name and bio are an RPC, since a handle has to be unique. Invites, Account, Connected apps and
+ * Developer are the exception, live answers on purpose (`settings-account.tsx`, `settings-apps.tsx`,
+ * `settings-developer.tsx`).
  */
 import {
   type AccountUsage,
@@ -77,6 +78,7 @@ import { feedsInFolder, feedTitle, folderIdOf } from '../store/selectors'
 import { useUi } from '../ui'
 import { AccountSection, InvitesSection } from './settings-account'
 import { AppsSection } from './settings-apps'
+import { DeveloperSection } from './settings-developer'
 
 export const SECTIONS = [
   'profile',
@@ -85,6 +87,7 @@ export const SECTIONS = [
   'subscriptions',
   'privacy',
   'apps',
+  'developer',
   'invites',
   'account',
 ] as const
@@ -356,6 +359,7 @@ function SectionContent({ section }: { section: Section }) {
       {section === 'subscriptions' ? <SubscriptionsSection /> : null}
       {section === 'privacy' ? <PrivacySection /> : null}
       {section === 'apps' ? <AppsSection /> : null}
+      {section === 'developer' ? <DeveloperSection /> : null}
       {section === 'invites' ? <InvitesSection /> : null}
       {section === 'account' ? <AccountSection /> : null}
     </>

@@ -889,6 +889,7 @@
       "subscriptions": "訂閱",
       "privacy": "隱私",
       "apps": "已連線的應用程式",
+      "developer": "開發者",
       "invites": "邀請",
       "account": "帳戶"
     },
@@ -1139,6 +1140,98 @@
     "errors": {
       "load": "無法載入已連線的應用程式，請稍後再試。",
       "failed": "沒能中斷連線，請重試。"
+    }
+  },
+  "developer": {
+    "intro": "你為 Tela API 登記的應用程式：別人把它連線到自己的 Tela 帳號，用來讀取內容或代為操作。<guide>API 怎麼用</guide>",
+    "register": "登記應用程式",
+    "none": "還沒有應用程式",
+    "noneBody": "應用程式是連線到 Tela 帳號的程式，可以給自己用，也可以給別人用：比如終端裡的閱讀器、手機應用程式或者一段指令碼。<guide>閱讀 API 指南</guide>，動手做一個。",
+    "noneLimits": "應用程式登記後先處於測試中，只有你能連線；有了隱私政策後，就可以上線，讓所有人連線。在 Tela 稽核之前，它能連線的成員數量有限，也不能請求成員的電子郵件地址。",
+    "rules": "每個應用程式都須遵守<rules>開發者規則</rules>，你要為自己的應用程式負責。",
+    "capNote": "未經 Tela 稽核的應用程式共用一個上限：你所有未稽核的應用程式合計最多同時連線 {cap} 位成員，你自己的連線不計在內。稽核後不再受此限制。",
+    "status": {
+      "draft": "測試中",
+      "approved": "已上線",
+      "suspended": "已停用"
+    },
+    "statusBody": {
+      "draft": "只有你能連線。",
+      "approved": "Tela 的任何成員都能連線。",
+      "suspended": "Tela 已停用這個應用程式：它對任何人都不再可用，也不能修改或刪除。"
+    },
+    "reviewed": "Tela 已稽核",
+    "notReviewed": "未稽核",
+    "reviewAsked": "已於 {date} 申請稽核",
+    "connections": "{n, plural, other {已連線 # 位成員}}",
+    "connectionsOf": "已連線 {n} / {cap} 位成員",
+    "registered": "登記於 {date}",
+    "clientId": "客戶端 ID",
+    "copy": "複製",
+    "copied": "已複製",
+    "actions": {
+      "live": "上線",
+      "testing": "改回測試",
+      "review": "申請稽核",
+      "edit": "編輯",
+      "delete": "刪除"
+    },
+    "testingConfirm": "要把 {name} 改回測試嗎？除你之外的所有成員都會立即中斷連線；在它再次上線之前，只有你能連線。",
+    "testingYes": "改回測試",
+    "deleteConfirm": "要刪除 {name} 嗎？所有連線了它的成員都會立即中斷連線，它的客戶端 ID 也將永久失效。此操作無法撤銷。",
+    "deleteYes": "刪除",
+    "cancel": "取消",
+    "reviewIntro": "稽核是可選的。Tela 會檢視應用程式、它的主頁和隱私政策，也可能寫信到它的聯絡電子郵件。稽核後，應用程式不再受成員數量上限的限制，並且可以請求成員的電子郵件地址。",
+    "reviewNote": "想告訴 Tela 的事（可不填）",
+    "reviewNoteHint": "最多 {n} 個字元。",
+    "reviewEmail": "它需要成員的電子郵件地址",
+    "reviewSend": "申請稽核",
+    "form": {
+      "title": "新應用程式",
+      "name": "名稱",
+      "nameHint": "成員連線它時看到的名字。只有 Tela 自己的應用程式可以使用「Tela」這個詞。",
+      "developer": "開發者",
+      "developerHint": "誰做的：你，或者你的團隊。在 Tela 稽核之前，成員看到的是你的 @使用者名稱。",
+      "contactEmail": "聯絡電子郵件",
+      "contactHint": "Tela 就這個應用程式聯絡你時使用，成員看不到。留空則使用你帳號的電子郵件。",
+      "contactPlaceholder": "你帳號的電子郵件地址",
+      "homepageUrl": "主頁",
+      "privacyUrl": "隱私政策",
+      "urlHint": "都必須是 https 地址，會顯示在成員連線應用程式的頁面上。沒有隱私政策就不能上線。",
+      "redirectUris": "重新導向網址",
+      "redirectHint": "每行一個，最多 {n} 個：http://127.0.0.1/… 或 http://[::1]/…（任意埠均可），或應用程式自己的協議，例如 com.example.app:/callback。不能用 localhost。",
+      "maxScope": "最多可以請求的權限",
+      "scope": {
+        "read": "僅讀取",
+        "write": "讀取和修改"
+      },
+      "terms": "我接受<rules>開發者規則</rules>，並對這個應用程式以及它如何處理成員的資料負責。",
+      "clearsReview": "修改名稱、重新導向網址或最多可以請求的權限，會清除 Tela 的稽核：在 Tela 再次稽核之前，應用程式受成員數量上限的限制，也看不到電子郵件地址。",
+      "register": "登記",
+      "save": "儲存",
+      "saveClearing": "儲存並清除稽核",
+      "cancel": "取消",
+      "errors": {
+        "name": "請填寫名稱，最多 {name} 個字元。",
+        "nameTela": "只有 Tela 自己的應用程式可以在名稱中使用「Tela」這個詞，以免有人把應用程式誤認作 Tela 本身。",
+        "developer": "請填寫開發者，最多 {text} 個字元。",
+        "developerTela": "只有 Tela 自己的應用程式可以把 Tela 寫作開發者，以免有人把應用程式誤認作 Tela 本身。",
+        "contactEmail": "聯絡電子郵件必須能收信。",
+        "homepageUrl": "主頁必須是 https 地址。",
+        "privacyUrl": "隱私政策必須是 https 地址。",
+        "redirectUris": "需要 1 到 {n} 個互不相同的重新導向網址：使用 http 的本機迴環地址，或應用程式自己的反向域名協議。不能用 localhost，也不能用 https。",
+        "maxScope": "請選擇它最多可以請求的權限。",
+        "terms": "請先接受開發者規則，才能登記應用程式。"
+      }
+    },
+    "errors": {
+      "load": "無法載入你的應用程式，請稍後再試。",
+      "failed": "沒有成功，請重試。",
+      "app_limit": "每個帳號最多登記 {limit, plural, other {# 個應用程式}}，你已經達到上限。刪除一個才能再登記。",
+      "rate_limited": "你今天登記或修改應用程式的次數已達上限，請稍後再試。",
+      "privacy_required": "請先新增隱私政策：成員連線應用程式的頁面會連結到它，沒有隱私政策就不能上線。",
+      "cut_off": "Tela 已停用這個應用程式，因此不能刪除。",
+      "reported": "有人檢舉了這個應用程式，在 Tela 處理檢舉之前不能刪除。"
     }
   },
   "connect": {

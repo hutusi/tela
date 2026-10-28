@@ -889,6 +889,7 @@
       "subscriptions": "Subscriptions",
       "privacy": "Privacy",
       "apps": "Connected apps",
+      "developer": "Developer",
       "invites": "Invites",
       "account": "Account"
     },
@@ -1139,6 +1140,98 @@
     "errors": {
       "load": "Your connected apps couldn’t be loaded. Try again later.",
       "failed": "It couldn’t be disconnected. Try again."
+    }
+  },
+  "developer": {
+    "intro": "Apps you register for Tela’s API: programs people connect to their Tela account, to read it or to act for them. <guide>How the API works</guide>",
+    "register": "Register an app",
+    "none": "No apps yet",
+    "noneBody": "An app is a program, for you or for others, that connects to Tela accounts: a reader in the terminal, a phone app, a script. <guide>Read the API guide</guide> to make one.",
+    "noneLimits": "An app starts in Testing, where only you can connect it, and can go Live for everyone once it has a privacy policy. Until Tela reviews it, it can hold only a limited number of members, and can’t ask for their email addresses.",
+    "rules": "Every app is held to the <rules>developer rules</rules>, and you are responsible for yours.",
+    "capNote": "Apps Tela hasn’t reviewed share a cap: {cap} members connected at once, across all your unreviewed apps. Your own connection doesn’t count. A review lifts the cap.",
+    "status": {
+      "draft": "Testing",
+      "approved": "Live",
+      "suspended": "Cut off"
+    },
+    "statusBody": {
+      "draft": "Only you can connect it.",
+      "approved": "Anyone on Tela can connect it.",
+      "suspended": "Tela has cut it off: it works for no one, and it can’t be changed or deleted."
+    },
+    "reviewed": "Reviewed by Tela",
+    "notReviewed": "Not reviewed",
+    "reviewAsked": "review requested {date}",
+    "connections": "{n, plural, one {# member} other {# members}} connected",
+    "connectionsOf": "{n} of {cap} members connected",
+    "registered": "registered {date}",
+    "clientId": "Client ID",
+    "copy": "Copy",
+    "copied": "Copied",
+    "actions": {
+      "live": "Go live",
+      "testing": "Back to testing",
+      "review": "Request a review",
+      "edit": "Edit",
+      "delete": "Delete"
+    },
+    "testingConfirm": "Put {name} back in Testing? Everyone but you is disconnected from it at once, and only you can connect it until it goes Live again.",
+    "testingYes": "Back to testing",
+    "deleteConfirm": "Delete {name}? Everyone connected to it is disconnected at once, and its client ID stops working for good. This can’t be undone.",
+    "deleteYes": "Delete",
+    "cancel": "Cancel",
+    "reviewIntro": "A review is optional. Tela looks at the app, its homepage and its privacy policy, and may write to its contact address. Once reviewed, the app is no longer held to the cap on members, and it may ask members for their email address.",
+    "reviewNote": "Anything Tela should know (optional)",
+    "reviewNoteHint": "Up to {n} characters.",
+    "reviewEmail": "It needs members’ email addresses",
+    "reviewSend": "Request a review",
+    "form": {
+      "title": "A new app",
+      "name": "Name",
+      "nameHint": "What members see when they connect it. Only Tela’s own apps may use the word “Tela”.",
+      "developer": "Developer",
+      "developerHint": "Who makes it: you, or your team. Until Tela reviews the app, members see your @handle instead.",
+      "contactEmail": "Contact address",
+      "contactHint": "Where Tela writes to you about this app. Members never see it. Left empty, it is your account’s address.",
+      "contactPlaceholder": "Your account’s email address",
+      "homepageUrl": "Homepage",
+      "privacyUrl": "Privacy policy",
+      "urlHint": "Both https, and both linked on the page where members connect the app. It can’t go Live without a privacy policy.",
+      "redirectUris": "Redirect URIs",
+      "redirectHint": "One a line, at most {n}: http://127.0.0.1/… or http://[::1]/… (any port matches), or the app’s own scheme, such as com.example.app:/callback. Never localhost.",
+      "maxScope": "The most it may ask for",
+      "scope": {
+        "read": "Read only",
+        "write": "Read and write"
+      },
+      "terms": "I accept the <rules>developer rules</rules>, and I am responsible for this app and for what it does with members’ data.",
+      "clearsReview": "Changing the name, the redirect URIs or the most it may ask for clears Tela’s review: until Tela reviews it again, the app is held to the cap on members and can’t see email addresses.",
+      "register": "Register",
+      "save": "Save",
+      "saveClearing": "Save and clear the review",
+      "cancel": "Cancel",
+      "errors": {
+        "name": "Give it a name of up to {name} characters.",
+        "nameTela": "Only Tela’s own apps may use the word “Tela” in a name, so that no app is taken for Tela itself.",
+        "developer": "Say who makes it, in up to {text} characters.",
+        "developerTela": "Only Tela’s own apps may name Tela as their developer, so that no app is taken for Tela itself.",
+        "contactEmail": "A contact address must be one that receives mail.",
+        "homepageUrl": "The homepage must be an https address.",
+        "privacyUrl": "The privacy policy must be an https address.",
+        "redirectUris": "One to {n} redirect URIs, each different: a loopback address over http, or the app’s own reverse-DNS scheme. Never localhost, never https.",
+        "maxScope": "Choose the most it may ask for.",
+        "terms": "Accept the developer rules to register an app."
+      }
+    },
+    "errors": {
+      "load": "Your apps couldn’t be loaded. Try again later.",
+      "failed": "That didn’t work. Try again.",
+      "app_limit": "One account may register {limit, plural, one {# app} other {# apps}}, and you have that many. Delete one to register another.",
+      "rate_limited": "You’ve registered or changed apps as often as one day allows. Try again later.",
+      "privacy_required": "Add a privacy policy first: the page where members connect the app links to it, so the app can’t go Live without one.",
+      "cut_off": "Tela has cut this app off, so it can’t be deleted.",
+      "reported": "Someone has reported this app, so it can’t be deleted until Tela has looked at the report."
     }
   },
   "connect": {

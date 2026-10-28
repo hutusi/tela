@@ -878,6 +878,7 @@ test.describe('Settings on a phone', () => {
     ['subscriptions', 'Subscriptions'],
     ['privacy', 'Privacy'],
     ['apps', 'Connected apps'],
+    ['developer', 'Developer'],
     ['invites', 'Invites'],
     ['account', 'Account'],
   ] as const
@@ -886,7 +887,7 @@ test.describe('Settings on a phone', () => {
   const title = (page: Page) =>
     page.getByTestId('settings-content').getByRole('heading', { level: 1 })
 
-  test('the list holds the eight sections, rows to touch that each open their own page', async ({
+  test('the list holds the nine sections, rows to touch that each open their own page', async ({
     page,
   }) => {
     for (const width of [360, 412]) {
@@ -1058,6 +1059,7 @@ test.describe('Settings on a phone', () => {
       '/settings/subscriptions': 'settings-subscription',
       '/settings/privacy': 'privacy-likes',
       '/settings/account': 'account-email',
+      '/settings/developer': 'developer-register',
       '/settings/invites': 'invite-create',
     }
     for (const width of [360, 412]) {
