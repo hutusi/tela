@@ -275,14 +275,14 @@
         "done": "連線已全部中斷"
       },
       "review": {
-        "label": "稽核",
-        "short": "稽核",
-        "done": "已稽核"
+        "label": "審核",
+        "short": "審核",
+        "done": "已審核"
       },
       "dismissReview": {
-        "label": "忽略稽核申請",
+        "label": "忽略審核申請",
         "short": "忽略",
-        "done": "已忽略稽核申請"
+        "done": "已忽略審核申請"
       }
     },
     "report": {

@@ -1120,12 +1120,12 @@
     }
   },
   "connectedApps": {
-    "intro": "你連線到 Tela 帳號的應用程式，以及每個應用程式能做什麼。應用程式由會員自行登記，Tela 只稽核其中一部分，未經稽核的應用程式會註明。",
+    "intro": "你連線到 Tela 帳號的應用程式，以及每個應用程式能做什麼。應用程式由會員自行登記，Tela 只審核其中一部分，未經審核的應用程式會註明。",
     "none": "還沒有連線任何應用程式",
-    "noneBody": "其他開發者做的應用程式可以讀取你在 Tela 的內容；如果你允許，還能替你做些更改，比如標記已讀。任何會員都能登記應用程式，Tela 只稽核其中一部分，每個應用程式都會註明是否經過稽核。從應用程式裡連線時，由你決定它能做什麼。",
+    "noneBody": "其他開發者做的應用程式可以讀取你在 Tela 的內容；如果你允許，還能替你做些更改，比如標記已讀。任何會員都能登記應用程式，Tela 只審核其中一部分，每個應用程式都會註明是否經過審核。從應用程式裡連線時，由你決定它能做什麼。",
     "by": "開發者：{developer}",
     "byHandle": "開發者：<member>@{handle}</member>",
-    "notReviewed": "未經 Tela 稽核",
+    "notReviewed": "未經 Tela 審核",
     "level": {
       "read": "僅讀取",
       "write": "讀取和修改"
@@ -1251,7 +1251,7 @@
     "byHandle": "開發者：<member>@{handle}</member>",
     "byHandleWithHome": "開發者：<member>@{handle}</member> · <home>網站</home>",
     "unreviewed": {
-      "title": "未經 Tela 稽核",
+      "title": "未經 Tela 審核",
       "body": "這個應用程式由開發者自行登記，並由開發者負責。Tela 沒有檢查過它會怎樣使用你的帳號，請只在信任開發者時連線。"
     },
     "account": {
