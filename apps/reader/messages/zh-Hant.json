@@ -1120,10 +1120,12 @@
     }
   },
   "connectedApps": {
-    "intro": "你連線到 Tela 帳號的應用程式，以及每個應用程式能做什麼。每個應用程式都要先經過 Tela 核准，才能被任何人連線。",
+    "intro": "你連線到 Tela 帳號的應用程式，以及每個應用程式能做什麼。",
     "none": "還沒有連線任何應用程式",
-    "noneBody": "其他開發者做的應用程式可以讀取你在 Tela 的內容；如果你允許，還能替你做些更改，比如標記已讀。每個應用程式都要先經過 Tela 核准，才能被任何人連線；從應用程式裡連線時，由你決定它能做什麼。",
+    "noneBody": "其他開發者做的應用程式可以讀取你在 Tela 的內容；如果你允許，還能替你做些更改，比如標記已讀。從應用程式裡連線時，由你決定它能做什麼。",
     "by": "開發者：{developer}",
+    "byHandle": "開發者：<member>@{handle}</member>",
+    "notReviewed": "未經 Tela 稽核",
     "level": {
       "read": "僅讀取",
       "write": "讀取和修改"
@@ -1242,10 +1244,16 @@
       "logIn": "登入",
       "join": "加入 Tela"
     },
-    "draft": "尚未經過 Tela 核准。只有你能連線它，因為它登記在你的帳號下，供你測試。",
+    "draft": "測試中，尚未上線。只有你能連線它，因為它登記在你的帳號下，供你測試。",
     "heading": "把 {app} 連線到你的 Tela 帳號？",
     "by": "開發者：{developer}",
     "byWithHome": "開發者：{developer} · <home>網站</home>",
+    "byHandle": "開發者：<member>@{handle}</member>",
+    "byHandleWithHome": "開發者：<member>@{handle}</member> · <home>網站</home>",
+    "unreviewed": {
+      "title": "未經 Tela 稽核",
+      "body": "這個應用程式由開發者自行登記，並由開發者負責。Tela 沒有檢查過它會怎樣使用你的帳號，請只在信任開發者時連線。"
+    },
     "account": {
       "label": "你的帳號",
       "as": "已登入帳號",
@@ -1289,7 +1297,7 @@
       "invalid_request": "應用程式發來的請求不完整或格式有誤。請回到應用程式裡重新連線。",
       "unsupported_response_type": "應用程式請求的連線方式 Tela 不提供。",
       "invalid_scope": "應用程式請求的權限超出了 Tela 允許的範圍。",
-      "app_unavailable": "這個應用程式現在無法連線：它還沒有獲得核准，或者已被 Tela 暫停。",
+      "app_unavailable": "這個應用程式現在無法連線：它還沒有上線，或者已被暫停。",
       "max_connections": "這個應用程式的連線人數已達到 Tela 目前允許的上限。請稍後再試。",
       "failed": "請檢查網路後重試。",
       "nothingShared": "什麼都沒有共享給應用程式。",
@@ -1396,19 +1404,22 @@
       "profile": "檢舉這個個人頁",
       "blogroll": "檢舉這個部落格鏈",
       "site": "檢舉這個部落格",
-      "recommendation": "檢舉這條推薦語"
+      "recommendation": "檢舉這條推薦語",
+      "app": "檢舉這個應用程式"
     },
     "byMail": {
       "profile": "發郵件檢舉這個個人頁",
       "blogroll": "發郵件檢舉這個部落格鏈",
       "site": "發郵件檢舉這個部落格",
-      "recommendation": "發郵件檢舉這條推薦語"
+      "recommendation": "發郵件檢舉這條推薦語",
+      "app": "發郵件檢舉這個應用程式"
     },
     "mailSubject": {
       "profile": "檢舉：Tela 上的一個個人頁",
       "blogroll": "檢舉：Tela 上的一個部落格鏈",
       "site": "檢舉：Tela 上的一個部落格",
-      "recommendation": "檢舉：Tela 上的一條推薦語"
+      "recommendation": "檢舉：Tela 上的一條推薦語",
+      "app": "檢舉：Tela 上的一個應用程式"
     },
     "intro": "檢舉只會交給運營 Tela 的人，不會告訴任何人是誰檢舉的。",
     "why": "它有什麼問題？",

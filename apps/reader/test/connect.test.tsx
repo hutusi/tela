@@ -1,7 +1,8 @@
 /**
- * The consent page (`/connect`) and Settings → Connected apps (ADR 0064), drawn on the server
- * from fixtures: what an app asks, what no app can do, whose account answers, and what a refused
- * request says instead of going anywhere. No effect runs in a server render, so nothing is asked.
+ * The consent page (`/connect`) and Settings → Connected apps (ADRs 0064, 0067), drawn on the
+ * server from fixtures: what an app asks, what no app can do, whose account answers, what a
+ * refused request says instead of going anywhere, and how an app Tela has not reviewed is shown
+ * and reported. No effect runs in a server render, so nothing is asked.
  */
 import { describe, expect, test } from 'bun:test'
 import {
@@ -96,6 +97,54 @@ describe('the consent page', () => {
     expect(html).toContain('>Approve<')
     expect(html).toContain('>Decline<')
     expect(html).not.toContain('data-testid="connect-draft"')
+    // Reviewed: no notice, and its developer by the name it gave; it can be reported all the same.
+    expect(html).not.toContain('data-testid="connect-unreviewed"')
+    expect(tag(html, 'report-link')).toContain('data-report="app"')
+    expect(tag(html, 'report-link')).toContain('aria-label="Report this app"')
+  })
+
+  test('an app Tela has not reviewed says so, and names its developer by their handle', () => {
+    const html = consent({
+      ...REQUEST,
+      app: {
+        ...REQUEST.app,
+        developer: 'Tela Official Team',
+        developerHandle: 'loom',
+        reviewed: false,
+      },
+    })
+    expect(html).toContain('data-testid="connect-unreviewed"')
+    expect(html).toContain('Not reviewed by Tela')
+    expect(html).toContain('the app is their responsibility')
+    // The handle, linked to their profile, in place of the words they typed.
+    expect(html).toContain('href="/@loom"')
+    expect(html.replaceAll('<!-- -->', '')).toContain('@loom')
+    expect(html).not.toContain('Tela Official Team')
+    expect(html).toContain('href="https://loom.example"')
+    expect(tag(html, 'report-link')).toContain('data-report="app"')
+  })
+
+  test.each([...UI_LOCALES])('%s words the notice and the report of an app', (locale) => {
+    const html = consent(
+      { ...REQUEST, app: { ...REQUEST.app, developerHandle: 'loom', reviewed: false } },
+      MARA,
+      locale,
+    )
+    const t = createTranslator({
+      locale,
+      messages: MESSAGES[locale as UiLocale],
+    }) as unknown as (key: string) => string
+    for (const key of [
+      'connect.unreviewed.title',
+      'connect.unreviewed.body',
+      'report.title.app',
+      'report.byMail.app',
+      'report.mailSubject.app',
+      'connectedApps.notReviewed',
+    ]) {
+      expect({ key, text: t(key) }).not.toEqual({ key, text: key })
+    }
+    expect(html).toContain(t('connect.unreviewed.title'))
   })
 
   test('a read-only request offers nothing to lower, and no email line unless asked', () => {
@@ -112,7 +161,7 @@ describe('the consent page', () => {
       redirect: { kind: 'scheme', target: 'com.loom.desktop' },
     })
     expect(html).toContain('data-testid="connect-draft"')
-    expect(html).toContain('Not yet approved by Tela')
+    expect(html).toContain('not live yet')
     expect(html).toContain('you go back to the app (com.loom.desktop)')
     expect(html).toContain('It has given Tela no privacy policy.')
   })
@@ -198,16 +247,56 @@ describe('Settings → Connected apps', () => {
     expect(html).toContain('2 devices')
     expect(html).toContain('data-testid="connection-disconnect"')
     expect(html).toContain('href="/privacy#apps"')
+    // Reviewed apps carry no mark; each can be reported.
+    expect(html).not.toContain('data-testid="connection-unreviewed"')
+    expect(html.match(/data-report="app"/g)).toHaveLength(2)
   })
 
-  test('with nothing connected, says what apps are and that Tela approves each one', () => {
+  test('an app Tela has not reviewed says so, by its developer’s handle, and can be reported', () => {
+    const html = render(
+      <ConnectionList
+        connections={[
+          {
+            ...LOOM,
+            app: { ...LOOM.app, developer: 'Loom Labs', reviewed: false, developerHandle: 'loom' },
+          },
+        ]}
+        failed={false}
+        onChange={() => {}}
+      />,
+      'en',
+      '/settings/apps',
+    )
+    expect(html).toContain('data-testid="connection-unreviewed"')
+    expect(html).toContain('Not reviewed by Tela')
+    expect(html).toContain('href="/@loom"')
+    expect(html).not.toContain('Loom Labs')
+    expect(tag(html, 'report-link')).toContain('aria-label="Report this app"')
+  })
+
+  test('a connection from a tela-api that sends no client id offers no report', () => {
+    const html = render(
+      <ConnectionList
+        connections={[{ ...LOOM, app: { ...LOOM.app, clientId: '' } }]}
+        failed={false}
+        onChange={() => {}}
+      />,
+      'en',
+      '/settings/apps',
+    )
+    expect(html).not.toContain('data-testid="report-link"')
+  })
+
+  test('with nothing connected, says what apps are and that the member chooses what each may do', () => {
     const html = render(
       <ConnectionList connections={[]} failed={false} onChange={() => {}} />,
       'en',
       '/settings/apps',
     )
     expect(html).toContain('No apps connected')
-    expect(html).toContain('Tela approves each one before anyone can connect it')
+    expect(html).toContain('You choose what each may do')
+    // Members register apps themselves now (ADR 0067): no promise that Tela approves each.
+    expect(html).not.toContain('Tela approves')
     expect(html).not.toContain('data-testid="connection"')
   })
 

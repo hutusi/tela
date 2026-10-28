@@ -11,7 +11,13 @@ import type { ReactNode } from 'react'
 import { renderToString } from 'react-dom/server'
 import { MemoryRouter } from 'react-router'
 import { I18n } from '../src/i18n'
-import { detailsLength, PUBLIC_ORIGIN, reportMailto, sendReport } from '../src/lib/reporting'
+import {
+  detailsLength,
+  PUBLIC_ORIGIN,
+  reportedAddress,
+  reportMailto,
+  sendReport,
+} from '../src/lib/reporting'
 import { publicRoute, renderPublicPage } from '../src/ssr'
 import { bindApi } from '../src/store/api'
 import { BlogrollView } from '../src/views/blogroll'
@@ -326,6 +332,17 @@ describe("a member's report", () => {
       throw new TypeError('offline')
     }) as unknown as typeof fetch
     expect(await sendReport(input)).toBe('failed')
+  })
+
+  test('sends the page as the browser has it, or without a query that holds a request', () => {
+    const at = {
+      href: 'https://telaread.com/connect?client_id=tela_app_x&state=SECRET#top',
+      origin: 'https://telaread.com',
+      pathname: '/connect',
+    }
+    expect(reportedAddress(at, false)).toBe(at.href)
+    // The consent page's query is the app's request, its state among it (ADR 0067).
+    expect(reportedAddress(at, true)).toBe('https://telaread.com/connect')
   })
 
   test('counts its words as tela-api does, in code points', () => {

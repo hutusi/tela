@@ -1120,10 +1120,12 @@
     }
   },
   "connectedApps": {
-    "intro": "Les applications que vous avez connectées à votre compte Tela, et ce que chacune peut faire. Tela approuve chaque application avant que quiconque puisse la connecter.",
+    "intro": "Les applications que vous avez connectées à votre compte Tela, et ce que chacune peut faire.",
     "none": "Aucune application connectée",
-    "noneBody": "Des applications faites par d’autres développeurs peuvent lire votre Tela et, si vous le leur permettez, faire des changements pour vous, comme marquer des articles comme lus. Tela approuve chacune avant que quiconque puisse la connecter, et vous choisissez ce qu’elle peut faire en la connectant depuis l’application.",
+    "noneBody": "Des applications faites par d’autres développeurs peuvent lire votre Tela et, si vous le leur permettez, faire des changements pour vous, comme marquer des articles comme lus. Vous choisissez ce que chacune peut faire en la connectant depuis l’application.",
     "by": "Par {developer}",
+    "byHandle": "Par <member>@{handle}</member>",
+    "notReviewed": "Non vérifiée par Tela",
     "level": {
       "read": "Lecture seule",
       "write": "Lecture et écriture"
@@ -1242,10 +1244,16 @@
       "logIn": "Se connecter",
       "join": "Rejoindre Tela"
     },
-    "draft": "Pas encore approuvée par Tela. Vous seul pouvez la connecter, car elle est enregistrée sur votre compte pour des essais.",
+    "draft": "En test, pas encore en ligne. Vous seul pouvez la connecter, car elle est enregistrée sur votre compte pour des essais.",
     "heading": "Connecter {app} à votre compte Tela ?",
     "by": "Par {developer}",
     "byWithHome": "Par {developer} · <home>Site web</home>",
+    "byHandle": "Par <member>@{handle}</member>",
+    "byHandleWithHome": "Par <member>@{handle}</member> · <home>Site web</home>",
+    "unreviewed": {
+      "title": "Non vérifiée par Tela",
+      "body": "Son développeur l’a enregistrée lui-même, et elle relève de sa responsabilité. Tela n’a pas vérifié ce qu’elle fait de votre compte : ne la connectez que si vous lui faites confiance."
+    },
     "account": {
       "label": "Votre compte",
       "as": "Connecté en tant que",
@@ -1289,7 +1297,7 @@
       "invalid_request": "La demande de l’application est incomplète ou mal formée. Réessayez de vous connecter depuis l’application.",
       "unsupported_response_type": "L’application demande à se connecter d’une façon que Tela ne propose pas.",
       "invalid_scope": "L’application demande plus que ce que Tela lui permet.",
-      "app_unavailable": "Cette application ne peut pas être connectée pour l’instant : elle n’est pas encore approuvée, ou Tela l’a suspendue.",
+      "app_unavailable": "Cette application ne peut pas être connectée pour l’instant : elle n’est pas encore en ligne, ou elle a été suspendue.",
       "max_connections": "Cette application compte déjà autant de personnes connectées que Tela le permet pour l’instant. Réessayez plus tard.",
       "failed": "Vérifiez votre connexion et réessayez.",
       "nothingShared": "Rien n’a été partagé avec l’application.",
@@ -1396,19 +1404,22 @@
       "profile": "Signaler ce profil",
       "blogroll": "Signaler cette blogroll",
       "site": "Signaler ce blog",
-      "recommendation": "Signaler ce mot"
+      "recommendation": "Signaler ce mot",
+      "app": "Signaler cette application"
     },
     "byMail": {
       "profile": "Signaler ce profil par e-mail",
       "blogroll": "Signaler cette blogroll par e-mail",
       "site": "Signaler ce blog par e-mail",
-      "recommendation": "Signaler ce mot par e-mail"
+      "recommendation": "Signaler ce mot par e-mail",
+      "app": "Signaler cette application par e-mail"
     },
     "mailSubject": {
       "profile": "Signalement : un profil sur Tela",
       "blogroll": "Signalement : une blogroll sur Tela",
       "site": "Signalement : un blog sur Tela",
-      "recommendation": "Signalement : un mot sur Tela"
+      "recommendation": "Signalement : un mot sur Tela",
+      "app": "Signalement : une application sur Tela"
     },
     "intro": "Votre signalement va à la personne qui gère Tela, et à elle seule. Personne ne saura qui l’a envoyé.",
     "why": "Quel est le problème ?",

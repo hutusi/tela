@@ -1120,10 +1120,12 @@
     }
   },
   "connectedApps": {
-    "intro": "你连接到 Tela 账号的应用，以及每个应用能做什么。每个应用都要先经过 Tela 批准，才能被任何人连接。",
+    "intro": "你连接到 Tela 账号的应用，以及每个应用能做什么。",
     "none": "还没有连接任何应用",
-    "noneBody": "其他开发者做的应用可以读取你在 Tela 的内容；如果你允许，还能替你做些更改，比如标记已读。每个应用都要先经过 Tela 批准，才能被任何人连接；从应用里连接时，由你决定它能做什么。",
+    "noneBody": "其他开发者做的应用可以读取你在 Tela 的内容；如果你允许，还能替你做些更改，比如标记已读。从应用里连接时，由你决定它能做什么。",
     "by": "开发者：{developer}",
+    "byHandle": "开发者：<member>@{handle}</member>",
+    "notReviewed": "未经 Tela 审核",
     "level": {
       "read": "仅读取",
       "write": "读取和修改"
@@ -1242,10 +1244,16 @@
       "logIn": "登录",
       "join": "加入 Tela"
     },
-    "draft": "尚未经过 Tela 批准。只有你能连接它，因为它登记在你的账号下，供你测试。",
+    "draft": "测试中，尚未上线。只有你能连接它，因为它登记在你的账号下，供你测试。",
     "heading": "把 {app} 连接到你的 Tela 账号？",
     "by": "开发者：{developer}",
     "byWithHome": "开发者：{developer} · <home>网站</home>",
+    "byHandle": "开发者：<member>@{handle}</member>",
+    "byHandleWithHome": "开发者：<member>@{handle}</member> · <home>网站</home>",
+    "unreviewed": {
+      "title": "未经 Tela 审核",
+      "body": "这个应用由开发者自行登记，并由开发者负责。Tela 没有检查过它会怎样使用你的账号，请只在信任开发者时连接。"
+    },
     "account": {
       "label": "你的账号",
       "as": "已登录账号",
@@ -1289,7 +1297,7 @@
       "invalid_request": "应用发来的请求不完整或格式有误。请回到应用里重新连接。",
       "unsupported_response_type": "应用请求的连接方式 Tela 不提供。",
       "invalid_scope": "应用请求的权限超出了 Tela 允许的范围。",
-      "app_unavailable": "这个应用现在无法连接：它还没有获得批准，或者已被 Tela 暂停。",
+      "app_unavailable": "这个应用现在无法连接：它还没有上线，或者已被暂停。",
       "max_connections": "这个应用的连接人数已达到 Tela 目前允许的上限。请稍后再试。",
       "failed": "请检查网络后重试。",
       "nothingShared": "什么都没有共享给应用。",
@@ -1396,19 +1404,22 @@
       "profile": "举报这个个人页",
       "blogroll": "举报这个博客链",
       "site": "举报这个博客",
-      "recommendation": "举报这条推荐语"
+      "recommendation": "举报这条推荐语",
+      "app": "举报这个应用"
     },
     "byMail": {
       "profile": "发邮件举报这个个人页",
       "blogroll": "发邮件举报这个博客链",
       "site": "发邮件举报这个博客",
-      "recommendation": "发邮件举报这条推荐语"
+      "recommendation": "发邮件举报这条推荐语",
+      "app": "发邮件举报这个应用"
     },
     "mailSubject": {
       "profile": "举报：Tela 上的一个个人页",
       "blogroll": "举报：Tela 上的一个博客链",
       "site": "举报：Tela 上的一个博客",
-      "recommendation": "举报：Tela 上的一条推荐语"
+      "recommendation": "举报：Tela 上的一条推荐语",
+      "app": "举报：Tela 上的一个应用"
     },
     "intro": "举报只会交给运营 Tela 的人，不会告诉任何人是谁举报的。",
     "why": "它有什么问题？",

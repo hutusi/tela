@@ -1120,10 +1120,12 @@
     }
   },
   "connectedApps": {
-    "intro": "Apps you have connected to your Tela account, and what each may do. Tela approves every app before anyone can connect it.",
+    "intro": "Apps you have connected to your Tela account, and what each may do.",
     "none": "No apps connected",
-    "noneBody": "Apps made by other developers can read your Tela and, if you let them, make changes for you, such as marking posts read. Tela approves each one before anyone can connect it, and you choose what it may do when you connect it from the app.",
+    "noneBody": "Apps made by other developers can read your Tela and, if you let them, make changes for you, such as marking posts read. You choose what each may do when you connect it from the app.",
     "by": "By {developer}",
+    "byHandle": "By <member>@{handle}</member>",
+    "notReviewed": "Not reviewed by Tela",
     "level": {
       "read": "Read only",
       "write": "Read and write"
@@ -1242,10 +1244,16 @@
       "logIn": "Log in",
       "join": "Join Tela"
     },
-    "draft": "Not yet approved by Tela. Only you can connect it, because it is registered to your account for testing.",
+    "draft": "In testing, not live yet. Only you can connect it, because it is registered to your account for testing.",
     "heading": "Connect {app} to your Tela account?",
     "by": "By {developer}",
     "byWithHome": "By {developer} · <home>Website</home>",
+    "byHandle": "By <member>@{handle}</member>",
+    "byHandleWithHome": "By <member>@{handle}</member> · <home>Website</home>",
+    "unreviewed": {
+      "title": "Not reviewed by Tela",
+      "body": "Its developer registered it on their own, and the app is their responsibility. Tela hasn’t checked what it does with your account, so connect it only if you trust them."
+    },
     "account": {
       "label": "Your account",
       "as": "Signed in as",
@@ -1289,7 +1297,7 @@
       "invalid_request": "The app’s request is incomplete or malformed. Try connecting again from the app.",
       "unsupported_response_type": "The app asked to connect in a way Tela doesn’t offer.",
       "invalid_scope": "The app asked for more than Tela lets it have.",
-      "app_unavailable": "This app can’t be connected now: it isn’t approved yet, or Tela has paused it.",
+      "app_unavailable": "This app can’t be connected now: it isn’t live yet, or it has been paused.",
       "max_connections": "This app has as many people connected as Tela allows for now. Try again later.",
       "failed": "Check your connection and try again.",
       "nothingShared": "Nothing was shared with the app.",
@@ -1396,19 +1404,22 @@
       "profile": "Report this profile",
       "blogroll": "Report this blogroll",
       "site": "Report this blog",
-      "recommendation": "Report this note"
+      "recommendation": "Report this note",
+      "app": "Report this app"
     },
     "byMail": {
       "profile": "Report this profile by email",
       "blogroll": "Report this blogroll by email",
       "site": "Report this blog by email",
-      "recommendation": "Report this note by email"
+      "recommendation": "Report this note by email",
+      "app": "Report this app by email"
     },
     "mailSubject": {
       "profile": "Report: a profile on Tela",
       "blogroll": "Report: a blogroll on Tela",
       "site": "Report: a blog on Tela",
-      "recommendation": "Report: a note on Tela"
+      "recommendation": "Report: a note on Tela",
+      "app": "Report: an app on Tela"
     },
     "intro": "Your report goes to the person who runs Tela, and only to them. Nobody is told who sent it.",
     "why": "What’s wrong with it?",

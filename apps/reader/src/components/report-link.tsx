@@ -1,5 +1,6 @@
 /**
- * "Report", on a profile, a blogroll, a blog's page and beside a note (ADR 0059). A member gets a
+ * "Report", on a profile, a blogroll, a blog's page and beside a note (ADR 0059), and on an app's
+ * consent page and its row in Connected apps (ADR 0067). A member gets a
  * sheet: why, in a few words if they like, and Send; then a calm thank-you. A visitor, who has no
  * account to report with, gets a mail to the contact address with the page's address in it.
  *
@@ -15,6 +16,7 @@ import {
   detailsLength,
   type ReportOutcome,
   type ReportSubject,
+  reportedAddress,
   reportMailto,
   sendReport,
 } from '../lib/reporting'
@@ -26,6 +28,7 @@ export function ReportLink({
   subject,
   path,
   member,
+  withoutQuery = false,
   className = '',
 }: {
   subject: ReportSubject
@@ -33,6 +36,8 @@ export function ReportLink({
   path: string
   /** A member is reading: the sheet, not the mail. */
   member: boolean
+  /** The page's query is not to be shared (`/connect`'s request): the sheet sends it without. */
+  withoutQuery?: boolean
   className?: string
 }) {
   const t = useTranslations('report')
@@ -66,7 +71,13 @@ export function ReportLink({
         {t('link')}
       </button>
       {open ? (
-        <ReportSheet subject={subject} path={path} opener={opener} onClose={() => setOpen(false)} />
+        <ReportSheet
+          subject={subject}
+          path={path}
+          withoutQuery={withoutQuery}
+          opener={opener}
+          onClose={() => setOpen(false)}
+        />
       ) : null}
     </>
   )
@@ -76,12 +87,14 @@ export function ReportLink({
 export function ReportSheet({
   subject,
   path,
+  withoutQuery = false,
   opener,
   onClose,
   send = sendReport,
 }: {
   subject: ReportSubject
   path: string
+  withoutQuery?: boolean
   opener: React.RefObject<HTMLElement | null>
   onClose: () => void
   /** For a test: what Send calls. */
@@ -100,7 +113,8 @@ export function ReportSheet({
     e.preventDefault()
     if (!ready || reason === null) return
     setState('sending')
-    setState(await send({ subject, reason, details, path, url: window.location.href }))
+    const url = reportedAddress(window.location, withoutQuery)
+    setState(await send({ subject, reason, details, path, url }))
   }
 
   // One dialog throughout, the thank-you in the form's place: two would hand focus back to the
