@@ -153,6 +153,9 @@ export function clearsReview(app: DeveloperApp, draft: Draft): boolean {
   const uris = linesOf(draft.redirectUris)
   return (
     draft.name.trim() !== app.name ||
+    draft.developer.trim() !== app.developer ||
+    (draft.homepageUrl.trim() || null) !== app.homepageUrl ||
+    (draft.privacyUrl.trim() || null) !== app.privacyUrl ||
     draft.maxScope !== app.maxScope ||
     uris.length !== app.redirectUris.length ||
     uris.some((uri, i) => uri !== app.redirectUris[i])

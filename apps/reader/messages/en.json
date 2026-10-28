@@ -1208,7 +1208,7 @@
         "write": "Read and write"
       },
       "terms": "I accept the <rules>developer rules</rules>, and I am responsible for this app and for what it does with members’ data.",
-      "clearsReview": "Changing the name, the redirect URIs or the most it may ask for clears Tela’s review: until Tela reviews it again, the app is held to the cap on members and can’t see email addresses.",
+      "clearsReview": "Changing the name, the developer, the homepage, the privacy policy, the redirect URIs or the most it may ask for clears Tela’s review: until Tela reviews it again, the app is held to the cap on members and can’t see email addresses.",
       "register": "Register",
       "save": "Save",
       "saveClearing": "Save and clear the review",
@@ -1232,8 +1232,9 @@
       "app_limit": "One account may register {limit, plural, one {# app} other {# apps}}, and you have that many. Delete one to register another.",
       "rate_limited": "You’ve registered or changed apps as often as one day allows. Try again later.",
       "privacy_required": "Add a privacy policy first: the page where members connect the app links to it, so the app can’t go Live without one.",
-      "cut_off": "Tela has cut this app off, so it can’t be deleted.",
-      "reported": "Someone has reported this app, so it can’t be deleted until Tela has looked at the report."
+      "cut_off": "Tela has cut this app off, so it can’t be changed or deleted.",
+      "reported": "Someone has reported this app, so it can’t be changed or deleted until Tela has looked at the report.",
+      "handle": "Your handle says “Tela”, which only Tela’s own apps may show beside an app. Change your handle in Settings → Profile to register an app or make one Live."
     }
   },
   "connect": {

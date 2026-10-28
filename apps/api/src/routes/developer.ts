@@ -26,6 +26,7 @@ import {
   consumeLimit,
   effectiveMaxConnections,
   endOthersConnections,
+  first,
   newClientId,
   newGroupId,
   readSetting,
@@ -38,6 +39,7 @@ import {
   type DeveloperApp,
   type DeveloperAppSettings,
   type DeveloperError,
+  mentionsTela,
   parseDeveloperApp,
   parseReviewNote,
 } from '@tela/shared'
@@ -200,6 +202,23 @@ export function developerRoutes(deps: ApiDeps) {
     })
   }
 
+  /**
+   * The member's handle shown on the consent page in place of the developer name they typed: one
+   * that says "Tela" would put the word back where the name rule keeps it out (ADR 0067).
+   */
+  const handleSaysTela = async (member: string) => {
+    const row = await first<{ handle: string }>(
+      db,
+      sql`select handle from profiles where user_id = ${member}`,
+    )
+    return row !== undefined && mentionsTela(row.handle)
+  }
+
+  /** An open report names the app, by its `client_id`. */
+  const openReport = (alias: string) =>
+    sql`exists (select 1 from reports r where r.target_kind = 'app'
+      and r.target_key = ${sql.raw(alias)}.client_id and r.state = 'open')`
+
   routes.get('/', async (c) => {
     const rows = await db.all<Raw>(sql`
       ${SELECT} where a.developer_id = ${c.get('member').id}
@@ -219,6 +238,7 @@ export function developerRoutes(deps: ApiDeps) {
     const now = clock.now()
     const spent = await spend(c, member, now)
     if (spent) return spent
+    if (await handleSaysTela(member)) return refuse(c, 'handle', 400)
     const { exempt } = await webActor(c, db)
     const perMember = settingSql('apps.perMember')
     const room = exempt
@@ -269,13 +289,27 @@ export function developerRoutes(deps: ApiDeps) {
     if (spent) return spent
     const redirects = JSON.stringify(s.redirectUris)
     // Over the row as it stood: what Tela reviewed is no longer this app.
-    const clears = sql`(name is not ${s.name} or redirect_uris is not ${redirects}
-      or max_scope is not ${s.maxScope})`
+    // Every field members read beside the review or that decides where the answer goes: a name
+    // or developer that changes after a review would carry Tela's word to something it never saw.
+    const clears = sql`(name is not ${s.name} or developer is not ${s.developer}
+      or homepage_url is not ${s.homepageUrl} or privacy_url is not ${s.privacyUrl}
+      or redirect_uris is not ${redirects} or max_scope is not ${s.maxScope})`
     const holds = sql`(name is ${s.name} and developer is ${s.developer}
       and contact_email is ${s.contactEmail} and homepage_url is ${s.homepageUrl}
       and privacy_url is ${s.privacyUrl} and redirect_uris is ${redirects}
       and max_scope is ${s.maxScope})`
-    const target = sql`id = ${id} and developer_id = ${member} and not ${holds}`
+    // Never while cut off or reported: a reported app renamed to look harmless would hide what
+    // the report named.
+    const state = await first<{ status: AppStatus; reported: number }>(
+      db,
+      sql`select status, ${openReport('apps')} as reported from apps
+        where id = ${id} and developer_id = ${member}`,
+    )
+    if (!state) return refuse(c, 'not_found', 404)
+    if (state.status === 'suspended') return refuse(c, 'cut_off', 409)
+    if (state.reported === 1) return refuse(c, 'reported', 409)
+    const target = sql`id = ${id} and developer_id = ${member} and not ${holds}
+      and status <> 'suspended' and not ${openReport('apps')}`
     const [, , rows] = (await db.batch([
       audited(
         'developer.edit',
@@ -317,6 +351,9 @@ export function developerRoutes(deps: ApiDeps) {
     if (typeof live !== 'boolean') return refuse(c, 'invalid', 400, { field: 'live' })
     const member = c.get('member').id
     const now = clock.now()
+    const spent = await spend(c, member, now)
+    if (spent) return spent
+    if (live && (await handleSaysTela(member))) return refuse(c, 'handle', 400)
     const mine = sql`id = ${id} and developer_id = ${member}`
     const rows = live
       ? await goLive({ id, member, now, mine })
@@ -414,7 +451,12 @@ export function developerRoutes(deps: ApiDeps) {
     if (typeof wantsEmail !== 'boolean') return refuse(c, 'invalid', 400, { field: 'wantsEmail' })
     const member = c.get('member').id
     const now = clock.now()
-    const moves = sql`id = ${id} and developer_id = ${member} and status <> 'suspended'`
+    const spent = await spend(c, member, now)
+    if (spent) return spent
+    // The same request again changes nothing and writes no audit row.
+    const moves = sql`id = ${id} and developer_id = ${member} and status <> 'suspended'
+      and (review_requested_at is null or review_note is not ${note}
+        or review_wants_email <> ${wantsEmail ? 1 : 0})`
     const [, , rows] = (await db.batch([
       audited(
         'developer.review',
@@ -444,9 +486,10 @@ export function developerRoutes(deps: ApiDeps) {
     if (id === null) return refuse(c, 'not_found', 404)
     const member = c.get('member').id
     const now = clock.now()
+    const spent = await spend(c, member, now)
+    if (spent) return spent
     const mine = sql`id = ${id} and developer_id = ${member}`
-    const reported = sql`exists (select 1 from reports r where r.target_kind = 'app'
-      and r.target_key = apps.client_id and r.state = 'open')`
+    const reported = openReport('apps')
     const goes = sql`${mine} and status <> 'suspended' and not ${reported}`
     const [, deleted, left] = (await db.batch([
       audited(

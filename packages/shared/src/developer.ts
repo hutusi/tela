@@ -146,8 +146,9 @@ export type DeveloperAction = (typeof DEVELOPER_ACTIONS)[number]
  * - `privacy_required` (400): an app goes Live only with a privacy policy URL;
  * - `not_found` (404): no app of the member's has that id;
  * - `too_many_apps` (409): `apps.perMember` reached;
- * - `cut_off` (409): the operator cut it off, so it neither moves nor goes;
- * - `reported` (409): an open report names it, so it is not deleted;
+ * - `cut_off` (409): the operator cut it off, so it is neither edited, moved nor deleted;
+ * - `reported` (409): an open report names it, so it is neither edited nor deleted;
+ * - `handle` (400): the member's handle says "Tela", so they can't register or go Live;
  * - `rate_limited` (429, with `retry-after`): registered or edited too often today.
  */
 export const DEVELOPER_ERRORS = [
@@ -159,6 +160,8 @@ export const DEVELOPER_ERRORS = [
   'cut_off',
   'reported',
   'rate_limited',
+  // The member's handle says "Tela", which the consent page would show beside their app.
+  'handle',
 ] as const
 export type DeveloperError = (typeof DEVELOPER_ERRORS)[number]
 

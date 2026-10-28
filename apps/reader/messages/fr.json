@@ -1208,7 +1208,7 @@
         "write": "Lecture et écriture"
       },
       "terms": "J’accepte les <rules>règles pour les développeurs</rules>, et je suis responsable de cette application et de ce qu’elle fait des données des membres.",
-      "clearsReview": "Changer le nom, les URI de redirection ou le plus qu’elle peut demander annule l’examen de Tela : jusqu’à un nouvel examen, l’application est soumise au plafond de membres et ne voit aucune adresse e-mail.",
+      "clearsReview": "Modifier le nom, le développeur, la page d’accueil, la politique de confidentialité, les URI de redirection ou le plus qu’elle peut demander annule la vérification de Tela : jusqu’à une nouvelle vérification, l’application est limitée en membres et ne voit pas les adresses e-mail.",
       "register": "Enregistrer l’application",
       "save": "Enregistrer les modifications",
       "saveClearing": "Enregistrer et annuler l’examen",
@@ -1232,8 +1232,9 @@
       "app_limit": "Un compte peut enregistrer {limit, plural, one {# application} other {# applications}}, et vous en avez déjà autant. Supprimez-en une pour en enregistrer une autre.",
       "rate_limited": "Vous avez enregistré ou modifié des applications aussi souvent qu’une journée le permet. Réessayez plus tard.",
       "privacy_required": "Ajoutez d’abord une politique de confidentialité : la page où les membres connectent l’application y renvoie, et l’application ne peut donc pas être mise en ligne sans elle.",
-      "cut_off": "Tela a coupé cette application : elle ne peut pas être supprimée.",
-      "reported": "Cette application a été signalée : elle ne peut pas être supprimée tant que Tela n’a pas examiné le signalement."
+      "cut_off": "Tela a coupé cette application : elle ne peut être ni modifiée ni supprimée.",
+      "reported": "Quelqu’un a signalé cette application : elle ne peut être ni modifiée ni supprimée tant que Tela n’a pas examiné le signalement.",
+      "handle": "Votre identifiant contient « Tela », que seules les applications de Tela peuvent afficher. Changez-le dans Réglages → Profil pour enregistrer une application ou la mettre en ligne."
     }
   },
   "connect": {

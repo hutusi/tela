@@ -275,11 +275,14 @@ describe('what the form checks first', () => {
     })
   })
 
-  test('a new name, redirect URIs or scope clears a review; other fields do not', () => {
+  test('a new name, developer, homepage, privacy policy, redirect URIs or scope clears a review; the contact does not', () => {
     const reviewed = { ...LOOM, reviewed: true }
     expect(clearsReview(reviewed, draft())).toBe(false)
     expect(clearsReview(reviewed, draft({ name: ' Loom ' }))).toBe(false)
-    expect(clearsReview(reviewed, draft({ developer: 'Loom Ltd', homepageUrl: '' }))).toBe(false)
+    expect(clearsReview(reviewed, draft({ contactEmail: 'other@loom.example' }))).toBe(false)
+    expect(clearsReview(reviewed, draft({ developer: 'Loom Ltd' }))).toBe(true)
+    expect(clearsReview(reviewed, draft({ homepageUrl: '' }))).toBe(true)
+    expect(clearsReview(reviewed, draft({ privacyUrl: 'https://loom.example/p2' }))).toBe(true)
     expect(clearsReview(reviewed, draft({ name: 'Loom 2' }))).toBe(true)
     expect(clearsReview(reviewed, draft({ maxScope: 'read' }))).toBe(true)
     expect(clearsReview(reviewed, draft({ redirectUris: 'http://127.0.0.1/callback' }))).toBe(true)

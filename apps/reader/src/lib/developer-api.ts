@@ -90,6 +90,7 @@ export type DeveloperProblem =
   | { error: 'privacy_required' }
   | { error: 'cut_off' }
   | { error: 'reported' }
+  | { error: 'handle' }
   | { error: 'failed' }
 
 const FIELDS: readonly DeveloperAppField[] = [
@@ -111,6 +112,7 @@ export function problemOf(status: number, body: unknown): DeveloperProblem {
     return field ? { error: 'invalid', field } : { error: 'failed' }
   }
   if (status === 400 && b.error === 'privacy_required') return { error: 'privacy_required' }
+  if (status === 400 && b.error === 'handle') return { error: 'handle' }
   if (status === 409 && b.error === 'too_many_apps' && isCount(b.limit)) {
     return { error: 'app_limit', limit: b.limit }
   }

@@ -205,6 +205,8 @@ describe('the member’s apps', () => {
     const theirs = await registered(bo)
     const operators = await registerApp(api)
     for (const id of [theirs.appId, operators.id, 999]) {
+      // Every write spends the day's count, a refused one too: start each id afresh.
+      await api.db.run(sql`delete from action_limits`)
       for (const res of [
         await edit(dev, id, { name: 'Mine now' }),
         await goLive(dev, id, true),
@@ -219,27 +221,24 @@ describe('the member’s apps', () => {
 })
 
 describe('editing an app', () => {
-  test('a new name, redirect or scope clears its review and the email permission; others keep it', async () => {
+  test('any field members read clears its review and the email permission; the contact keeps it', async () => {
     const app = await registered(dev)
     const review = () =>
       api.db.run(sql`update apps set reviewed_at = 5, reviewed_by = ${bo.userId}, allow_email = 1
         where id = ${app.appId}`)
     await review()
-    const kept = await edit(dev, app.appId, {
-      homepageUrl: 'https://loom.example/home',
-      privacyUrl: 'https://loom.example/privacy',
-      developer: 'Loom Ltd',
-      contactEmail: 'other@loom.example',
-    })
+    const kept = await edit(dev, app.appId, { contactEmail: 'other@loom.example' })
     expect(kept.status).toBe(200)
     expect(((await kept.json()) as { app: DeveloperApp }).app).toMatchObject({
-      homepageUrl: 'https://loom.example/home',
       contactEmail: 'other@loom.example',
       reviewed: true,
     })
     expect(await row(app.appId)).toMatchObject({ reviewed_at: 5, allow_email: 1 })
     for (const change of [
       { name: 'Loom 2' },
+      { developer: 'Google LLC' },
+      { homepageUrl: 'https://loom.example/home' },
+      { privacyUrl: 'https://loom.example/other-policy' },
       { redirectUris: ['http://127.0.0.1/other'] },
       { maxScope: 'write' },
     ]) {
@@ -253,6 +252,25 @@ describe('editing an app', () => {
         allow_email: 0,
       })
     }
+  })
+
+  test('is refused while the app is cut off or reported', async () => {
+    const app = await registered(dev, { privacyUrl: 'https://loom.example/privacy' })
+    await goLive(dev, app.appId, true)
+    await api.db.run(sql`insert into reports (reporter_id, target_kind, target_key, reason, state,
+        created_at)
+      values (${ann.userId}, 'app', ${app.clientId}, 'spam', 'open', 0)`)
+    expect(await answer(await edit(dev, app.appId, { name: 'Harmless' }))).toEqual([
+      409,
+      { error: 'reported' },
+    ])
+    await api.db.run(sql`update reports set state = 'dismissed'`)
+    await api.db.run(sql`update apps set status = 'suspended' where id = ${app.appId}`)
+    expect(await answer(await edit(dev, app.appId, { name: 'Harmless' }))).toEqual([
+      409,
+      { error: 'cut_off' },
+    ])
+    expect((await list(dev)).map((a) => a.name)).toEqual([SETTINGS.name])
   })
 
   test('holds an edit to the rule a registration is held to', async () => {
@@ -389,6 +407,52 @@ describe('deleting an app', () => {
       expect([table, count]).toEqual([table, { n: 0 }])
     }
     expect(await answer(await remove(dev, app.appId))).toEqual([404, { error: 'not_found' }])
+  })
+})
+
+describe('what the name rule and the day’s count also hold', () => {
+  test('a member whose handle says Tela registers nothing and makes nothing Live', async () => {
+    const app = await registered(dev, { privacyUrl: 'https://loom.example/privacy' })
+    await api.db.run(
+      sql`update profiles set handle = 'tela_official' where user_id = ${dev.userId}`,
+    )
+    expect(await answer(await register(dev))).toEqual([400, { error: 'handle' }])
+    expect(await answer(await goLive(dev, app.appId, true))).toEqual([400, { error: 'handle' }])
+    // Back to Testing is never refused for it.
+    expect((await goLive(dev, app.appId, false)).status).toBe(200)
+  })
+
+  test('the same review request again writes nothing', async () => {
+    const app = await registered(dev)
+    await askReview(dev, app.appId, { note: 'Please', wantsEmail: false })
+    const audits = () =>
+      first<{ n: number }>(
+        api.db,
+        sql`select count(*) as n from admin_actions where action = 'developer.review'`,
+      )
+    expect(await audits()).toEqual({ n: 1 })
+    expect((await askReview(dev, app.appId, { note: 'Please', wantsEmail: false })).status).toBe(
+      200,
+    )
+    expect(await audits()).toEqual({ n: 1 })
+    await askReview(dev, app.appId, { note: 'Please, with email', wantsEmail: true })
+    expect(await audits()).toEqual({ n: 2 })
+  })
+
+  test('Live, Testing, review requests and deletes spend the day’s count too', async () => {
+    await operatorSets(api, 'apps.perMember', null)
+    const app = await registered(dev, { privacyUrl: 'https://loom.example/privacy' })
+    for (let i = 0; i < 4; i++) {
+      expect((await goLive(dev, app.appId, i % 2 === 0)).status).toBe(200)
+    }
+    for (let i = 0; i < 5; i++) {
+      expect((await askReview(dev, app.appId, { note: `n${i}`, wantsEmail: false })).status).toBe(
+        200,
+      )
+    }
+    expect((await goLive(dev, app.appId, true)).status).toBe(429)
+    expect((await askReview(dev, app.appId, { note: 'x', wantsEmail: false })).status).toBe(429)
+    expect((await remove(dev, app.appId)).status).toBe(429)
   })
 })
 
