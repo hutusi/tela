@@ -37,6 +37,8 @@ const REQUEST: ConnectRequest = {
     homepageUrl: 'https://loom.example',
     privacyUrl: 'https://loom.example/privacy',
     status: 'approved',
+    developerHandle: null,
+    reviewed: true,
   },
   scope: 'write',
   email: true,
@@ -161,7 +163,14 @@ describe('Settings → Connected apps', () => {
   const at = Date.UTC(2026, 9, 3, 12)
   const LOOM: Connection = {
     id: 7,
-    app: { name: 'Loom', developer: 'Loom Labs', homepageUrl: 'https://loom.example' },
+    app: {
+      name: 'Loom',
+      developer: 'Loom Labs',
+      homepageUrl: 'https://loom.example',
+      clientId: 'tela_app_loom',
+      reviewed: true,
+      developerHandle: null,
+    },
     scope: 'write',
     email: true,
     createdAt: at,

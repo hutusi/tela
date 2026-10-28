@@ -150,6 +150,8 @@ export function connectRoutes(deps: ApiDeps, auth: Auth) {
         homepageUrl: app.homepageUrl,
         privacyUrl: app.privacyUrl,
         status: app.status === 'draft' ? 'draft' : 'approved',
+        developerHandle: app.developerHandle,
+        reviewed: app.reviewed,
       },
       scope: checked.scope,
       email: checked.email,

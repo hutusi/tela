@@ -19,7 +19,11 @@
     },
     "search": "Search by handle, name or email",
     "name": "Member",
-    "columns": { "role": "Role", "signIn": "Sign-in", "joined": "Joined" },
+    "columns": {
+      "role": "Role",
+      "signIn": "Sign-in",
+      "joined": "Joined"
+    },
     "role": {
       "admin": "Admin",
       "member": "Member",
@@ -59,10 +63,18 @@
     }
   },
   "invites": {
-    "filters": { "codes": "Codes", "waiting": "Waiting", "revoked": "Revoked" },
+    "filters": {
+      "codes": "Codes",
+      "waiting": "Waiting",
+      "revoked": "Revoked"
+    },
     "search": "Search by code, inviter or email",
     "name": "Code or email",
-    "columns": { "createdBy": "Created by", "uses": "Uses", "when": "Created or expires" },
+    "columns": {
+      "createdBy": "Created by",
+      "uses": "Uses",
+      "when": "Created or expires"
+    },
     "operator": "The operator",
     "sub": {
       "operator": "The operator's code",
@@ -119,7 +131,8 @@
       "profile": "Profile",
       "blogroll": "Blogroll",
       "site": "Blog",
-      "recommendation": "Note"
+      "recommendation": "Note",
+      "app": "App"
     },
     "sub": "{kind} · @{handle}",
     "gone": "{kind} no longer shown",

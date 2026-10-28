@@ -19,7 +19,11 @@
     },
     "search": "按用户名、昵称或邮箱搜索",
     "name": "成员",
-    "columns": { "role": "角色", "signIn": "登录方式", "joined": "加入时间" },
+    "columns": {
+      "role": "角色",
+      "signIn": "登录方式",
+      "joined": "加入时间"
+    },
     "role": {
       "admin": "管理员",
       "member": "成员",
@@ -59,10 +63,18 @@
     }
   },
   "invites": {
-    "filters": { "codes": "邀请码", "waiting": "等待中", "revoked": "已作废" },
+    "filters": {
+      "codes": "邀请码",
+      "waiting": "等待中",
+      "revoked": "已作废"
+    },
     "search": "按邀请码、邀请人或邮箱搜索",
     "name": "邀请码或邮箱",
-    "columns": { "createdBy": "创建者", "uses": "名额", "when": "创建或到期" },
+    "columns": {
+      "createdBy": "创建者",
+      "uses": "名额",
+      "when": "创建或到期"
+    },
     "operator": "运营者",
     "sub": {
       "operator": "运营者的邀请码",
@@ -119,7 +131,8 @@
       "profile": "个人页",
       "blogroll": "博客链",
       "site": "博客",
-      "recommendation": "推荐语"
+      "recommendation": "推荐语",
+      "app": "应用"
     },
     "sub": "{kind} · @{handle}",
     "gone": "已不再显示的{kind}",

@@ -100,6 +100,10 @@ export function readConnectRequest(body: unknown): ConnectRequest | null {
       homepageUrl: httpsOrNull(a.homepageUrl),
       privacyUrl: httpsOrNull(a.privacyUrl),
       status: a.status,
+      // A tela-api from before ADR 0067 sends neither: every app it knew was the operator's, and
+      // reviewed.
+      developerHandle: typeof a.developerHandle === 'string' ? a.developerHandle : null,
+      reviewed: a.reviewed !== false,
     },
     scope,
     email,
@@ -181,7 +185,14 @@ function readConnection(value: unknown): Connection | null {
   if (typeof v.devices !== 'number') return null
   return {
     id: v.id,
-    app: { name: app.name, developer: app.developer, homepageUrl: httpsOrNull(app.homepageUrl) },
+    app: {
+      name: app.name,
+      developer: app.developer,
+      homepageUrl: httpsOrNull(app.homepageUrl),
+      clientId: typeof app.clientId === 'string' ? app.clientId : '',
+      reviewed: app.reviewed !== false,
+      developerHandle: typeof app.developerHandle === 'string' ? app.developerHandle : null,
+    },
     scope: v.scope,
     email: v.email,
     createdAt: v.createdAt,

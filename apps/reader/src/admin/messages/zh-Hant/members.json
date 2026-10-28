@@ -19,7 +19,11 @@
     },
     "search": "按使用者名稱、暱稱或電子郵件搜尋",
     "name": "成員",
-    "columns": { "role": "角色", "signIn": "登入方式", "joined": "加入時間" },
+    "columns": {
+      "role": "角色",
+      "signIn": "登入方式",
+      "joined": "加入時間"
+    },
     "role": {
       "admin": "管理員",
       "member": "成員",
@@ -59,10 +63,18 @@
     }
   },
   "invites": {
-    "filters": { "codes": "邀請碼", "waiting": "等待中", "revoked": "已作廢" },
+    "filters": {
+      "codes": "邀請碼",
+      "waiting": "等待中",
+      "revoked": "已作廢"
+    },
     "search": "按邀請碼、邀請人或電子郵件搜尋",
     "name": "邀請碼或電子郵件",
-    "columns": { "createdBy": "建立者", "uses": "名額", "when": "建立或到期" },
+    "columns": {
+      "createdBy": "建立者",
+      "uses": "名額",
+      "when": "建立或到期"
+    },
     "operator": "運營者",
     "sub": {
       "operator": "運營者的邀請碼",
@@ -119,7 +131,8 @@
       "profile": "個人頁",
       "blogroll": "部落格鏈",
       "site": "部落格",
-      "recommendation": "推薦語"
+      "recommendation": "推薦語",
+      "app": "應用程式"
     },
     "sub": "{kind} · @{handle}",
     "gone": "已不再顯示的{kind}",

@@ -169,6 +169,10 @@ export type ConsentApp = {
   status: AppStatus
   ownerUserId: string | null
   maxConnections: number | null
+  /** Tela reviewed it (ADR 0067). */
+  reviewed: boolean
+  /** The handle of the member who registered it; null for an app the operator registered. */
+  developerHandle: string | null
   /** The member holds a live connection to it, so a cap on connections does not refuse them. */
   connected: boolean
   /** Members holding a live connection to it now. */
@@ -204,11 +208,15 @@ export async function readConsentApp(
     status: AppStatus
     owner_user_id: string | null
     max_connections: number | null
+    reviewed: number
+    developer_handle: string | null
     connected: number
     connections: number
   }>(sql`
     select a.id, a.client_id, a.name, a.developer, a.homepage_url, a.privacy_url, a.redirect_uris,
       a.grant_types, a.max_scope, a.allow_email, a.status, a.owner_user_id, a.max_connections,
+      (a.reviewed_at is not null) as reviewed,
+      (select p.handle from profiles p where p.user_id = a.developer_id) as developer_handle,
       exists (select 1 from app_grants g where g.app_id = a.id and g.user_id = ${userId}
         and g.ended_at is null) as connected,
       (select count(*) from app_grants g where g.app_id = a.id and g.ended_at is null) as connections
@@ -230,6 +238,8 @@ export async function readConsentApp(
     status: row.status,
     ownerUserId: row.owner_user_id,
     maxConnections: row.max_connections,
+    reviewed: row.reviewed === 1,
+    developerHandle: row.developer_handle,
     connected: row.connected === 1,
     connections: row.connections,
   }
@@ -629,6 +639,9 @@ export async function listConnections(
     name: string
     developer: string
     homepage_url: string | null
+    client_id: string
+    reviewed: number
+    developer_handle: string | null
     scope: AppScope
     max_scope: AppScope
     email: number
@@ -637,8 +650,9 @@ export async function listConnections(
     last_used_at: number | null
     devices: number
   }>(sql`
-    select g.id, a.name, a.developer, a.homepage_url, g.scope, a.max_scope, g.email, a.allow_email,
-      g.created_at, g.last_used_at,
+    select g.id, a.name, a.developer, a.homepage_url, a.client_id, (a.reviewed_at is not null) as reviewed,
+      (select p.handle from profiles p where p.user_id = a.developer_id) as developer_handle,
+      g.scope, a.max_scope, g.email, a.allow_email, g.created_at, g.last_used_at,
       (select count(*) from app_tokens t where t.grant_id = g.id and t.ended_at is null
         and (t.access_expires_at > ${now} or t.refresh_idle_expires_at > ${now})) as devices
     from app_grants g join apps a on a.id = g.app_id
@@ -647,7 +661,14 @@ export async function listConnections(
   `)
   return rows.map((r) => ({
     id: r.id,
-    app: { name: r.name, developer: r.developer, homepageUrl: r.homepage_url },
+    app: {
+      name: r.name,
+      developer: r.developer,
+      homepageUrl: r.homepage_url,
+      clientId: r.client_id,
+      reviewed: r.reviewed === 1,
+      developerHandle: r.developer_handle,
+    },
     scope: lowerScope(r.scope, r.max_scope),
     email: r.email === 1 && r.allow_email === 1,
     createdAt: r.created_at,

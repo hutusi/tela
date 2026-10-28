@@ -161,10 +161,14 @@ export async function describeTargets(
   db: TelaDb,
   wanted: { kind: ReportTarget; key: string }[],
 ): Promise<Map<string, AdminReportTarget>> {
-  const keys = { profile: [], blogroll: [], site: [], recommendation: [] } as Record<
-    ReportTarget,
-    ReportKey[]
-  >
+  // Every kind named, never cast: a kind missing here was a crash at runtime, not a type error.
+  const keys: Record<ReportTarget, ReportKey[]> = {
+    profile: [],
+    blogroll: [],
+    site: [],
+    recommendation: [],
+    app: [],
+  }
   for (const w of wanted) {
     const key = reportKeyOf(w.kind, w.key)
     if (key) keys[w.kind].push(key)

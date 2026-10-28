@@ -48,6 +48,11 @@ export function shownTarget(key: ReportKey): SQL {
       return sql`select 1 from recommendations r join profiles p on p.user_id = r.user_id
         where r.user_id = ${key.userId} and r.article_id = ${key.articleId}
           and r.deleted_at is null and r.note is not null and r.note <> '' and ${standingOk('p')}`
+    case 'app':
+      // Any app members can be shown on the consent page or hold in Connected apps, until it is
+      // cut off (ADR 0067).
+      return sql`select 1 from apps a where a.client_id = ${key.clientId}
+        and a.status <> 'suspended'`
   }
 }
 

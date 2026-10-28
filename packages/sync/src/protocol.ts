@@ -43,8 +43,11 @@ export const TITLE_IDS_MAX = 1000
  *   (`GET /api/v1/articles/:id`), and a body may be refused for the day's limit on posts from
  *   blogs the member does not follow (ADR 0066). A protocol-4 shell would open a public post with
  *   no body, and retry a refused one on every pull.
+ * - 6: an app a member registered may be unreviewed (ADR 0067), and the consent page must say so
+ *   ("Not reviewed by Tela", the developer's handle in place of the name they typed). A
+ *   protocol-5 shell would show such an app's own words with nothing to say Tela never checked it.
  */
-export const MIN_CLIENT = 5
+export const MIN_CLIENT = 6
 /**
  * The first protocol whose clients name the member (`MEMBER_HEADER`). Signing out checks that name
  * from here on, whatever `MIN_CLIENT` has become: a tab told to reload may still sign out, and a

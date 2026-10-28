@@ -65,7 +65,8 @@ export type AdminAppDetail = { app: AdminAppRow; history: AdminHistoryEntry[] }
 
 /** No control characters, and nothing that is only spaces. */
 const PLAIN = /^[^\p{Cc}]*$/u
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+export const APP_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const EMAIL = APP_EMAIL
 /** A loopback redirect: `127.0.0.1` or `[::1]`, over http, any port. Never `localhost`. */
 const LOOPBACK = /^http:\/\/(?:127\.0\.0\.1|\[::1\])(?::[1-9]\d{0,4})?\/[^\s#]*$/
 /**
@@ -91,7 +92,7 @@ export function redirectKind(uri: string): 'loopback' | 'scheme' | null {
 }
 
 /** An https address to link to, at most `APP_URL_MAX` long, or null for none (empty). */
-function httpsUrl(value: unknown): string | null | undefined {
+export function httpsUrl(value: unknown): string | null | undefined {
   if (value === null || value === undefined) return null
   if (typeof value !== 'string') return undefined
   const url = value.trim()
@@ -106,6 +107,17 @@ function httpsUrl(value: unknown): string | null | undefined {
   }
 }
 
+/** 1 to `APP_REDIRECTS_MAX` distinct redirect URIs, each one an app may register. */
+export function isRedirectList(uris: unknown): uris is string[] {
+  return (
+    Array.isArray(uris) &&
+    uris.length > 0 &&
+    uris.length <= APP_REDIRECTS_MAX &&
+    uris.every((uri) => typeof uri === 'string' && redirectKind(uri) !== null) &&
+    new Set(uris).size === uris.length
+  )
+}
+
 /** A limit: null for the default, else a whole number from 0. */
 function limit(value: unknown): number | null | undefined {
   if (value === null || value === undefined || value === '') return null
@@ -113,7 +125,8 @@ function limit(value: unknown): number | null | undefined {
   return value >= 0 && value <= APP_LIMIT_MAX ? value : undefined
 }
 
-function text(value: unknown, max: number): string | undefined {
+/** Trimmed text of 1 to `max` characters with no control characters, or undefined. */
+export function appText(value: unknown, max: number): string | undefined {
   if (typeof value !== 'string') return undefined
   const trimmed = value.trim()
   return trimmed.length >= 1 && trimmed.length <= max && PLAIN.test(trimmed) ? trimmed : undefined
@@ -129,11 +142,11 @@ export function parseAppSettings(
 ): { ok: true; value: AdminAppSettings } | { ok: false; field: AppField } {
   if (typeof value !== 'object' || value === null) return { ok: false, field: 'name' }
   const v = value as Record<string, unknown>
-  const name = text(v.name, APP_NAME_MAX)
+  const name = appText(v.name, APP_NAME_MAX)
   if (name === undefined) return { ok: false, field: 'name' }
-  const developer = text(v.developer, APP_TEXT_MAX)
+  const developer = appText(v.developer, APP_TEXT_MAX)
   if (developer === undefined) return { ok: false, field: 'developer' }
-  const contactEmail = text(v.contactEmail, APP_TEXT_MAX)
+  const contactEmail = appText(v.contactEmail, APP_TEXT_MAX)
   if (contactEmail === undefined || !EMAIL.test(contactEmail)) {
     return { ok: false, field: 'contactEmail' }
   }
@@ -142,15 +155,7 @@ export function parseAppSettings(
   const privacyUrl = httpsUrl(v.privacyUrl)
   if (privacyUrl === undefined) return { ok: false, field: 'privacyUrl' }
   const uris = v.redirectUris
-  if (
-    !Array.isArray(uris) ||
-    uris.length === 0 ||
-    uris.length > APP_REDIRECTS_MAX ||
-    !uris.every((uri) => typeof uri === 'string' && redirectKind(uri) !== null) ||
-    new Set(uris).size !== uris.length
-  ) {
-    return { ok: false, field: 'redirectUris' }
-  }
+  if (!isRedirectList(uris)) return { ok: false, field: 'redirectUris' }
   if (!APP_SCOPES.some((s) => s === v.maxScope)) return { ok: false, field: 'maxScope' }
   if (typeof v.allowEmail !== 'boolean') return { ok: false, field: 'allowEmail' }
   let owner: string | null = null

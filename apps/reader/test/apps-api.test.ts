@@ -55,6 +55,8 @@ const REQUEST = {
     homepageUrl: 'https://loom.example',
     privacyUrl: 'https://loom.example/privacy',
     status: 'approved',
+    developerHandle: 'loomlabs',
+    reviewed: false,
   },
   scope: 'write',
   email: true,
@@ -176,13 +178,30 @@ describe('the answer', () => {
 describe('connected apps', () => {
   const CONNECTION = {
     id: 7,
-    app: { name: 'Loom', developer: 'Loom Labs', homepageUrl: 'https://loom.example' },
+    app: {
+      name: 'Loom',
+      developer: 'Loom Labs',
+      homepageUrl: 'https://loom.example',
+      clientId: 'tela_app_loom',
+      reviewed: false,
+      developerHandle: 'loomlabs',
+    },
     scope: 'read',
     email: false,
     createdAt: 1_760_000_000_000,
     lastUsedAt: null,
     devices: 2,
   }
+
+  test('from a tela-api before self-serve apps read as reviewed, with no developer handle', () => {
+    const { clientId: _c, reviewed: _r, developerHandle: _d, ...older } = CONNECTION.app
+    expect(readConnections({ connections: [{ ...CONNECTION, app: older }] })?.[0]?.app).toEqual({
+      ...older,
+      clientId: '',
+      reviewed: true,
+      developerHandle: null,
+    })
+  })
 
   test('are listed as tela-api sends them, each read on its own', async () => {
     const calls = answer(200, { connections: [CONNECTION, { id: 'x' }] })
