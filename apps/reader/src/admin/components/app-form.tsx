@@ -320,7 +320,13 @@ export function ReviewForm({
       data-kind="review"
       onSubmit={(e) => {
         e.preventDefault()
-        if (!busy) onAnswer({ allowEmail })
+        // The version the operator read travels with the answer, so an edit since refuses it.
+        if (!busy) {
+          onAnswer({
+            allowEmail,
+            ...(typeof initial?.seen === 'number' ? { seen: initial.seen } : {}),
+          })
+        }
       }}
       onKeyDown={(e) => {
         if (e.key !== 'Escape') return
