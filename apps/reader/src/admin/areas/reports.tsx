@@ -2,8 +2,9 @@
  * The Reports ledger (ADR 0059): each thing members reported, once however many reported it,
  * open until an operator resolves it (acted on) or dismisses it (nothing to do). The record says
  * what the thing is now, links to its public page while there is one, and offers what acts on it
- * from the areas that already do: hide a blog or a blogroll from Discover, suspend or delete its
- * member. Reporters are named in the record and nowhere else.
+ * from the areas that already do: hide a blog or a blogroll from Discover, cut an app off or end
+ * its connections (ADR 0067), suspend or delete its member. Reporters are named in the record and
+ * nowhere else.
  */
 import type {
   AdminFilter,
@@ -106,19 +107,21 @@ function ReportRecord({
   const member = target.member
   const decided = report.decidedAt
   const { actions } = target
-  // The page opens in a tab of its own: the console stays where it was.
-  const page = target.path ? (
-    <a
-      href={target.path}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="text-ink underline decoration-thumb underline-offset-2 hover:decoration-ink"
-    >
-      {target.path}
-    </a>
-  ) : (
-    t('reports.notPublic')
-  )
+  // The page opens in a tab of its own: the console stays where it was. An app has none: members
+  // meet it on the consent page and in Connected apps, which its record in Apps stands in for.
+  const page =
+    target.kind === 'app' ? null : target.path ? (
+      <a
+        href={target.path}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-ink underline decoration-thumb underline-offset-2 hover:decoration-ink"
+      >
+        {target.path}
+      </a>
+    ) : (
+      t('reports.notPublic')
+    )
   const whose = member ? (
     <span className="flex flex-wrap gap-x-2">
       <PersonLink person={member} open={open} />
@@ -134,7 +137,7 @@ function ReportRecord({
         rows={[
           [t('reports.kv.what'), targetSub(t, target)],
           [t('reports.kv.page'), page],
-          [t('reports.kv.member'), whose],
+          [t(target.kind === 'app' ? 'reports.kv.developer' : 'reports.kv.member'), whose],
           [
             t('reports.kv.reasons'),
             report.reasons
@@ -161,6 +164,16 @@ function ReportRecord({
           className="cursor-pointer self-start border-0 bg-transparent p-0 text-left text-[13.5px] text-ink underline decoration-thumb underline-offset-2 hover:decoration-ink"
         >
           {t('reports.openBlog')}
+        </button>
+      ) : null}
+      {target.kind === 'app' && target.appId !== null ? (
+        <button
+          type="button"
+          onClick={() => open('apps', String(target.appId))}
+          className="cursor-pointer self-start border-0 bg-transparent p-0 text-left text-[13.5px] text-ink underline decoration-thumb underline-offset-2 hover:decoration-ink"
+          data-testid="report-open-app"
+        >
+          {t('reports.openApp')}
         </button>
       ) : null}
       {actions.length > 0 ? (

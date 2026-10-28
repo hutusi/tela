@@ -127,6 +127,7 @@ describe('the members’ words', () => {
         path: '/@anna',
         member: { id: 'u-anna-000001', handle: 'anna', name: 'Anna', standing: 'ok' },
         siteId: null,
+        appId: null,
         actions: [],
       },
       state: 'open',

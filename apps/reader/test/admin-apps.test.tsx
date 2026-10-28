@@ -9,6 +9,7 @@ import {
   type AdminAppRow,
   type AdminAppSettings,
   type AdminList,
+  type AdminReportRow,
   parseAppSettings,
 } from '@tela/shared/admin'
 import { renderToString } from 'react-dom/server'
@@ -16,6 +17,7 @@ import { MemoryRouter } from 'react-router'
 import { createTranslator } from 'use-intl'
 import { actionLook, promptFor, type Translate } from '../src/admin/act'
 import { settingsOfRow, useAppsArea } from '../src/admin/areas/apps'
+import { useReportsArea } from '../src/admin/areas/reports'
 import { draftOf, settingsOf } from '../src/admin/components/app-form'
 import { ActionPrompt } from '../src/admin/components/prompt'
 import { AdminContext } from '../src/admin/context'
@@ -120,6 +122,64 @@ describe('the Apps ledger', () => {
   })
 })
 
+describe('a report of an app', () => {
+  const REPORTED: AdminReportRow = {
+    id: 'app:tela_app_UXVpbGw',
+    actions: ['report.resolve', 'report.dismiss'],
+    target: {
+      kind: 'app',
+      key: 'tela_app_UXVpbGw',
+      label: 'Quill',
+      path: null,
+      member: { id: 'u-mara', handle: 'mara', name: 'Mara', standing: 'ok' },
+      siteId: null,
+      appId: 5,
+      actions: [
+        { action: 'app.suspend', id: '5' },
+        { action: 'app.endConnections', id: '5' },
+        { action: 'member.suspend', id: 'u-mara' },
+        { action: 'member.delete', id: 'u-mara' },
+      ],
+    },
+    state: 'open',
+    reason: 'impersonation',
+    reasons: ['impersonation'],
+    details: null,
+    reporters: 1,
+    firstAt: now - DAY,
+    lastAt: now - DAY,
+    decidedAt: null,
+    decidedBy: null,
+  }
+
+  function Reports() {
+    return (
+      <Ledger
+        area="reports"
+        spec={useReportsArea()}
+        initial={{
+          counts: { open: 1, resolved: 0, dismissed: 0 },
+          rows: [REPORTED],
+          truncated: false,
+        }}
+      />
+    )
+  }
+
+  test('names it and its developer, opens its record, and acts on both', () => {
+    const html = render(<Reports />, `/admin/reports?id=${encodeURIComponent(REPORTED.id)}`)
+    expect(html).toContain('Quill')
+    expect(html).toMatch(/App · @(<!-- -->)?mara/)
+    expect(html).toContain('Developer')
+    expect(html).toContain('data-testid="report-open-app"')
+    // An app has no public page to link, and says nothing of one.
+    expect(html).not.toContain('Not shown to anyone now')
+    for (const action of ['app.suspend', 'app.endConnections', 'member.suspend']) {
+      expect(html).toContain(`data-action="${action}"`)
+    }
+  })
+})
+
 describe('the app form', () => {
   test('registers an app from an empty form', () => {
     const html = render(
@@ -196,6 +256,8 @@ describe('the words', () => {
       ...APP_STATUSES.flatMap((s) => [`apps.status.${s}`, `apps.notes.${s}`]),
       'apps.scope.read',
       'apps.scope.write',
+      'reports.openApp',
+      'reports.kv.developer',
       ...Object.keys(settingsOfRow(loom)).flatMap((f) => [
         `apps.form.${f}`,
         `apps.form.errors.${f}`,

@@ -25,13 +25,19 @@ export type AdminReportTarget = {
   label: string | null
   /** The public page that shows it, while one does; null once nothing public shows it. */
   path: string | null
-  /** Whose it is: the member, a blogroll's owner, a note's author. Null for a blog. */
+  /**
+   * Whose it is: the member, a blogroll's owner, a note's author, an app's developer. Null for a
+   * blog, and for an app the operator registered.
+   */
   member: (AdminPerson & { standing: AdminStanding }) | null
   /** The blog, for a site. */
   siteId: number | null
+  /** The app, for an app (ADR 0067): its id in the Apps area. Its developer is `member`. */
+  appId: number | null
   /**
    * What can be done to it now, from the areas that already do it: hide a blog or a blogroll
-   * from Discover, suspend or delete its member. Each names the target that action takes.
+   * from Discover, cut an app off or end its connections, suspend or delete its member. Each names
+   * the target that action takes.
    */
   actions: { action: AdminActionName; id: string }[]
 }

@@ -15,6 +15,7 @@ import type {
   AdminReportRow,
 } from '@tela/shared/admin'
 import { sql } from 'drizzle-orm'
+import { registerApp } from './apps-helpers'
 import { ADMIN_TOKEN, createTestApi, type SignedIn, signedIn, type TestApi } from './helpers'
 import {
   ANNA,
@@ -237,6 +238,90 @@ describe('the Reports area', () => {
     const refused = await undo(first.undo?.group ?? '')
     expect(refused.status).toBe(409)
     expect((await reportRows()).map((r) => r.state)).toEqual(['resolved', 'dismissed'])
+  })
+})
+
+describe('reports of an app (ADR 0067)', () => {
+  /** Anna's own app, unreviewed and live, with one member connected to it. */
+  async function annasApp() {
+    const app = await registerApp(api, { developerId: ANNA, ownerUserId: ANNA, reviewed: false })
+    const name =
+      (await first<{ name: string }>(db, sql`select name from apps where id = ${app.id}`))?.name ??
+      ''
+    const now = api.clock.now()
+    await db.run(sql`insert into app_grants (app_id, user_id, scope, created_at, updated_at)
+      values (${app.id}, ${other.userId}, 'read', ${now}, ${now})`)
+    return { ...app, name }
+  }
+
+  test('name the app by its name, its developer as whose, and act on both', async () => {
+    const app = await annasApp()
+    expect(
+      (await report({ targetKind: 'app', targetKey: app.clientId, reason: 'spam' })).status,
+    ).toBe(200)
+    const [row] = (await queue()).rows
+    const id = String(app.id)
+    expect(row).toMatchObject({
+      id: `app:${app.clientId}`,
+      actions: ['report.resolve', 'report.dismiss'],
+      target: {
+        kind: 'app',
+        key: app.clientId,
+        label: app.name,
+        path: null,
+        siteId: null,
+        appId: app.id,
+        member: { id: ANNA, handle: 'anna', standing: 'ok' },
+        actions: [
+          { action: 'app.suspend', id },
+          { action: 'app.endConnections', id },
+          { action: 'member.suspend', id: ANNA },
+          { action: 'member.delete', id: ANNA },
+        ],
+      },
+    })
+    // Found by the app's name, its client id, or its developer's handle.
+    for (const q of [app.name, app.clientId, 'anna']) {
+      expect({ q, ids: (await queue('open', q)).rows.map((r) => r.id) }).toEqual({
+        q,
+        ids: [`app:${app.clientId}`],
+      })
+    }
+
+    // Cut off from the report: Restore is offered in its place; ended, nothing is left to end.
+    expect((await act({ action: 'app.suspend', ids: [id] })).done).toEqual([id])
+    expect((await act({ action: 'app.endConnections', ids: [id] })).done).toEqual([id])
+    const { body: detail } = await get<AdminReportDetail>(
+      `/api/v1/admin/reports/${encodeURIComponent(`app:${app.clientId}`)}`,
+    )
+    expect(detail.report.target).toMatchObject({
+      label: app.name,
+      actions: [
+        { action: 'app.restore', id },
+        { action: 'member.suspend', id: ANNA },
+        { action: 'member.delete', id: ANNA },
+      ],
+    })
+  })
+
+  test('an app the operator registered has no developer to act on', async () => {
+    const app = await registerApp(api)
+    await report({ targetKind: 'app', targetKey: app.clientId, reason: 'abuse' })
+    const [row] = (await queue()).rows
+    expect(row?.target).toMatchObject({
+      kind: 'app',
+      appId: app.id,
+      member: null,
+      actions: [{ action: 'app.suspend', id: String(app.id) }],
+    })
+    // Gone from the database, it is named by its kind alone.
+    await db.run(sql`delete from apps where id = ${app.id}`)
+    expect((await queue()).rows[0]?.target).toMatchObject({
+      label: null,
+      appId: null,
+      member: null,
+      actions: [],
+    })
   })
 })
 
