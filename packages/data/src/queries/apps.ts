@@ -108,12 +108,98 @@ export async function pkceS256(verifier: string): Promise<string> {
 const HOUR_MS = 60 * 60 * 1000
 
 /**
- * True (as SQL) for an app, `alias` in the query, that may act for the member `userId` names: an
- * approved app, or a draft of the member's own. A suspended app acts for nobody.
+ * True (as SQL) while the developer of the app `alias` names, if a member registered it, is in
+ * good standing (ADR 0067). A developer with no profile row is not barred, as `isBarred` reads it.
  */
-function usableFor(alias: string, userId: SQL): SQL {
+export function developerOk(alias: string): SQL {
   const a = sql.raw(alias)
-  return sql`(${a}.status = 'approved' or (${a}.status = 'draft' and ${a}.owner_user_id = ${userId}))`
+  return sql`not exists (select 1 from profiles dev_p where dev_p.user_id = ${a}.developer_id
+    and not ${standingOk('dev_p')})`
+}
+
+/**
+ * True (as SQL) for an app, `alias` in the query, that is cut off: by the operator (`suspended`),
+ * or because its developer is suspended or closed (ADR 0067), which answers the same way. Its
+ * connections and tokens are kept either way, so lifting either brings it back.
+ */
+export function appCutOff(alias: string): SQL {
+  return sql`(${sql.raw(alias)}.status = 'suspended' or not ${developerOk(alias)})`
+}
+
+/**
+ * True (as SQL) for an app, `alias` in the query, that may act for the member `userId` names: an
+ * approved app, or a draft of the member's own, whose developer is in good standing. A suspended
+ * app acts for nobody. `developer` names the developer's profile when the query already joins it
+ * (left, on `developer_id`): a row with no developer, all nulls, passes `standingOk` as it is.
+ */
+function usableFor(alias: string, userId: SQL, developer?: string): SQL {
+  const a = sql.raw(alias)
+  const standing = developer ? standingOk(developer) : developerOk(alias)
+  return sql`((${a}.status = 'approved' or (${a}.status = 'draft' and ${a}.owner_user_id = ${userId}))
+    and ${standing})`
+}
+
+/**
+ * True (as SQL) when the app `alias` names may let a member see their address (ADR 0067): the
+ * operator allows it, and Tela reviewed the app, which no edit since has undone. What the consent
+ * page offers, what a token resolves to, and what Connected apps and the export say all read it.
+ */
+export function emailAllowed(alias: string): SQL {
+  const a = sql.raw(alias)
+  return sql`(${a}.allow_email = 1 and ${a}.reviewed_at is not null)`
+}
+
+/**
+ * The most members the app `alias` names may hold at once, as SQL; null for no cap (ADR 0067).
+ * A reviewed app has its own (`max_connections`); one Tela has not reviewed, the lower of its own
+ * and `apps.unreviewedMaxConnections`, either of which may be null. A `CASE`, never `min()`,
+ * which is null as soon as either side is: no cap at all.
+ */
+export function effectiveMaxConnections(alias: string): SQL {
+  const a = sql.raw(alias)
+  const setting = settingSql('apps.unreviewedMaxConnections')
+  return sql`(case when ${a}.reviewed_at is not null then ${a}.max_connections
+    when ${a}.max_connections is null then ${setting}
+    when ${setting} is null then ${a}.max_connections
+    when ${a}.max_connections < ${setting} then ${a}.max_connections
+    else ${setting} end)`
+}
+
+/**
+ * True (as SQL) for a live connection, `grant` in the statement, that counts against the cap of
+ * the app `alias` names: one to the app itself; and, for an unreviewed app a member registered,
+ * one to any of that developer's unreviewed apps, so spreading members over several `client_id`s
+ * gains nothing. The developer's own connection never counts.
+ */
+function countsToward(alias: string, grant: string): SQL {
+  const a = sql.raw(alias)
+  const g = sql.raw(grant)
+  return sql`(${g}.ended_at is null and ${g}.user_id is not ${a}.developer_id
+    and (${g}.app_id = ${a}.id or (${a}.reviewed_at is null and ${a}.developer_id is not null
+      and ${g}.app_id in (select o.id from apps o
+        where o.developer_id = ${a}.developer_id and o.reviewed_at is null))))`
+}
+
+/** The members counted against the app `alias` names now (`countsToward`), each once, as SQL. */
+export function connectionsCounted(alias: string): SQL {
+  return sql`(select count(distinct cg.user_id) from app_grants cg
+    where ${countsToward(alias, 'cg')})`
+}
+
+/**
+ * True (as SQL) when the app `alias` names has room for the member `userId` names: its developer,
+ * a member it already counts (connected to it, or to another app sharing its cap), or a place
+ * under its cap (`effectiveMaxConnections`). What the consent page checks, and what the approval
+ * holds in its one statement, should two approvals race.
+ */
+function hasRoom(alias: string, userId: SQL): SQL {
+  const a = sql.raw(alias)
+  const cap = effectiveMaxConnections(alias)
+  return sql`(${a}.developer_id is ${userId}
+    or exists (select 1 from app_grants rg where ${countsToward(alias, 'rg')}
+      and rg.user_id = ${userId})
+    or ${cap} is null
+    or ${connectionsCounted(alias)} < ${cap})`
 }
 
 /** True (as SQL) while the operator lets apps act at all (`apps.enabled`, ADR 0064). */
@@ -165,18 +251,27 @@ export type ConsentApp = {
   redirectUris: string[]
   grantTypes: string[]
   maxScope: AppScope
-  allowEmail: boolean
+  /** It may let a member see their address (`emailAllowed`): allowed, and reviewed. */
+  emailAllowed: boolean
   status: AppStatus
+  /** Cut off (`appCutOff`): by the operator, or because its developer is barred (ADR 0067). */
+  cutOff: boolean
   ownerUserId: string | null
+  /** The most members it may hold at once (`effectiveMaxConnections`); null for no cap. */
   maxConnections: number | null
   /** Tela reviewed it (ADR 0067). */
   reviewed: boolean
   /** The handle of the member who registered it; null for an app the operator registered. */
   developerHandle: string | null
-  /** The member holds a live connection to it, so a cap on connections does not refuse them. */
+  /** The member holds a live connection to it. */
   connected: boolean
-  /** Members holding a live connection to it now. */
+  /** Members counted against its cap now (`connectionsCounted`). */
   connections: number
+  /**
+   * Its cap has room for the member (`hasRoom`): they are its developer, it already counts them,
+   * or a place is free. The approval holds the same condition in its own statement.
+   */
+  room: boolean
 }
 
 const jsonList = (text: string): string[] => {
@@ -204,22 +299,27 @@ export async function readConsentApp(
     redirect_uris: string
     grant_types: string
     max_scope: AppScope
-    allow_email: number
+    email_allowed: number
     status: AppStatus
+    cut_off: number
     owner_user_id: string | null
     max_connections: number | null
     reviewed: number
     developer_handle: string | null
     connected: number
     connections: number
+    room: number
   }>(sql`
     select a.id, a.client_id, a.name, a.developer, a.homepage_url, a.privacy_url, a.redirect_uris,
-      a.grant_types, a.max_scope, a.allow_email, a.status, a.owner_user_id, a.max_connections,
+      a.grant_types, a.max_scope, ${emailAllowed('a')} as email_allowed, a.status,
+      ${appCutOff('a')} as cut_off, a.owner_user_id,
+      ${effectiveMaxConnections('a')} as max_connections,
       (a.reviewed_at is not null) as reviewed,
       (select p.handle from profiles p where p.user_id = a.developer_id) as developer_handle,
       exists (select 1 from app_grants g where g.app_id = a.id and g.user_id = ${userId}
         and g.ended_at is null) as connected,
-      (select count(*) from app_grants g where g.app_id = a.id and g.ended_at is null) as connections
+      ${connectionsCounted('a')} as connections,
+      ${hasRoom('a', sql`${userId}`)} as room
     from apps a where a.client_id = ${clientId}
   `)
   const row = rows[0]
@@ -234,14 +334,16 @@ export async function readConsentApp(
     redirectUris: jsonList(row.redirect_uris),
     grantTypes: jsonList(row.grant_types),
     maxScope: row.max_scope,
-    allowEmail: row.allow_email === 1,
+    emailAllowed: row.email_allowed === 1,
     status: row.status,
+    cutOff: row.cut_off === 1,
     ownerUserId: row.owner_user_id,
     maxConnections: row.max_connections,
     reviewed: row.reviewed === 1,
     developerHandle: row.developer_handle,
     connected: row.connected === 1,
     connections: row.connections,
+    room: row.room === 1,
   }
 }
 
@@ -249,9 +351,10 @@ export async function readConsentApp(
  * A member approves an app: their live connection to it is made, or updated to what they chose
  * this time (one per app and member, the partial unique index), and a code is minted for the
  * redirect and PKCE challenge the request named. One batch. The connection is made only while the
- * app may act for the member and its cap on connections has room (a member already connected
- * always has); the code only beside a live connection. Null when either refused: the caller asks
- * the request's checks again for the reason.
+ * app may act for the member and its cap has room for them (`hasRoom`: its developer and a member
+ * already counted always have, ADR 0067), with the setting read inline, so of two approvals
+ * racing for the last place one connects; the code only beside a live connection. Null when
+ * either refused: the caller asks the request's checks again for the reason.
  */
 export async function approveConnection(
   db: TelaDb,
@@ -273,12 +376,8 @@ export async function approveConnection(
     db.run(sql`
       insert into app_grants (app_id, user_id, scope, email, created_at, updated_at)
       select ${appId}, ${userId}, ${input.scope}, ${email}, ${now}, ${now}
-      where exists (select 1 from apps a where a.id = ${appId} and ${usableFor('a', sql`${userId}`)})
-        and (exists (select 1 from app_grants where app_id = ${appId} and user_id = ${userId}
-              and ended_at is null)
-          or (select max_connections from apps where id = ${appId}) is null
-          or (select count(*) from app_grants where app_id = ${appId} and ended_at is null)
-            < (select max_connections from apps where id = ${appId}))
+      where exists (select 1 from apps a where a.id = ${appId} and ${usableFor('a', sql`${userId}`)}
+        and ${hasRoom('a', sql`${userId}`)})
       on conflict (app_id, user_id) where ended_at is null
       do update set scope = excluded.scope, email = excluded.email, updated_at = excluded.updated_at
     `),
@@ -485,7 +584,7 @@ export type AppPrincipal = {
   tokenId: number
   /** The lower of the token's and the app's ceiling, so lowering an app reaches live tokens. */
   scope: AppScope
-  /** The member granted it, and the operator lets the app ask. */
+  /** The member granted it, and the app may ask (`emailAllowed`: allowed, and reviewed). */
   email: boolean
 }
 
@@ -505,10 +604,10 @@ type Found = {
   app_id: number
   client_id: string
   max_scope: AppScope
-  allow_email: number
+  email_allowed: number
   per_member_per_min: number | null
   per_app_per_min: number | null
-  app_status: AppStatus
+  cut_off: number
   usable: number
   enabled: number
 }
@@ -526,8 +625,9 @@ const secondsUntil = (end: number, now: number) => Math.max(1, Math.ceil((end - 
  * Resolve an access token to the member and app it acts for, in one batch that also does what
  * every call through it costs:
  *
- * 1. the token, its connection, the app and the member's profile, read together: the app must be
- *    approved (or a draft of this member's), `apps.enabled` on, and the member in good standing;
+ * 1. the token, its connection, the app, the member's profile and the app's developer's, read
+ *    together: the app must be approved (or a draft of this member's), its developer in good
+ *    standing (ADR 0067), `apps.enabled` on, and the member in good standing;
  * 2. the app's requests counted for this member and in all (`appMember`, `appTotal`, as
  *    `consumeLimit` keys them), each held to the app's own limit or the default (0 is none);
  * 3. the device marked used, so a spent refresh token is never again a lost answer (`pristine`);
@@ -545,18 +645,22 @@ export async function resolveToken(
   const hash = await sha256Hex(accessToken)
   const member = windowOf('appMember', now)
   const total = windowOf('appTotal', now)
+  // The developer's profile (`dp`) is joined once, left: an app the operator registered has none.
   const held = sql`app_tokens t join app_grants g on g.id = t.grant_id
-    join apps a on a.id = g.app_id join profiles p on p.user_id = g.user_id`
+    join apps a on a.id = g.app_id join profiles p on p.user_id = g.user_id
+    left join profiles dp on dp.user_id = a.developer_id`
   const current = sql`t.access_hash = ${hash} and t.ended_at is null
     and t.access_expires_at > ${now} and g.ended_at is null`
-  const usable = sql`(${usableFor('a', sql`g.user_id`)} and ${standingOk('p')})`
+  const usable = sql`(${usableFor('a', sql`g.user_id`, 'dp')} and ${standingOk('p')})`
   const live = sql`${current} and ${usable} and ${appsOn()}`
   const stale = now - HOUR_MS
   const [found, memberCount, totalCount] = (await db.batch([
     db.all<Found>(sql`
       select t.id as token_id, t.scope as token_scope, t.email as token_email, g.id as grant_id,
-        g.scope as grant_scope, g.email as grant_email, g.user_id, a.id as app_id, a.client_id, a.max_scope, a.allow_email, a.per_member_per_min,
-        a.per_app_per_min, a.status as app_status, ${usable} as usable, ${appsOn()} as enabled
+        g.scope as grant_scope, g.email as grant_email, g.user_id, a.id as app_id, a.client_id,
+        a.max_scope, ${emailAllowed('a')} as email_allowed, a.per_member_per_min,
+        a.per_app_per_min, (a.status = 'suspended' or not ${standingOk('dp')}) as cut_off,
+        ${usable} as usable, ${appsOn()} as enabled
       from ${held} where ${current}
     `),
     db.all<{ count: number }>(sql`
@@ -594,9 +698,10 @@ export async function resolveToken(
   if (!row) return { ok: false, error: 'invalid_token' }
   if (row.enabled !== 1) return { ok: false, error: 'apps_paused' }
   // A cut-off app is told so, apart from a token that ended: its tokens work again when the
-  // operator restores it, so it should keep them rather than ask the member to connect again.
+  // operator restores it, or its developer's suspension is lifted (ADR 0067), so it should keep
+  // them rather than ask the member to connect again.
   if (row.usable !== 1) {
-    return { ok: false, error: row.app_status === 'suspended' ? 'app_suspended' : 'invalid_token' }
+    return { ok: false, error: row.cut_off === 1 ? 'app_suspended' : 'invalid_token' }
   }
   const over = (count: number | undefined, limit: number) => count === undefined || count > limit
   if (over(memberCount[0]?.count, row.per_member_per_min ?? APP_DEFAULT_PER_MEMBER_PER_MIN)) {
@@ -616,7 +721,7 @@ export async function resolveToken(
       // The lowest of what this device was given, what the connection holds now (a member who
       // connects again at Read only lowers every device), and the app's ceiling.
       scope: lowerScope(lowerScope(row.token_scope, row.grant_scope), row.max_scope),
-      email: row.token_email === 1 && row.grant_email === 1 && row.allow_email === 1,
+      email: row.token_email === 1 && row.grant_email === 1 && row.email_allowed === 1,
     },
   }
 }
@@ -626,8 +731,8 @@ export async function resolveToken(
 
 /**
  * A member's live connections (`GET /api/v1/connections`): what each app may do now (the grant,
- * lowered by the app's ceiling and its permission to see the address), and how many devices hold
- * tokens that still work or can still be refreshed.
+ * lowered by the app's ceiling and its permission to see the address, `emailAllowed`), and how
+ * many devices hold tokens that still work or can still be refreshed.
  */
 export async function listConnections(
   db: TelaDb,
@@ -645,14 +750,15 @@ export async function listConnections(
     scope: AppScope
     max_scope: AppScope
     email: number
-    allow_email: number
+    email_allowed: number
     created_at: number
     last_used_at: number | null
     devices: number
   }>(sql`
     select g.id, a.name, a.developer, a.homepage_url, a.client_id, (a.reviewed_at is not null) as reviewed,
       (select p.handle from profiles p where p.user_id = a.developer_id) as developer_handle,
-      g.scope, a.max_scope, g.email, a.allow_email, g.created_at, g.last_used_at,
+      g.scope, a.max_scope, g.email, ${emailAllowed('a')} as email_allowed, g.created_at,
+      g.last_used_at,
       (select count(*) from app_tokens t where t.grant_id = g.id and t.ended_at is null
         and (t.access_expires_at > ${now} or t.refresh_idle_expires_at > ${now})) as devices
     from app_grants g join apps a on a.id = g.app_id
@@ -670,7 +776,7 @@ export async function listConnections(
       developerHandle: r.developer_handle,
     },
     scope: lowerScope(r.scope, r.max_scope),
-    email: r.email === 1 && r.allow_email === 1,
+    email: r.email === 1 && r.email_allowed === 1,
     createdAt: r.created_at,
     lastUsedAt: r.last_used_at,
     devices: r.devices,

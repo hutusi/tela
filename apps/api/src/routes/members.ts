@@ -9,6 +9,7 @@ import {
   bumpSeq,
   consumeLimit,
   currentSeq,
+  emailAllowed,
   first,
   gravatarOn,
   restampTranslations,
@@ -394,10 +395,12 @@ export function memberRoutes(deps: ApiDeps) {
         order by coalesce(st.read_at, st.read_updated_at) desc, st.article_id
       `),
       // The apps they connected and still hold (ADR 0064): what each may do and when it last
-      // acted for them. Never a token, which Tela keeps only as a hash.
+      // acted for them, and whether it sees their address as `/v1/me` would answer it now
+      // (`emailAllowed`, ADR 0067). Never a token, which Tela keeps only as a hash.
       db.all(sql`
         select a.name as "app", a.developer, a.homepage_url as "homepage", g.scope,
-          g.email as "seesEmail", g.created_at as "connectedAt", g.last_used_at as "lastUsedAt"
+          (g.email = 1 and ${emailAllowed('a')}) as "seesEmail", g.created_at as "connectedAt",
+          g.last_used_at as "lastUsedAt"
         from app_grants g join apps a on a.id = g.app_id
         where g.user_id = ${id} and g.ended_at is null order by g.created_at, g.id
       `),
