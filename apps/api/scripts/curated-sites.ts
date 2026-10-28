@@ -32,9 +32,10 @@ export type CuratedSite = {
  * operator's review of the blogs members add (ADR 0041) needs members to have added some. Before
  * any of that the directory is empty, which reads as a broken page, not as an empty one. These
  * are independent blogs written by people, which is what the directory is for; a publication with
- * a masthead does not belong here.
+ * a masthead does not belong here. The AI labs at the end are the one exception (ADR 0068): listed
+ * under AI alone and never featured, so the front shelf and the other chips stay the writers'.
  *
- * All nine topics are covered on purpose: /discover renders every chip whether or not anything
+ * All ten topics are covered on purpose: /discover renders every chip whether or not anything
  * is behind it, and a chip that lands on "No blogs listed here yet" is worse than no chip.
  *
  * Each entry was verified to serve a parseable feed under the body cap when it was added, and to
@@ -49,14 +50,14 @@ export type CuratedSite = {
  */
 export const CURATED_SITES = [
   // English
-  { feedUrl: 'https://simonwillison.net/atom/everything/', topics: ['tech'], featured: true },
+  { feedUrl: 'https://simonwillison.net/atom/everything/', topics: ['ai', 'tech'], featured: true },
   { feedUrl: 'https://jvns.ca/atom.xml', topics: ['tech'] },
   { feedUrl: 'https://overreacted.io/rss.xml', topics: ['tech'] },
   { feedUrl: 'https://daringfireball.net/feeds/main', topics: ['tech'] },
   { feedUrl: 'https://macwright.com/rss.xml', topics: ['tech', 'life'] },
   { feedUrl: 'https://hillelwayne.com/index.xml', topics: ['tech', 'science'] },
-  { feedUrl: 'https://www.interconnects.ai/feed', topics: ['tech', 'science'] },
-  { feedUrl: 'https://magazine.sebastianraschka.com/feed', topics: ['tech', 'science'] },
+  { feedUrl: 'https://www.interconnects.ai/feed', topics: ['ai', 'tech', 'science'] },
+  { feedUrl: 'https://magazine.sebastianraschka.com/feed', topics: ['ai', 'tech', 'science'] },
   { feedUrl: 'https://sive.rs/en.atom', topics: ['essays'] },
   { feedUrl: 'https://robinsloan.com/feed.xml', topics: ['essays'], featured: true },
   {
@@ -135,8 +136,8 @@ export const CURATED_SITES = [
   // 简体中文
   { feedUrl: 'https://www.ruanyifeng.com/blog/atom.xml', topics: ['tech'], featured: true },
   { feedUrl: 'https://blog.codingnow.com/atom.xml', topics: ['tech'] },
-  { feedUrl: 'https://kexue.fm/feed', topics: ['science', 'tech'] },
-  { feedUrl: 'https://baoyu.io/feed.xml', topics: ['tech'] },
+  { feedUrl: 'https://kexue.fm/feed', topics: ['ai', 'science', 'tech'] },
+  { feedUrl: 'https://baoyu.io/feed.xml', topics: ['ai', 'tech'] },
   {
     feedUrl: 'https://www.zhangxinxu.com/wordpress/feed/',
     topics: ['design', 'tech'],
@@ -454,8 +455,8 @@ export const CURATED_SITES = [
   // names: listed without a topic, a blog shows under All and under no chip. They came in by
   // review rather than by this list's bar, so one stays while it has posted in six months.
   { feedUrl: 'https://addyosmani.com/rss.xml', topics: ['tech'], title: 'Addy Osmani' },
-  { feedUrl: 'https://lilianweng.github.io/index.xml', topics: ['science', 'tech'] },
-  { feedUrl: 'https://swyx.io/rss.xml', topics: ['tech', 'essays'], title: 'swyx' },
+  { feedUrl: 'https://lilianweng.github.io/index.xml', topics: ['ai', 'science', 'tech'] },
+  { feedUrl: 'https://swyx.io/rss.xml', topics: ['ai', 'tech', 'essays'], title: 'swyx' },
   {
     feedUrl: 'https://brennan.day/feed.xml',
     topics: ['essays', 'tech'],
@@ -485,6 +486,55 @@ export const CURATED_SITES = [
   { feedUrl: 'https://macshuo.com/?feed=rss2', topics: ['tech'], title: 'MacTalk' },
   { feedUrl: 'https://www.changhai.org/feed.xml', topics: ['science', 'essays'], title: '卢昌海' },
   { feedUrl: 'https://depp.wang/rss2.xml', topics: ['essays', 'tech', 'life'] },
+
+  // AI labs (ADR 0068), the exception to blogs written by people: under AI alone, never featured,
+  // and named as the lab, since their feeds name a section ("OpenAI News"). A lab with no feed of
+  // its own is read through a maintained one elsewhere whose <link> names the lab, so it files
+  // under the lab's blog and Add finds it from the lab's address. Never rsshub.app: it refuses
+  // feed readers and says it is for testing. Left out on 2026-10-28: NVIDIA's (the whole
+  // company's news), Meta AI's and xAI's (nothing in 30 days; x.ai answers bots 403), Qwen's
+  // (quiet since 2025-08).
+  {
+    feedUrl: 'https://openai.com/news/rss.xml',
+    topics: ['ai'],
+    title: 'OpenAI',
+    note: 'No text in the feed and openai.com answers bots 403 (2026-10-28): posts may stay excerpts',
+  },
+  { feedUrl: 'https://deepmind.google/blog/rss.xml', topics: ['ai'], title: 'Google DeepMind' },
+  { feedUrl: 'https://research.google/blog/rss/', topics: ['ai'], title: 'Google Research' },
+  { feedUrl: 'https://huggingface.co/blog/feed.xml', topics: ['ai'], title: 'Hugging Face' },
+  {
+    feedUrl: 'https://www.microsoft.com/en-us/research/feed/',
+    topics: ['ai'],
+    title: 'Microsoft Research',
+    note: 'Files under www.microsoft.com, so any other feed from that host joins this blog',
+  },
+  { feedUrl: 'https://mistral.ai/news/rss', topics: ['ai'], title: 'Mistral AI' },
+  {
+    feedUrl:
+      'https://raw.githubusercontent.com/Olshansk/rss-feeds/main/feeds/feed_anthropic_news.xml',
+    topics: ['ai'],
+    title: 'Anthropic',
+    note: 'No feed of its own; github.com/Olshansk/rss-feeds keeps these three',
+  },
+  {
+    feedUrl:
+      'https://raw.githubusercontent.com/Olshansk/rss-feeds/main/feeds/feed_anthropic_research.xml',
+    topics: ['ai'],
+    title: 'Anthropic',
+  },
+  {
+    feedUrl:
+      'https://raw.githubusercontent.com/Olshansk/rss-feeds/main/feeds/feed_anthropic_engineering.xml',
+    topics: ['ai'],
+    title: 'Anthropic',
+  },
+  {
+    feedUrl: 'https://raw.githubusercontent.com/Olshansk/rss-feeds/main/feeds/feed_cohere.xml',
+    topics: ['ai'],
+    title: 'Cohere',
+    note: 'No feed of its own; kept by the same repository',
+  },
 ] as const satisfies readonly CuratedSite[]
 
 // Deliberately absent: rachelbythebay.com. She runs a feed-reader conformance test and blocks
