@@ -27,6 +27,7 @@ import {
   effectiveMaxConnections,
   endOthersConnections,
   first,
+  memberHandleSaysTela,
   newClientId,
   newGroupId,
   readSetting,
@@ -238,7 +239,6 @@ export function developerRoutes(deps: ApiDeps) {
     const now = clock.now()
     const spent = await spend(c, member, now)
     if (spent) return spent
-    if (await handleSaysTela(member)) return refuse(c, 'handle', 400)
     const { exempt } = await webActor(c, db)
     const perMember = settingSql('apps.perMember')
     const room = exempt
@@ -254,7 +254,7 @@ export function developerRoutes(deps: ApiDeps) {
         select ${clientId}, ${s.name}, ${s.developer}, ${s.contactEmail}, ${s.homepageUrl},
           ${s.privacyUrl}, ${JSON.stringify(s.redirectUris)}, ${s.maxScope}, 0, 'draft',
           ${member}, ${member}, ${now}, ${now}, ${now}
-        where ${room}
+        where ${room} and not ${memberHandleSaysTela(member)}
         returning id
       `),
       audited(
@@ -268,8 +268,10 @@ export function developerRoutes(deps: ApiDeps) {
       db.all<Raw>(sql`${SELECT} where a.client_id = ${clientId}`),
     ] as never)) as unknown as [{ id: number }[], unknown, Raw[]]
     const app = rows[0]
-    // The page says how many one account may hold, so it is read here, where it is rare.
+    // Refused in the statement (a handle that says Tela, or no room), and worded here, where it
+    // is rare: the page says how many one account may hold.
     if (inserted.length === 0 || !app) {
+      if (await handleSaysTela(member)) return refuse(c, 'handle', 400)
       return refuse(c, 'too_many_apps', 409, { limit: await readSetting(db, 'apps.perMember') })
     }
     return c.json({ app: toApp(app) }, 201)
@@ -308,12 +310,11 @@ export function developerRoutes(deps: ApiDeps) {
     if (!state) return refuse(c, 'not_found', 404)
     if (state.status === 'suspended') return refuse(c, 'cut_off', 409)
     if (state.reported === 1) return refuse(c, 'reported', 409)
-    // A Live app keeps a privacy policy: the consent page links it, and Live needed one.
-    if (state.status === 'approved' && s.privacyUrl === null) {
-      return refuse(c, 'privacy_required', 400)
-    }
+    // A Live app keeps a privacy policy (the consent page links it, and Live needed one), held in
+    // the statement: an app made Live by a request racing this edit keeps its policy too.
     const target = sql`id = ${id} and developer_id = ${member} and not ${holds}
-      and status <> 'suspended' and not ${openReport('apps')}`
+      and status <> 'suspended' and not ${openReport('apps')}
+      and (${s.privacyUrl} is not null or status <> 'approved')`
     const [, , rows] = (await db.batch([
       audited(
         'developer.edit',
@@ -344,7 +345,11 @@ export function developerRoutes(deps: ApiDeps) {
       own(id, member),
     ] as never)) as unknown as [unknown, unknown, Raw[]]
     const app = rows[0]
-    return app ? c.json({ app: toApp(app) }) : refuse(c, 'not_found', 404)
+    if (!app) return refuse(c, 'not_found', 404)
+    if (s.privacyUrl === null && app.status === 'approved' && app.privacy_url !== null) {
+      return refuse(c, 'privacy_required', 400)
+    }
+    return c.json({ app: toApp(app) })
   })
 
   routes.post('/:id{[0-9]+}/live', async (c) => {
@@ -357,7 +362,6 @@ export function developerRoutes(deps: ApiDeps) {
     const now = clock.now()
     const spent = await spend(c, member, now)
     if (spent) return spent
-    if (live && (await handleSaysTela(member))) return refuse(c, 'handle', 400)
     const mine = sql`id = ${id} and developer_id = ${member}`
     const rows = live
       ? await goLive({ id, member, now, mine })
@@ -365,7 +369,10 @@ export function developerRoutes(deps: ApiDeps) {
     const app = rows[0]
     if (!app) return refuse(c, 'not_found', 404)
     if (app.status === 'suspended') return refuse(c, 'cut_off', 409)
-    if (live && app.status !== 'approved') return refuse(c, 'privacy_required', 400)
+    if (live && app.status !== 'approved') {
+      if (app.privacy_url === null) return refuse(c, 'privacy_required', 400)
+      return refuse(c, 'handle', 400)
+    }
     return c.json({ app: toApp(app) })
   })
 
@@ -381,7 +388,10 @@ export function developerRoutes(deps: ApiDeps) {
     now: number
     mine: SQL
   }): Promise<Raw[]> {
-    const moves = sql`${mine} and status = 'draft' and privacy_url is not null`
+    // A handle that says Tela is shown beside a Live unreviewed app: held in the statement, so a
+    // handle changed by a racing request can't slip in between.
+    const moves = sql`${mine} and status = 'draft' and privacy_url is not null
+      and not ${memberHandleSaysTela(member)}`
     const results = (await db.batch([
       audited(
         'developer.live',

@@ -158,6 +158,22 @@ export async function pkceS256(verifier: string): Promise<string> {
 const HOUR_MS = 60 * 60 * 1000
 
 /**
+ * True (as SQL) when a handle says "Tela" (ADR 0067), as `mentionsTela` reads a name: a word that
+ * starts with it. Handles are `[a-z0-9_]` (`HANDLE`), so a word starts at the handle's start or
+ * after an underscore, and the two checks agree on every handle. In SQL so that a write can hold
+ * to it in its own statement: a developer's handle against their app, and their app against it.
+ */
+export function handleSaysTela(handle: SQL): SQL {
+  return sql`(${handle} like 'tela%' or ${handle} like '%!_tela%' escape '!')`
+}
+
+/** True (as SQL) when the member `userId` has a handle that says "Tela". */
+export function memberHandleSaysTela(userId: string): SQL {
+  return sql`exists (select 1 from profiles hp where hp.user_id = ${userId}
+    and ${handleSaysTela(sql`hp.handle`)})`
+}
+
+/**
  * True (as SQL) while the developer of the app `alias` names, if a member registered it, is in
  * good standing (ADR 0067). A developer with no profile row is not barred, as `isBarred` reads it.
  */

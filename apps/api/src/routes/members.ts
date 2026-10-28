@@ -37,16 +37,6 @@ export function memberRoutes(deps: ApiDeps) {
     if (body.handle !== undefined) {
       handle = String(body.handle).trim().toLowerCase()
       if (!isValidHandle(handle)) return c.json({ error: 'invalid_handle' }, 400)
-      // A developer's handle is what the consent page shows beside their unreviewed apps, so one
-      // that says "Tela" is theirs only while they hold none (ADR 0067); registering and going
-      // Live check the same thing from the other side.
-      if (mentionsTela(handle)) {
-        const holds = await first<{ x: number }>(
-          db,
-          sql`select 1 as x from apps where developer_id = ${member.id} limit 1`,
-        )
-        if (holds) return c.json({ error: 'handle_reserved' }, 400)
-      }
       sets.push(sql`handle = ${handle}`)
     }
     if (body.displayName !== undefined) {
@@ -70,17 +60,30 @@ export function memberRoutes(deps: ApiDeps) {
     }
     if (sets.length === 0) return c.json({ ok: true })
     // Taken handles are refused in the statement itself, so two members racing for one cannot
-    // both win and neither sees a constraint error.
+    // both win and neither sees a constraint error. So is a handle that says "Tela" while the
+    // member holds an app (ADR 0067), since the consent page shows a developer's handle beside
+    // their unreviewed apps; registering and going Live hold to it from the other side.
+    const saysTela = handle !== undefined && mentionsTela(handle)
     const [, updated] = (await db.batch([
       bumpSeq(db),
       db.all(sql`
         update profiles set ${sql.join(sets, sql`, `)}, updated_at = ${now}, seq = ${currentSeq}
         where user_id = ${member.id}
           ${handle === undefined ? sql`` : sql`and not exists (select 1 from profiles p2 where p2.handle = ${handle} and p2.user_id <> ${member.id})`}
+          ${saysTela ? sql`and not exists (select 1 from apps where developer_id = ${member.id})` : sql``}
         returning handle
       `),
     ] as never)) as unknown as [unknown, { handle: string }[]]
-    if (updated.length === 0) return c.json({ error: 'handle_taken' }, 409)
+    if (updated.length === 0) {
+      if (saysTela) {
+        const holds = await first<{ x: number }>(
+          db,
+          sql`select 1 as x from apps where developer_id = ${member.id} limit 1`,
+        )
+        if (holds) return c.json({ error: 'handle_reserved' }, 400)
+      }
+      return c.json({ error: 'handle_taken' }, 409)
+    }
     return c.json({ ok: true, handle: updated[0]?.handle })
   })
 

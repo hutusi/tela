@@ -5,8 +5,8 @@
  * member as its actor and never the app's contact address.
  */
 import { beforeEach, describe, expect, test } from 'bun:test'
-import { first, historyOf } from '@tela/data'
-import type { DeveloperApp } from '@tela/shared'
+import { first, handleSaysTela, historyOf } from '@tela/data'
+import { type DeveloperApp, mentionsTela } from '@tela/shared'
 import { sql } from 'drizzle-orm'
 import {
   askConsent,
@@ -76,10 +76,24 @@ const answer = async (res: Response) => [res.status, await res.json()]
 const row = (id: number) =>
   first<Record<string, unknown>>(
     api.db,
-    sql`select status, developer_id, owner_user_id, contact_email, terms_at, allow_email,
+    sql`select status, developer_id, owner_user_id, contact_email, terms_at, allow_email, privacy_url,
       reviewed_at, reviewed_by, approved_at, review_requested_at, review_note, review_wants_email
       from apps where id = ${id}`,
   )
+
+const setHandle = (who: SignedIn, handle: string) =>
+  api.db.run(sql`update profiles set handle = ${handle} where user_id = ${who.userId}`)
+
+/** Run `meanwhile` just before the route's next batch, as a request racing it would land. */
+function beforeNextBatch(meanwhile: () => Promise<unknown>) {
+  const db = api.db as unknown as { batch: (items: unknown) => Promise<unknown> }
+  const batch = db.batch
+  db.batch = async (items) => {
+    db.batch = batch
+    await meanwhile()
+    return batch.call(api.db, items)
+  }
+}
 
 const appCount = async () =>
   (await first<{ n: number }>(api.db, sql`select count(*) as n from apps`))?.n
@@ -434,6 +448,73 @@ describe('what the name rule and the day’s count also hold', () => {
       { error: 'handle_reserved' },
     ])
     expect((await profile(dev, 'loom_labs')).status).toBe(200)
+  })
+
+  test('the handle check in SQL reads every handle as mentionsTela does', async () => {
+    const handles = [
+      'tela',
+      'telaread',
+      'my_tela',
+      'x_tela_y',
+      'tela_1',
+      'hotela',
+      'atela',
+      '1tela',
+    ]
+    for (const h of [...handles, 'stellar', 'tel_a', 'a_telb', '_tel_a', 'loom_labs', '__tela']) {
+      const says = await first<{ x: number }>(api.db, sql`select ${handleSaysTela(sql`${h}`)} as x`)
+      expect([h, says?.x === 1]).toEqual([h, mentionsTela(h)])
+    }
+  })
+
+  // Each of these lands the racing request's write between the route's reads and its own batch,
+  // where a check made in JavaScript beforehand would already have passed (Codex's review).
+  test('registering holds to the handle as it is when the app is written', async () => {
+    const before = await appCount()
+    beforeNextBatch(() => setHandle(dev, 'tela_official'))
+    expect(await answer(await register(dev))).toEqual([400, { error: 'handle' }])
+    expect(await appCount()).toBe(before)
+  })
+
+  test('going Live holds to the handle as it is when the app moves', async () => {
+    const app = await registered(dev, { privacyUrl: 'https://loom.example/privacy' })
+    beforeNextBatch(() => setHandle(dev, 'tela_official'))
+    expect(await answer(await goLive(dev, app.appId, true))).toEqual([400, { error: 'handle' }])
+    expect(await row(app.appId)).toMatchObject({ status: 'draft' })
+  })
+
+  test('a new handle holds to the apps the member holds when it lands', async () => {
+    const app = await registered(bo)
+    beforeNextBatch(() =>
+      api.db.run(sql`update apps set developer_id = ${dev.userId}, owner_user_id = ${dev.userId}
+        where id = ${app.appId}`),
+    )
+    const res = await api.request('/api/v1/profile', {
+      as: dev,
+      method: 'PUT',
+      body: { handle: 'tela_official' },
+    })
+    expect(await answer(res)).toEqual([400, { error: 'handle_reserved' }])
+    const handle = await first<{ handle: string }>(
+      api.db,
+      sql`select handle from profiles where user_id = ${dev.userId}`,
+    )
+    expect(handle?.handle).not.toBe('tela_official')
+  })
+
+  test('dropping the policy holds to the app’s status when the edit lands', async () => {
+    const app = await registered(dev, { privacyUrl: 'https://loom.example/privacy' })
+    beforeNextBatch(() =>
+      api.db.run(sql`update apps set status = 'approved', approved_at = 1 where id = ${app.appId}`),
+    )
+    expect(await answer(await edit(dev, app.appId, { privacyUrl: null }))).toEqual([
+      400,
+      { error: 'privacy_required' },
+    ])
+    expect(await row(app.appId)).toMatchObject({
+      status: 'approved',
+      privacy_url: 'https://loom.example/privacy',
+    })
   })
 
   test('a Live app keeps its privacy policy; in Testing it may drop it', async () => {
