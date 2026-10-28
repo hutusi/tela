@@ -562,3 +562,39 @@ describe('reviewing an app a member registered (ADR 0067)', () => {
     expect((await appRow(id))?.owner_user_id).toBe(mara.userId)
   })
 })
+
+describe('the contacts of live apps (ADR 0067)', () => {
+  const contacts = (token = ADMIN_TOKEN) =>
+    api.request('/api/admin/apps/contacts', {
+      method: 'GET',
+      headers: { authorization: `Bearer ${token}` },
+    })
+
+  test('lists every live app’s name and address, for the operator’s token alone', async () => {
+    const live = await register({ name: 'Weft', contactEmail: 'hi@weft.example' })
+    await act({ action: 'app.approve', ids: [live] })
+    await register({ name: 'Draft only', contactEmail: 'draft@x.example' })
+    const cut = await register({ name: 'Cut', contactEmail: 'cut@x.example' })
+    await act({ action: 'app.approve', ids: [cut] })
+    await act({ action: 'app.suspend', ids: [cut] })
+
+    const res = await contacts()
+    expect(res.status).toBe(200)
+    expect(res.headers.get('cache-control')).toBe('no-store')
+    const body = (await res.json()) as {
+      apps: { clientId: string; name: string; contactEmail: string }[]
+    }
+    expect(body.apps).toEqual([
+      {
+        clientId: expect.stringMatching(/^tela_app_/),
+        name: 'Weft',
+        contactEmail: 'hi@weft.example',
+      },
+    ])
+    expect((await contacts('wrong')).status).toBe(403)
+    // Never through the console's cookie: an admin's session is not the operator's token.
+    expect((await api.request('/api/admin/apps/contacts', { method: 'GET', as: ops })).status).toBe(
+      403,
+    )
+  })
+})

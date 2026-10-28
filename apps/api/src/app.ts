@@ -36,6 +36,7 @@ import { fromOperator } from './operator'
 import { accountRoutes } from './routes/account'
 import { adminRoutes } from './routes/admin'
 import { runBatch } from './routes/admin/framework'
+import { liveAppContacts } from './routes/admin/members/apps'
 import { applySetting, settingRows } from './routes/admin/running/settings'
 import { avatarRoutes } from './routes/avatars'
 import { blogrollRoutes } from './routes/blogrolls'
@@ -344,6 +345,15 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
     })
     if (outcome === 'invalid') return c.json({ error: 'invalid' }, 400)
     return c.json({ key: body.key, changed: outcome === 'done' })
+  })
+
+  /**
+   * Every live app's name and contact address (`bun run admin app-contacts`, ADR 0067), for the
+   * notices the API's developer rules promise: a preview's break, a deprecation.
+   */
+  app.get('/api/admin/apps/contacts', async (c) => {
+    if (!fromOperator(c, deps.config.adminToken)) return c.json({ error: 'forbidden' }, 403)
+    return c.json({ apps: await liveAppContacts(deps.db) }, 200, { 'cache-control': 'no-store' })
   })
 
   /**

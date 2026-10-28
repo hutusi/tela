@@ -12,6 +12,7 @@
  *   ADMIN_TOKEN=… bun run admin settings                 # every runtime setting (ADR 0056)
  *   ADMIN_TOKEN=… bun run admin set signup.mode invite   # change one, audited
  *   ADMIN_TOKEN=… bun run admin closures                 # after a restore: close again what was closed (ADR 0058)
+ *   ADMIN_TOKEN=… bun run admin app-contacts             # every live app's contact address (ADR 0067)
  *   TELA_URL=http://localhost:8787 ADMIN_TOKEN=… bun run admin invite a@b.c
  */
 import { parseArgs } from 'node:util'
@@ -34,6 +35,7 @@ function usage(): never {
       '       bun run admin settings',
       '       bun run admin set <key> <value>   (a number, null for no limit, a word, or JSON)',
       '       bun run admin closures   (after a restore)',
+      '       bun run admin app-contacts',
       '(needs ADMIN_TOKEN; TELA_URL optional)',
     ].join('\n'),
   )
@@ -192,6 +194,17 @@ if (command === 'invite') {
   const { res, text, json } = await admin('POST', 'closures', {})
   if (!res.ok) failed('closures', res, text)
   console.log(`${json.closures} closures read; ${json.closed} accounts closed again`)
+} else if (command === 'app-contacts') {
+  // Who API notices go to (ADR 0067): one line an app, then the addresses alone, ready for Bcc.
+  const { res, text, json } = await admin('GET', 'apps/contacts')
+  if (!res.ok) failed('app-contacts', res, text)
+  const apps = (json.apps ?? []) as { clientId: string; name: string; contactEmail: string }[]
+  if (apps.length === 0) console.log('no live apps')
+  for (const app of apps) console.log(`${app.contactEmail}  ${app.name}  (${app.clientId})`)
+  if (apps.length > 0) {
+    console.log(`\n${apps.length} live ${apps.length === 1 ? 'app' : 'apps'}; the addresses alone:`)
+    console.log([...new Set(apps.map((app) => app.contactEmail))].join(', '))
+  }
 } else if (command === 'settings') {
   const { res, text, json } = await admin('GET', 'settings')
   if (!res.ok) failed('settings', res, text)

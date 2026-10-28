@@ -63,6 +63,7 @@ bun run admin curate                 # add the curated blogs, featuring those ma
 bun run admin grant <email>          # open the admin console (/admin) to a member; ungrant closes it (ADR 0039)
 bun run admin settings               # the runtime settings; `bun run admin set <key> <value>` changes one (ADR 0056)
 bun run admin closures               # after any restore or Time Travel rollback: close again the accounts closed since (ADR 0058)
+bun run admin app-contacts           # every live app's contact address, for API notices (ADR 0067)
 bun run restore-drill                # restore the newest nightly export into a scratch libSQL file and check it (OPERATIONS.md)
 cd apps/jobs && wrangler deploy      # deploy order: tela-jobs, tela-api, tela-web, then tela-gateway
 cd apps/reader && bunx vite build && wrangler deploy

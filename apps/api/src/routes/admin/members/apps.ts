@@ -737,3 +737,18 @@ export const appInverses = {
   'app.review': unreview,
   'app.dismissReview': unreview,
 }
+
+/**
+ * Every live app's name and contact address (`bun run admin app-contacts`, ADR 0067): where the
+ * operator sends API notices, a preview's break or a deprecation. The operator's token alone
+ * reads it; the console never lists the addresses together, and no audit row holds one.
+ */
+export async function liveAppContacts(
+  db: TelaDb,
+): Promise<{ clientId: string; name: string; contactEmail: string }[]> {
+  const rows = await db.all<{ client_id: string; name: string; contact_email: string }>(sql`
+    select client_id, name, contact_email from apps
+    where status = 'approved' and contact_email <> '' order by name, id
+  `)
+  return rows.map((r) => ({ clientId: r.client_id, name: r.name, contactEmail: r.contact_email }))
+}
