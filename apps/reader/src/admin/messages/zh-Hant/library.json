@@ -7,7 +7,7 @@
     "blogrolls": "搜尋部落格鏈或主人"
   },
   "filters": {
-    "claims": { "review": "待稽核", "checking": "檢查中", "verified": "已驗證" },
+    "claims": { "review": "待審核", "checking": "檢查中", "verified": "已驗證" },
     "sites": {
       "discover": "在發現中",
       "private": "未公開",
@@ -23,7 +23,7 @@
       "fetching": "正常抓取"
     },
     "discover": {
-      "candidates": "待稽核",
+      "candidates": "待審核",
       "featured": "精選",
       "listed": "已列入",
       "dismissed": "不列入發現",
@@ -65,7 +65,7 @@
     "private": "未公開",
     "rejected": "已隱藏",
     "unclaimed": "無人認領",
-    "toReview": "待稽核",
+    "toReview": "待審核",
     "dismissed": "不列入發現"
   },
   "health": {
@@ -87,7 +87,7 @@
     "verified": "已驗證",
     "checking": "檢查中",
     "disputed": "有爭議",
-    "review": "待稽核",
+    "review": "待審核",
     "failed": "檢查失敗",
     "reviewed": "已處理",
     "removed": "已撤銷"
