@@ -55,6 +55,8 @@ export const CURATED_SITES = [
   { feedUrl: 'https://daringfireball.net/feeds/main', topics: ['tech'] },
   { feedUrl: 'https://macwright.com/rss.xml', topics: ['tech', 'life'] },
   { feedUrl: 'https://hillelwayne.com/index.xml', topics: ['tech', 'science'] },
+  { feedUrl: 'https://www.interconnects.ai/feed', topics: ['tech', 'science'] },
+  { feedUrl: 'https://magazine.sebastianraschka.com/feed', topics: ['tech', 'science'] },
   { feedUrl: 'https://sive.rs/en.atom', topics: ['essays'] },
   { feedUrl: 'https://robinsloan.com/feed.xml', topics: ['essays'], featured: true },
   {
