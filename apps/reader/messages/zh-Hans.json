@@ -930,7 +930,8 @@
     "viewProfile": "查看个人页",
     "errors": {
       "invalid_handle": "用户名需为 3–30 个小写字母、数字或下划线，且不能使用保留词。",
-      "handle_taken": "该用户名已被占用。"
+      "handle_taken": "该用户名已被占用。",
+      "handle_reserved": "你登记了应用时，用户名里不能有“Tela”：它会显示在你的应用旁，只有 Tela 自己的应用能显示这个词。"
     },
     "readingIntro": "文章在「阅读」里的样子和行为。",
     "textSize": "字号",

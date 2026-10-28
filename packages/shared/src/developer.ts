@@ -116,10 +116,19 @@ export function parseDeveloperApp(
   }
 }
 
-/** A review request's note: trimmed, at most `REVIEW_NOTE_MAX`, or null for none. */
+/**
+ * A review request's note: trimmed, at most `REVIEW_NOTE_MAX`, or null for none. Line breaks are
+ * the one control character it may hold (CRLF read as LF): it comes from a textarea, and only the
+ * operator reads it, as written. Nothing invisible.
+ */
 export function parseReviewNote(value: unknown): string | null | undefined {
   if (value === null || value === undefined || value === '') return null
-  return appText(value, REVIEW_NOTE_MAX)
+  if (typeof value !== 'string') return undefined
+  const note = value.replace(/\r\n?/g, '\n').trim()
+  if (note === '') return null
+  if (note.length > REVIEW_NOTE_MAX) return undefined
+  if (/[\p{Cc}]/u.test(note.replace(/\n/g, '')) || hasInvisible(note)) return undefined
+  return note
 }
 
 /**

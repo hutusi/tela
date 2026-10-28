@@ -930,7 +930,8 @@
     "viewProfile": "View profile",
     "errors": {
       "invalid_handle": "Handles are 3–30 lowercase letters, digits, or underscores, and some words are reserved.",
-      "handle_taken": "That handle is already taken."
+      "handle_taken": "That handle is already taken.",
+      "handle_reserved": "While you have apps registered, your handle can’t say “Tela”: it’s shown beside them, and only Tela’s own apps may show that word."
     },
     "readingIntro": "How articles look and behave in Reading.",
     "textSize": "Text size",

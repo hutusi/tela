@@ -422,6 +422,43 @@ describe('what the name rule and the day’s count also hold', () => {
     expect((await goLive(dev, app.appId, false)).status).toBe(200)
   })
 
+  test('a developer can’t change their handle to one that says Tela while they hold an app', async () => {
+    const profile = (who: SignedIn, handle: string) =>
+      api.request('/api/v1/profile', { as: who, method: 'PUT', body: { handle } })
+    // Nobody's app yet: any valid handle is theirs to take.
+    expect((await profile(bo, 'tela_fan')).status).toBe(200)
+    const app = await registered(dev, { privacyUrl: 'https://loom.example/privacy' })
+    await goLive(dev, app.appId, true)
+    expect(await answer(await profile(dev, 'tela_official'))).toEqual([
+      400,
+      { error: 'handle_reserved' },
+    ])
+    expect((await profile(dev, 'loom_labs')).status).toBe(200)
+  })
+
+  test('a Live app keeps its privacy policy; in Testing it may drop it', async () => {
+    const app = await registered(dev, { privacyUrl: 'https://loom.example/privacy' })
+    await goLive(dev, app.appId, true)
+    expect(await answer(await edit(dev, app.appId, { privacyUrl: null }))).toEqual([
+      400,
+      { error: 'privacy_required' },
+    ])
+    expect((await goLive(dev, app.appId, false)).status).toBe(200)
+    expect((await edit(dev, app.appId, { privacyUrl: null })).status).toBe(200)
+  })
+
+  test('a review note may run over several lines', async () => {
+    const app = await registered(dev)
+    const res = await askReview(dev, app.appId, {
+      note: 'A desktop reader.\r\nIt syncs your subscriptions.',
+      wantsEmail: false,
+    })
+    expect(res.status).toBe(200)
+    expect(await row(app.appId)).toMatchObject({
+      review_note: 'A desktop reader.\nIt syncs your subscriptions.',
+    })
+  })
+
   test('the same review request again writes nothing', async () => {
     const app = await registered(dev)
     await askReview(dev, app.appId, { note: 'Please', wantsEmail: false })

@@ -51,11 +51,12 @@ Sign in to <https://telaread.com> and open **Settings → Developer**. Register 
 
 - its name, and who makes it (a person or a company). Only Tela's own apps may use the word
   "Tela" in either, and neither may hold invisible characters. Your Tela handle is shown beside an
-  unreviewed app, so a handle that says "Tela" can't register one either;
+  unreviewed app, so a handle that says "Tela" can't register one, and you can't change yours to one
+  while you hold an app;
 - a contact address that receives mail: changes to the API and anything about your app are sent
   there. Members never see it;
 - a homepage and a privacy policy, both `https://`. Members see both before they connect, and an
-  app needs its privacy policy before it goes Live;
+  app needs its privacy policy to go Live and to stay Live;
 - your redirect URIs (see [authorization.md](authorization.md#redirect-uris)): a loopback address
   such as `http://127.0.0.1/callback`, your own reverse-DNS scheme such as
   `com.example.reader:/callback`, or both;

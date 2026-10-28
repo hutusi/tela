@@ -930,7 +930,8 @@
     "viewProfile": "檢視個人頁",
     "errors": {
       "invalid_handle": "使用者名稱需為 3–30 個小寫字母、數字或底線，且不能使用保留詞。",
-      "handle_taken": "該使用者名稱已被佔用。"
+      "handle_taken": "該使用者名稱已被佔用。",
+      "handle_reserved": "你登記了應用程式時，使用者名稱裡不能有「Tela」：它會顯示在你的應用程式旁，只有 Tela 自己的應用程式能顯示這個詞。"
     },
     "readingIntro": "文章在「閱讀」裡的樣子和行為。",
     "textSize": "字級",

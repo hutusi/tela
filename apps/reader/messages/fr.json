@@ -930,7 +930,8 @@
     "viewProfile": "Voir le profil",
     "errors": {
       "invalid_handle": "Un identifiant compte 3 à 30 lettres minuscules, chiffres ou tirets bas, et certains mots sont réservés.",
-      "handle_taken": "Cet identifiant est déjà pris."
+      "handle_taken": "Cet identifiant est déjà pris.",
+      "handle_reserved": "Tant que vous avez des applications enregistrées, votre identifiant ne peut pas contenir « Tela » : il s’affiche à côté d’elles, et seules les applications de Tela peuvent afficher ce mot."
     },
     "readingIntro": "L’apparence et le comportement des articles dans Lecture.",
     "textSize": "Taille du texte",

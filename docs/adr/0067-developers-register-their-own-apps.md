@@ -20,7 +20,7 @@ and poor for phishing.
 **Any member in good standing registers apps in Settings → Developer,** with no account-age rule.
 - **What they get:** a `client_id` at once.
 - **How an app starts:** in **Testing**, where only its developer can connect it. Once it has a
-  privacy policy, they make it **Live** for everyone.
+  privacy policy, they make it **Live** for everyone, and a Live app keeps one.
 - **Their limits:** up to `apps.perMember` apps (5; admins exempt on the web), registered or
   edited at most 10 times a day.
 - **The developer rules** (`docs/api/policy.md`) are accepted at registration (`terms_at`).
@@ -50,7 +50,8 @@ removed and Cyrillic and Greek look-alikes read as Latin).
   bidirectional overrides, and blank fillers) are refused in a member's app name and developer
   name outright.
 - **Handles:** a member whose handle says "Tela" can't register an app or make one Live, because
-  the consent page shows their handle beside it.
+  the consent page shows their handle beside it; nor can a member who holds an app change their
+  handle to one that says it.
 - Members don't otherwise have name rules.
 
 **A developer's standing is their apps'.**

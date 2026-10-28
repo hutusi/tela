@@ -374,7 +374,7 @@ function Intro({ children }: { children: React.ReactNode }) {
 // ---------------------------------------------------------------------------------------------
 // Profile
 
-type SaveError = 'invalid_handle' | 'handle_taken'
+type SaveError = 'invalid_handle' | 'handle_taken' | 'handle_reserved'
 type SaveState = { saved: boolean; error: SaveError | null }
 
 function ProfileSection() {
@@ -565,7 +565,10 @@ function ProfileForm({
       } else {
         onState({
           saved: false,
-          error: body?.error === 'handle_taken' ? 'handle_taken' : 'invalid_handle',
+          error:
+            body?.error === 'handle_taken' || body?.error === 'handle_reserved'
+              ? body.error
+              : 'invalid_handle',
         })
       }
     } finally {

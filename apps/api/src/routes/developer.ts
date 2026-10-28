@@ -308,6 +308,10 @@ export function developerRoutes(deps: ApiDeps) {
     if (!state) return refuse(c, 'not_found', 404)
     if (state.status === 'suspended') return refuse(c, 'cut_off', 409)
     if (state.reported === 1) return refuse(c, 'reported', 409)
+    // A Live app keeps a privacy policy: the consent page links it, and Live needed one.
+    if (state.status === 'approved' && s.privacyUrl === null) {
+      return refuse(c, 'privacy_required', 400)
+    }
     const target = sql`id = ${id} and developer_id = ${member} and not ${holds}
       and status <> 'suspended' and not ${openReport('apps')}`
     const [, , rows] = (await db.batch([

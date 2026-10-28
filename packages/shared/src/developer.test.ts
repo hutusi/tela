@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { hasInvisible, mentionsTela, parseDeveloperApp } from './developer'
+import { hasInvisible, mentionsTela, parseDeveloperApp, parseReviewNote } from './developer'
 
 const SETTINGS = {
   name: 'Loom',
@@ -53,5 +53,16 @@ describe('the word only the operator may use (ADR 0067)', () => {
       field: 'name',
     })
     expect(parseDeveloperApp(SETTINGS).ok).toBe(true)
+  })
+})
+
+describe('a review note', () => {
+  test('keeps its line breaks, and nothing else a reader cannot see', () => {
+    expect(parseReviewNote('One.\r\nTwo.\n')).toBe('One.\nTwo.')
+    expect(parseReviewNote('   ')).toBeNull()
+    expect(parseReviewNote('Tab\there')).toBeUndefined()
+    expect(parseReviewNote('Zero\u200Bwidth')).toBeUndefined()
+    expect(parseReviewNote('x'.repeat(501))).toBeUndefined()
+    expect(parseReviewNote(5)).toBeUndefined()
   })
 })

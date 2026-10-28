@@ -15,7 +15,7 @@ import {
   restampTranslations,
   standingOk,
 } from '@tela/data'
-import { isTopic, isValidHandle } from '@tela/shared'
+import { isTopic, isValidHandle, mentionsTela } from '@tela/shared'
 import { sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import type { ApiEnv } from '../app'
@@ -37,6 +37,16 @@ export function memberRoutes(deps: ApiDeps) {
     if (body.handle !== undefined) {
       handle = String(body.handle).trim().toLowerCase()
       if (!isValidHandle(handle)) return c.json({ error: 'invalid_handle' }, 400)
+      // A developer's handle is what the consent page shows beside their unreviewed apps, so one
+      // that says "Tela" is theirs only while they hold none (ADR 0067); registering and going
+      // Live check the same thing from the other side.
+      if (mentionsTela(handle)) {
+        const holds = await first<{ x: number }>(
+          db,
+          sql`select 1 as x from apps where developer_id = ${member.id} limit 1`,
+        )
+        if (holds) return c.json({ error: 'handle_reserved' }, 400)
+      }
       sets.push(sql`handle = ${handle}`)
     }
     if (body.displayName !== undefined) {
