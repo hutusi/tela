@@ -456,6 +456,28 @@ describe('what the name rule and the day’s count also hold', () => {
   })
 })
 
+describe('the member’s export', () => {
+  test('lists the apps they registered, contact address and review request included', async () => {
+    const app = await registered(dev, { privacyUrl: 'https://loom.example/privacy' })
+    await askReview(dev, app.appId, { note: 'For readers of Loom', wantsEmail: true })
+    await goLive(dev, app.appId, true)
+    const res = await api.request('/api/v1/export', { as: dev })
+    expect(res.status).toBe(200)
+    const { registeredApps } = (await res.json()) as { registeredApps: Record<string, unknown>[] }
+    expect(registeredApps).toEqual([
+      expect.objectContaining({
+        clientId: app.clientId,
+        name: SETTINGS.name,
+        contactEmail: app.contactEmail,
+        status: 'live',
+        reviewed: false,
+        reviewNote: 'For readers of Loom',
+        redirectUris: app.redirectUris,
+      }),
+    ])
+  })
+})
+
 describe('the console’s history', () => {
   test('holds every change the member made, as theirs, and never the contact address', async () => {
     const app = await registered(dev, { privacyUrl: 'https://loom.example/privacy' })

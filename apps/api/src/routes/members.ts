@@ -299,6 +299,7 @@ export function memberRoutes(deps: ApiDeps) {
       joinedBy,
       reads,
       apps,
+      registered,
     ] = (await db.batch([
       db.all(sql`
         select p.handle, p.display_name as "displayName", p.bio, p.reading_lang as "readingLang",
@@ -404,6 +405,17 @@ export function memberRoutes(deps: ApiDeps) {
         from app_grants g join apps a on a.id = g.app_id
         where g.user_id = ${id} and g.ended_at is null order by g.created_at, g.id
       `),
+      // The apps they registered in Settings → Developer (ADR 0067), as Tela keeps them: the
+      // contact address and the review request included, which the Privacy page names.
+      db.all(sql`
+        select a.client_id as "clientId", a.name, a.developer, a.contact_email as "contactEmail",
+          a.homepage_url as "homepage", a.privacy_url as "privacyPolicy",
+          a.redirect_uris as "redirectUris", a.max_scope as "maxScope", a.status,
+          (a.reviewed_at is not null) as "reviewed", a.review_requested_at as "reviewRequestedAt",
+          a.review_note as "reviewNote", a.terms_at as "rulesAcceptedAt",
+          a.created_at as "registeredAt"
+        from apps a where a.developer_id = ${id} order by a.created_at, a.id
+      `),
     ] as never)) as unknown as Record<string, unknown>[][]
     const profile = profiles?.[0]
     const body = {
@@ -448,6 +460,13 @@ export function memberRoutes(deps: ApiDeps) {
       connectedApps: (apps ?? []).map(({ seesEmail, ...app }) => ({
         ...app,
         seesEmail: seesEmail === 1,
+      })),
+      registeredApps: (registered ?? []).map(({ redirectUris, reviewed, status, ...app }) => ({
+        ...app,
+        // Members read Testing, Live and Cut off; the stored names stay (ADR 0067).
+        status: status === 'draft' ? 'testing' : status === 'approved' ? 'live' : 'cutOff',
+        reviewed: reviewed === 1,
+        redirectUris: JSON.parse(String(redirectUris ?? '[]')),
       })),
     }
     return new Response(JSON.stringify(body, null, 2), {

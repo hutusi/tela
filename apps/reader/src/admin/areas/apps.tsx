@@ -237,7 +237,10 @@ export function useAppsArea(): AnyAreaSpec {
           return { app }
         }
         // A review starts from what the app may do now, or what its developer asked for.
-        if (action === 'app.review') return { allowEmail: row.allowEmail || row.reviewWantsEmail }
+        // …and names the version read, so an edit made since refuses it.
+        if (action === 'app.review') {
+          return { allowEmail: row.allowEmail || row.reviewWantsEmail, seen: row.updatedAt }
+        }
         return undefined
       },
       bulk: [],

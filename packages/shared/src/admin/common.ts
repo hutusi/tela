@@ -312,6 +312,8 @@ export type AdminActArgs = {
   app?: unknown
   /** `app.review`: whether the app may ask to see a member's email address from now on. */
   allowEmail?: boolean
+  /** `app.review`: the app's `updatedAt` as the console showed it; a later edit refuses it. */
+  seen?: number
 }
 
 export type AdminActRequest = {

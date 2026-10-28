@@ -65,6 +65,7 @@ const loom: AdminAppRow = {
   perAppPerMin: 0,
   maxConnections: null,
   createdAt: now - 30 * DAY,
+  updatedAt: now - 30 * DAY,
   approvedAt: now - 20 * DAY,
   suspendedAt: null,
   connections: 12,

@@ -53,6 +53,8 @@ export type AdminAppRow = AdminRowBase &
     status: AppStatus
     owner: AdminPerson | null
     createdAt: number
+    /** When it last changed, which a review names so it lands only on what the operator read. */
+    updatedAt: number
     approvedAt: number | null
     suspendedAt: number | null
     /** Members connected to it now. */

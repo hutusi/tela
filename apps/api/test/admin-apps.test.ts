@@ -385,6 +385,14 @@ describe('reviewing an app a member registered (ADR 0067)', () => {
     return { mara, id: String(app.id), asked }
   }
 
+  /** The app's `updatedAt` as the console shows it, which a review names (the version read). */
+  const seenOf = async (id: string) =>
+    (
+      await first<{ updated_at: number }>(
+        api.db,
+        sql`select updated_at from apps where id = ${Number(id)}`,
+      )
+    )?.updated_at ?? 0
   const reviewOf = (id: string) =>
     first<{
       reviewed_at: number | null
@@ -432,7 +440,11 @@ describe('reviewing an app a member registered (ADR 0067)', () => {
     ])
     expect(parseAct({ action: 'app.review', ids: [id], args: { allowEmail: 'yes' } })).toBeNull()
 
-    const reviewed = await act({ action: 'app.review', ids: [id], args: { allowEmail: true } })
+    const reviewed = await act({
+      action: 'app.review',
+      ids: [id],
+      args: { allowEmail: true, seen: await seenOf(id) },
+    })
     expect(reviewed.done).toEqual([id])
     expect(await reviewOf(id)).toEqual({
       reviewed_at: api.clock.now(),
@@ -446,7 +458,13 @@ describe('reviewing an app a member registered (ADR 0067)', () => {
     expect(row?.actions).toEqual(['app.edit', 'app.suspend'])
     // Reviewed already: nothing to change.
     expect(
-      (await act({ action: 'app.review', ids: [id], args: { allowEmail: false } })).failed,
+      (
+        await act({
+          action: 'app.review',
+          ids: [id],
+          args: { allowEmail: false, seen: await seenOf(id) },
+        })
+      ).failed,
     ).toEqual([{ id, error: 'not_applicable' }])
 
     expect((await undo(reviewed.undo?.group ?? '')).status).toBe(200)
@@ -459,9 +477,28 @@ describe('reviewing an app a member registered (ADR 0067)', () => {
     expect((await apps('review')).rows.map((r) => r.id)).toEqual([id])
   })
 
+  test('lands only on the version the operator read: an edit since refuses it', async () => {
+    const { id } = await marasApp({ wantsEmail: true })
+    const seen = await seenOf(id)
+    api.clock.advance(1000)
+    await api.db.run(sql`update apps set name = 'Harmless', updated_at = ${api.clock.now()}
+      where id = ${Number(id)}`)
+    expect(
+      (await act({ action: 'app.review', ids: [id], args: { allowEmail: true, seen } })).failed,
+    ).toEqual([{ id, error: 'not_applicable' }])
+    expect(
+      (await act({ action: 'app.review', ids: [id], args: { allowEmail: true } })).failed,
+    ).toEqual([{ id, error: 'invalid' }])
+    expect(await reviewOf(id)).toMatchObject({ reviewed_at: null, allow_email: 0 })
+  })
+
   test('an edit since stands in the way of undoing a review: both write the email', async () => {
     const { id } = await marasApp()
-    const reviewed = await act({ action: 'app.review', ids: [id], args: { allowEmail: false } })
+    const reviewed = await act({
+      action: 'app.review',
+      ids: [id],
+      args: { allowEmail: false, seen: await seenOf(id) },
+    })
     const row = (await get<AdminAppDetail>(`apps/${id}`)).app
     const edit = await act({
       action: 'app.edit',
@@ -502,7 +539,11 @@ describe('reviewing an app a member registered (ADR 0067)', () => {
 
     // Reviewed after a dismissal, the dismissal can no longer be undone.
     const again = await act({ action: 'app.dismissReview', ids: [id] })
-    await act({ action: 'app.review', ids: [id], args: { allowEmail: false } })
+    await act({
+      action: 'app.review',
+      ids: [id],
+      args: { allowEmail: false, seen: await seenOf(id) },
+    })
     expect((await undo(again.undo?.group ?? '')).status).toBe(409)
     const history = (await get<AdminAppDetail>(`apps/${id}`)).history.map((h) => h.action)
     expect(history.slice(0, 2)).toEqual(['app.review', 'app.dismissReview'])
@@ -514,7 +555,13 @@ describe('reviewing an app a member registered (ADR 0067)', () => {
     const listed = (await apps('review')).rows.find((r) => r.id === id)
     expect(listed?.actions).toEqual(['app.dismissReview', 'app.restore', 'app.edit'])
     expect(
-      (await act({ action: 'app.review', ids: [id], args: { allowEmail: false } })).failed,
+      (
+        await act({
+          action: 'app.review',
+          ids: [id],
+          args: { allowEmail: false, seen: await seenOf(id) },
+        })
+      ).failed,
     ).toEqual([{ id, error: 'not_applicable' }])
   })
 

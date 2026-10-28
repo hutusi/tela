@@ -69,6 +69,7 @@ type AppRaw = {
   per_app_per_min: number | null
   max_connections: number | null
   created_at: number
+  updated_at: number
   approved_at: number | null
   suspended_at: number | null
   connections: number
@@ -94,7 +95,8 @@ const appSelect = sql`
   select a.id, a.client_id, a.name, a.developer, a.contact_email, a.homepage_url, a.privacy_url,
     a.redirect_uris, a.max_scope, a.allow_email, a.status, a.owner_user_id,
     op.handle as owner_handle, op.display_name as owner_name, a.per_member_per_min,
-    a.per_app_per_min, a.max_connections, a.created_at, a.approved_at, a.suspended_at,
+    a.per_app_per_min, a.max_connections, a.created_at, a.updated_at, a.approved_at,
+    a.suspended_at,
     (select count(*) from app_grants g where g.app_id = a.id and g.ended_at is null) as connections,
     (select max(g.last_used_at) from app_grants g where g.app_id = a.id) as last_used_at,
     a.developer_id, dp.handle as developer_handle, dp.display_name as developer_name, a.terms_at,
@@ -169,6 +171,7 @@ export function toApp(r: AppRaw): AdminAppRow {
     perAppPerMin: r.per_app_per_min,
     maxConnections: r.max_connections,
     createdAt: r.created_at,
+    updatedAt: r.updated_at,
     approvedAt: r.approved_at,
     suspendedAt: r.suspended_at,
     connections: r.connections,
@@ -605,6 +608,9 @@ const review: ActHandler = async (ctx, id, args) => {
   const appId = appOf(id)
   if (appId === null) return 'not_found'
   if (typeof args.allowEmail !== 'boolean') return 'invalid'
+  // The version the operator read: a developer who edited the app since, its name or its
+  // redirects, would otherwise have the review land on what nobody looked at.
+  if (typeof args.seen !== 'number') return 'invalid'
   const { db } = ctx.deps
   const to: Review = {
     reviewedAt: ctx.now,
@@ -612,7 +618,8 @@ const review: ActHandler = async (ctx, id, args) => {
     reviewRequestedAt: null,
     allowEmail: args.allowEmail,
   }
-  const target = sql`id = ${appId} and reviewed_at is null and status <> 'suspended'`
+  const target = sql`id = ${appId} and reviewed_at is null and status <> 'suspended'
+    and updated_at = ${args.seen}`
   const results = await runBatch(db, [
     audit(
       db,
