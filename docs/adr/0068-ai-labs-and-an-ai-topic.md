@@ -46,7 +46,11 @@ the one that repeats Research most (10 shared posts of 476). OpenAI is listed al
 posts may stay excerpts: if Tela's fetches from Cloudflare are refused as the test was, a member
 reads the summary and opens the post on openai.com. Tela does not try to get past a site's bot
 wall. Left out: NVIDIA's blog (the whole company's news), Meta AI and xAI (nothing in 30 days, and
-x.ai refuses bots) and Qwen (quiet since 2025-08).
+x.ai refuses bots), Qwen (quiet since 2025-08), and Microsoft Research, whose host,
+`www.microsoft.com`, is also the Security blog's: a blog is an origin, so a member who subscribed
+to that would put its posts under the lab and the AI chip, and with more posts it would become the
+lab's Subscribe (CodeRabbit's review). A lab on a host its company's other blogs share waits until
+Tela can tell blogs apart by path.
 
 **Add finds a listed blog's feeds from the blog's address.** When discovery finds nothing at a
 URL, or cannot reach it, it answers with the live feeds of the blog at that URL's origin (with or
@@ -111,7 +115,5 @@ can name, in Discover's order, as the dashboard already did, so the next topic n
 - Copies of a post are taken to share its date and language when recommendations are gathered:
   a recommended post is listed as its first copy, whose date and language a filter then reads.
 - A member subscribed to two overlapping feeds still sees the shared post twice in their own list.
-- Every feed from `www.microsoft.com` joins the Microsoft Research blog, as any feed joins the blog
-  at its home's origin.
 - A lab could claim its blog. Verification would then move the third-party feeds off it
   (ADR 0011), leaving the lab to publish a feed of its own, which is the outcome to want.

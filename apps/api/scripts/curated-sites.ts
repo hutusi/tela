@@ -136,9 +136,11 @@ export const CURATED_SITES = [
   // on 2026-10-29: blogs one person writes, posted in the 60 days before, whose feed Tela reads.
   // Left out: what is not a person's blog (neal.fun, companies, news sites), rachelbythebay.com
   // (it drops Cloudflare's connections), tedunangst.com (its certificate does not verify),
-  // xeiaso.net (its robots.txt says `ai-input=no`, and Tela translates with a model), newsletters
-  // on a shared host (buttondown.com, world.hey.com: a blog is an origin), the politics and
-  // economics newsletters and the paywalled ones (the owner's call), and anything quiet 60 days.
+  // xeiaso.net (its robots.txt says `ai-input=no`, and Tela translates with a model), blogs on a
+  // host other blogs share (buttondown.com, world.hey.com, and The Old New Thing on
+  // devblogs.microsoft.com, beside the TypeScript and .NET blogs: a blog is an origin, so they
+  // would be one blog), the politics and economics newsletters and the paywalled ones (the
+  // owner's call), and anything quiet 60 days.
   {
     feedUrl: 'https://www.seangoedecke.com/rss.xml',
     topics: ['tech', 'ai'],
@@ -213,11 +215,6 @@ export const CURATED_SITES = [
   { feedUrl: 'https://www.johndcook.com/blog/feed/', topics: ['science', 'tech'] },
   { feedUrl: 'https://terrytao.wordpress.com/feed/', topics: ['science'], title: 'Terence Tao' },
   { feedUrl: 'https://shkspr.mobi/blog/feed/atom/', topics: ['tech', 'essays'] },
-  {
-    feedUrl: 'https://devblogs.microsoft.com/oldnewthing/feed',
-    topics: ['tech'],
-    note: 'Raymond Chen. Any other devblogs.microsoft.com feed would join this blog',
-  },
   { feedUrl: 'https://www.astralcodexten.com/feed', topics: ['essays', 'science'] },
   {
     feedUrl: 'https://utcc.utoronto.ca/~cks/space/blog/?atom',
@@ -586,7 +583,9 @@ export const CURATED_SITES = [
   // under the lab's blog and Add finds it from the lab's address. Never rsshub.app: it refuses
   // feed readers and says it is for testing. Left out on 2026-10-28: NVIDIA's (the whole
   // company's news), Meta AI's and xAI's (nothing in 30 days; x.ai answers bots 403), Qwen's
-  // (quiet since 2025-08).
+  // (quiet since 2025-08), and on 2026-10-29 Microsoft Research's: www.microsoft.com is also the
+  // Security blog's host, and a blog is an origin, so a member's subscription to it would join
+  // the lab under AI and could take its Subscribe.
   {
     feedUrl: 'https://openai.com/news/rss.xml',
     topics: ['ai'],
@@ -596,12 +595,6 @@ export const CURATED_SITES = [
   { feedUrl: 'https://deepmind.google/blog/rss.xml', topics: ['ai'], title: 'Google DeepMind' },
   { feedUrl: 'https://research.google/blog/rss/', topics: ['ai'], title: 'Google Research' },
   { feedUrl: 'https://huggingface.co/blog/feed.xml', topics: ['ai'], title: 'Hugging Face' },
-  {
-    feedUrl: 'https://www.microsoft.com/en-us/research/feed/',
-    topics: ['ai'],
-    title: 'Microsoft Research',
-    note: 'Files under www.microsoft.com, so any other feed from that host joins this blog',
-  },
   { feedUrl: 'https://mistral.ai/news/rss', topics: ['ai'], title: 'Mistral AI' },
   {
     feedUrl:
