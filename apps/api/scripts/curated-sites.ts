@@ -143,11 +143,10 @@ export const CURATED_SITES = [
   // Left out: what is not a person's blog (neal.fun, companies, news sites), rachelbythebay.com
   // (it drops Cloudflare's connections), brooker.co.za (unreachable from production twice on
   // 2026-10-29, though it answers elsewhere), tedunangst.com (its certificate does not verify),
-  // xeiaso.net (its robots.txt says `ai-input=no`, and Tela translates with a model), blogs on a
-  // host other blogs share (buttondown.com, world.hey.com, and The Old New Thing on
-  // devblogs.microsoft.com, beside the TypeScript and .NET blogs: a blog is an origin, so they
-  // would be one blog), the politics and economics newsletters and the paywalled ones (the
-  // owner's call), and anything quiet 60 days.
+  // xeiaso.net (its robots.txt says `ai-input=no`, and Tela translates with a model), the
+  // politics and economics newsletters and the paywalled ones (the owner's call), and anything
+  // quiet 60 days. The blogs on a host other blogs share came in once a blog could be a path
+  // there (ADR 0069), at the end of this group.
   {
     feedUrl: 'https://www.seangoedecke.com/rss.xml',
     topics: ['tech', 'ai'],
@@ -227,6 +226,19 @@ export const CURATED_SITES = [
     topics: ['tech'],
     title: 'Chris Siebenmann',
     note: 'Rate-limits a client that asks too often (429)',
+  },
+  // On a host other blogs share, each its writer's path (`BLOG_RULES`, ADR 0069), checked
+  // 2026-10-30.
+  { feedUrl: 'https://devblogs.microsoft.com/oldnewthing/feed', topics: ['tech'] },
+  {
+    feedUrl: 'https://buttondown.com/hillelwayne/rss',
+    topics: ['tech'],
+    note: "Hillel Wayne's newsletter, apart from hillelwayne.com",
+  },
+  {
+    feedUrl: 'https://world.hey.com/dhh/feed.atom',
+    topics: ['tech', 'essays'],
+    title: 'David Heinemeier Hansson',
   },
 
   // 简体中文
@@ -589,9 +601,11 @@ export const CURATED_SITES = [
   // under the lab's blog and Add finds it from the lab's address. Never rsshub.app: it refuses
   // feed readers and says it is for testing. Left out on 2026-10-28: NVIDIA's (the whole
   // company's news), Meta AI's and xAI's (nothing in 30 days; x.ai answers bots 403), Qwen's
-  // (quiet since 2025-08), and on 2026-10-29 Microsoft Research's: www.microsoft.com is also the
-  // Security blog's host, and a blog is an origin, so a member's subscription to it would join
-  // the lab under AI and could take its Subscribe.
+  // (quiet since 2025-08). A lab's section that is a blog of its own is a path on the lab's host
+  // (`BLOG_RULES`, ADR 0069): Microsoft Research beside the Security blog on www.microsoft.com,
+  // and Anthropic's Research and Engineering, which were one blog until 2026-10-30. Their `home`
+  // moves the feeds Tela had filed under the lab: Engineering's first, so Research, which keeps
+  // the blog that was Anthropic's, its readers and its address, is the last to leave.
   {
     feedUrl: 'https://openai.com/news/rss.xml',
     topics: ['ai'],
@@ -604,16 +618,31 @@ export const CURATED_SITES = [
   { feedUrl: 'https://mistral.ai/news/rss', topics: ['ai'], title: 'Mistral AI' },
   {
     feedUrl:
-      'https://raw.githubusercontent.com/Olshansk/rss-feeds/main/feeds/feed_anthropic_research.xml',
+      'https://raw.githubusercontent.com/Olshansk/rss-feeds/main/feeds/feed_anthropic_engineering.xml',
     topics: ['ai'],
-    title: 'Anthropic',
-    note: 'Kept by github.com/Olshansk/rss-feeds, as Engineering is. Not News: it repeats Research',
+    title: 'Anthropic Engineering',
+    home: 'https://www.anthropic.com/engineering',
+    note: 'Kept by github.com/Olshansk/rss-feeds, as Research is',
   },
   {
     feedUrl:
-      'https://raw.githubusercontent.com/Olshansk/rss-feeds/main/feeds/feed_anthropic_engineering.xml',
+      'https://raw.githubusercontent.com/Olshansk/rss-feeds/main/feeds/feed_anthropic_research.xml',
     topics: ['ai'],
-    title: 'Anthropic',
+    title: 'Anthropic Research',
+    home: 'https://www.anthropic.com/research',
+    note: 'Not News: it repeats Research',
+  },
+  {
+    feedUrl: 'https://www.microsoft.com/en-us/research/feed/',
+    topics: ['ai'],
+    title: 'Microsoft Research',
+  },
+  {
+    feedUrl:
+      'https://raw.githubusercontent.com/Olshansk/rss-feeds/main/feeds/feed_openai_developer.xml',
+    topics: ['ai'],
+    title: 'OpenAI Developers',
+    note: "developers.openai.com's own rss.xml stopped on 2026-05-05 and lists its docs too",
   },
   {
     feedUrl: 'https://raw.githubusercontent.com/Olshansk/rss-feeds/main/feeds/feed_cohere.xml',
