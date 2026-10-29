@@ -6,8 +6,9 @@ and announced.
 ## 2026-10-28 (later)
 
 - **Discovery finds a listed blog's feeds from the blog's address.** When an address declares no
-  feed, `POST /v1/feeds/discover` may answer with the feeds of the blog there that Tela lists in
-  Discover, which can live on another host. The format did not change.
+  feed, is not a feed, or cannot be reached, `POST /v1/feeds/discover` may answer with the live
+  feeds of the blog at its origin that Tela lists in Discover, which can live on another host, in
+  place of the error (`not_a_feed`, `unreachable`) it gave before. The format did not change.
 - **A tenth topic, `ai`.** `topics` and the `topic` filter of `/v1/discover/articles` and
   `/v1/discover/blogs` may carry it. Topics were always an open set of strings.
 
