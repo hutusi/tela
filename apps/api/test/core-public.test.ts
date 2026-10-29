@@ -167,6 +167,28 @@ describe('a blog read through overlapping feeds (ADR 0068)', () => {
     expect(week.recommended.map((p) => [p.article.id, p.weekRecs])).toEqual([[first, 2]])
   })
 
+  test('a recommendation of a duplicate left on a merged feed ranks nothing', async () => {
+    await lab()
+    const now = api.clock.now()
+    // Feed 13 turned out to be another address for Research (ADR 0028): paused, merged into 12,
+    // its copy of "proteins" left behind as a duplicate, which a member had recommended.
+    await db.batch([
+      bumpSeq(db),
+      db.run(sql`insert into feeds (id, site_id, feed_url, host, status, merged_into,
+          next_fetch_at, created_at, updated_at, seq)
+        values (13, 1, 'https://lab.example/research.xml', 'lab.example', 'paused', 12, 0, 0, 0,
+          ${currentSeq})`),
+      db.run(sql`insert into articles (feed_id, dedup_key, url, title, title_hash, fetched_at,
+          sort_at, source_lang, content_key, seq)
+        values (13, 'proteins', 'https://lab.example/research/proteins', 'proteins', 'h-proteins',
+          0, ${now - 2000}, 'en', 'c13-proteins', ${currentSeq})`),
+    ] as never)
+    await db.run(sql`insert into recommendations (user_id, article_id, created_at, updated_at)
+      select ${reader.userId}, id, ${now}, ${now} from articles where feed_id = 13`)
+    expect((await readDiscover(deps(), 'articles')).recommended).toEqual([])
+    expect((await readDiscover(deps(), 'week')).recommended).toEqual([])
+  })
+
   test('a post both feeds hold is shown once, as the feed that stored it first has it', async () => {
     await lab()
     const shown = ['verification', 'proteins', 'agents', 'source-control']

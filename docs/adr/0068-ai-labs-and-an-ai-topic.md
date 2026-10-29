@@ -1,6 +1,6 @@
 # 0068 — AI labs in Discover, under an AI topic
 
-Status: accepted (2026-10-28, amended 2026-10-29 after two rounds of Codex's review). An exception to the curated
+Status: accepted (2026-10-28, amended 2026-10-29 after three rounds of Codex's review). An exception to the curated
 list's rule that Discover holds independent blogs written by people (ADR 0018's editorial door);
 adds a tenth topic, and changes which of a blog's feeds Subscribe adds.
 
@@ -83,7 +83,9 @@ one post to its readers too: a recommendation of either copy is the post's, so D
 recommended lists its first copy, counted by everyone who recommended either (`FIRST_COPY`), and
 every public post names the readers of both (`postExtras`). Listed as the copy recommended, the
 post came twice in Articles' default sort, once recommended and once among the newest (Codex's
-second review).
+second review). A recommendation of a duplicate a merge left on its alias still counts for
+nothing: a merge carries reads to the target, not recommendations (ADR 0028), so gathering it would
+rank a post on a vote it never shows (Codex's third review).
 
 **`MIN_CLIENT` goes to 7.** A protocol-6 shell renders a blog's topics by their key and would show
 "topics.ai" on the blog's page. From 7 the blog page and the console show only topics the build

@@ -179,13 +179,17 @@ function discoverPost(row: Row): DiscoverPost {
  * the newest; `filters` narrows them further, over `articles a` and `sites s`. A post two of its
  * blog's feeds hold is one post, by as many readers as recommended either copy, listed as its
  * first copy, as the newest posts list it (ADR 0068): listed as the copy recommended, it would
- * come twice in Articles, here and among the newest.
+ * come twice in Articles, here and among the newest. A recommendation of a duplicate left on a
+ * merged feed counts for nothing, as before: a merge carries reads to the target, not
+ * recommendations (ADR 0028), and `postExtras` would not name its reader, so the post would rank
+ * on a vote it never shows.
  */
 const recommendedStatement = (now: number, since: number, filters: SQL, limit: number) => sql`
   select ${PUBLIC_ARTICLE_COLUMNS}, ${TITLES}, ${EXCERPTS}, ${POST_SITE}, ${postExtras(since)}
   from (select ${FIRST_COPY} as article_id, count(distinct rr.user_id) as n
         from recommendations rr join profiles rp on rp.user_id = rr.user_id
-        join articles xa on xa.id = rr.article_id join feeds xf on xf.id = xa.feed_id
+        join articles xa on xa.id = rr.article_id
+        join feeds xf on xf.id = xa.feed_id and xf.merged_into is null
         where rr.deleted_at is null and rr.created_at >= ${since} and rr.created_at <= ${now}
           and ${standingOk('rp')}
         group by 1) w
