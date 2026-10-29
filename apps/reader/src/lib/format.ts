@@ -105,6 +105,20 @@ export function displayHost(input: string): string {
   }
 }
 
+/**
+ * A blog's address for display, from its home: the host without `www.`, and for a blog by path
+ * the path too (`world.hey.com/dhh`, `anthropic.com/research`), so two blogs on one host are told
+ * apart (ADR 0069). For a feed's or a post's address, `displayHost`.
+ */
+export function blogAddress(homeUrl: string): string {
+  try {
+    const url = new URL(homeUrl)
+    return url.hostname.replace(/^www\./, '') + url.pathname.replace(/\/+$/, '')
+  } catch {
+    return homeUrl
+  }
+}
+
 /** The public bucket favicons are served from (the jobs Worker fills it). */
 const ASSETS_BASE = (import.meta.env?.VITE_ASSETS_URL ?? 'https://assets.telaread.com').replace(
   /\/+$/,

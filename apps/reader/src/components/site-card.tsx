@@ -1,7 +1,7 @@
 import { languageBadge } from '@tela/shared'
 import { Link } from 'react-router'
 import { useTranslations } from 'use-intl'
-import { cadenceKey, displayHost } from '../lib/format'
+import { blogAddress, cadenceKey } from '../lib/format'
 import type { DiscoverSite, MemberControls } from '../views/types'
 
 /** Discover knows everything about a blog; search knows less, and the card shows what there is. */
@@ -35,7 +35,7 @@ export function SiteCard({
 }) {
   const t = useTranslations('discover')
   const ts = useTranslations('site')
-  const title = site.title ?? displayHost(site.homeUrl)
+  const title = site.title ?? blogAddress(site.homeUrl)
   const subscribed = site.feedId !== null && member?.isSubscribed(site.feedId) === true
   return (
     <div
@@ -68,7 +68,7 @@ export function SiteCard({
               </span>
             ) : null}
           </div>
-          <div className="truncate text-[12.5px] text-muted">{displayHost(site.homeUrl)}</div>
+          <div className="truncate text-[12.5px] text-muted">{blogAddress(site.homeUrl)}</div>
         </div>
         {site.primaryLang ? (
           <span className="rounded border border-line px-1.5 py-px text-[11px] text-muted">

@@ -39,6 +39,11 @@ describe('suggestHandle', () => {
     // A label that names a language or region edition is no one's name.
     expect(suggestHandle('胡涂说', 'tw.hutusi.com')).toBe('hutusi')
     expect(suggestHandle('', 'fr.example.org')).toBe('example')
+    // On a host many writers share, the writer's path is theirs (ADR 0069).
+    expect(suggestHandle('', 'world.hey.com/dhh')).toBe('dhh')
+    expect(suggestHandle('胡涂说', 'https://buttondown.com/hillel-wayne/archive')).toBe(
+      'hillel_wayne',
+    )
   })
 
   test('suggests nothing it could not use', () => {

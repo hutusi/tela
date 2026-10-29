@@ -15,7 +15,7 @@ import { DEFAULT_UI_LOCALE, type UiLocale } from '@tela/shared'
 import { createTranslator } from 'use-intl'
 import { MESSAGES } from '../src/i18n'
 import { type FeedRoute, feedPageHref, feedSelfHref } from '../src/lib/feed-href'
-import { displayHost } from '../src/lib/format'
+import { blogAddress } from '../src/lib/format'
 
 /** A blog as tela-api lists it in a feed (`FeedBlog` in `apps/api/src/routes/public-feeds.ts`). */
 export type FeedBlog = { siteId: number; name: string | null; homeUrl: string; feedUrl: string }
@@ -67,7 +67,7 @@ export function feedTitle(
 
 const web = (url: unknown): url is string => typeof url === 'string' && /^https?:\/\//i.test(url)
 
-const blogName = (b: FeedBlog) => b.name || displayHost(b.homeUrl)
+const blogName = (b: FeedBlog) => b.name || blogAddress(b.homeUrl)
 
 function items(posts: FeedPost[] | undefined, hl: string | null): RssItem[] {
   return (posts ?? [])

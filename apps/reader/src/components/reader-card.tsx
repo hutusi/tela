@@ -5,7 +5,7 @@
  */
 import { Link } from 'react-router'
 import { useTranslations } from 'use-intl'
-import { displayHost } from '../lib/format'
+import { blogAddress } from '../lib/format'
 import { publicTitle } from '../lib/public-title'
 import type { ReaderReason, Suggestion } from '../lib/suggest-readers'
 import { PostLink } from '../views/post-link'
@@ -13,7 +13,7 @@ import type { MemberControls, ReaderPost, Reading } from '../views/types'
 import { FollowButton } from './follow-button'
 import { PersonAvatar } from './person-avatar'
 
-const blogOf = (p: ReaderPost) => p.site.title ?? displayHost(p.site.homeUrl)
+const blogOf = (p: ReaderPost) => p.site.title ?? blogAddress(p.site.homeUrl)
 
 /** Why a reader is suggested, in the member's words for it. */
 export function useReasonText(): (reason: ReaderReason, reading: Reading) => string {

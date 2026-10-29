@@ -9,6 +9,7 @@
 
 import type { ArticleRow, Mutation, SiteRow } from '@tela/sync'
 import { applyMutation, HORIZON_DAYS, type Tables, titleKey, translationKey } from '@tela/sync'
+import { blogAddress } from '../lib/format'
 import type { Person } from '../views/types'
 
 export type Filter = 'all' | 'today' | 'liked'
@@ -156,14 +157,6 @@ export const isLiked = (t: Tables, articleId: number) => t.states.get(articleId)
 export const isRecommended = (t: Tables, articleId: number) =>
   t.recommendations.get(articleId)?.deletedAt === null
 
-const host = (url: string) => {
-  try {
-    return new URL(url).hostname.replace(/^www\./, '')
-  } catch {
-    return url
-  }
-}
-
 export function siteOfFeed(t: Tables, feedId: number): SiteRow | undefined {
   const feed = t.feeds.get(feedId)
   return feed ? t.sites.get(feed.siteId) : undefined
@@ -180,7 +173,7 @@ export function feedTitle(t: Tables, feedId: number): string {
   const site = feed ? t.sites.get(feed.siteId) : undefined
   const sibling = feed !== undefined && (feedsOfSite(t.feeds).get(feed.siteId) ?? 0) > 1
   const name = sibling ? (feed?.title ?? site?.title) : (site?.title ?? feed?.title)
-  return name ?? (site ? host(site.homeUrl) : '')
+  return name ?? (site ? blogAddress(site.homeUrl) : '')
 }
 
 const siteCounts = new WeakMap<Tables['feeds'], Map<number, number>>()

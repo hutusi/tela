@@ -10,7 +10,7 @@ import { Link } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { type PostReason, postReason } from '../lib/discover-overlay'
 import { bylineName } from '../lib/edition'
-import { displayHost, relativeTime, swatchColor } from '../lib/format'
+import { blogAddress, relativeTime, swatchColor } from '../lib/format'
 import { publicExcerpt, publicTitle } from '../lib/public-title'
 import { PostLink } from '../views/post-link'
 import type { DiscoverPost, MemberControls, Person, PublicArticle, Reading } from '../views/types'
@@ -29,7 +29,7 @@ export type DiscoverPostProps = {
   followed: readonly Person[]
 }
 
-const blogName = (post: DiscoverPost) => post.site.title ?? displayHost(post.site.homeUrl)
+const blogName = (post: DiscoverPost) => post.site.title ?? blogAddress(post.site.homeUrl)
 const personName = (p: Person) => p.displayName ?? `@${p.handle}`
 
 /** The language a title shows in: the reader's when `publicTitle` gave its translation. */

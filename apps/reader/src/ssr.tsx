@@ -40,7 +40,7 @@ import { NOTHING_HIDDEN } from './lib/discover-overlay'
 import { type ComposedWeek, composeWeek } from './lib/discover-week'
 import { FRONT_PATH, frontHref, type TitlesMode, titlesMode } from './lib/edition'
 import { blogrollFeedHref, discoverFeedHref } from './lib/feed-href'
-import { displayHost } from './lib/format'
+import { blogAddress } from './lib/format'
 import { headTags, inScript, type PageHead } from './lib/head'
 import { suggestReaders } from './lib/suggest-readers'
 import { NotFoundPage } from './pages/not-found'
@@ -317,7 +317,7 @@ function headOf(
         : route.kind === 'blogs'
           ? (data as DiscoverData).sites.map((s) => ({
               url: `${origin}/s/${s.id}`,
-              name: s.title ?? displayHost(s.homeUrl),
+              name: s.title ?? blogAddress(s.homeUrl),
             }))
           : route.kind === 'blogrolls'
             ? ((data as BlogrollsData).blogrolls ?? []).map((b) => ({
@@ -344,7 +344,7 @@ function headOf(
   }
   if (route.kind === 'site') {
     const { site, posts } = siteDataOf(data as SiteData)
-    const name = site.title ?? displayHost(site.homeUrl)
+    const name = site.title ?? blogAddress(site.homeUrl)
     const published = posts.filter((a) => a.url).slice(0, BLOG_POSTS)
     return {
       title: name,
@@ -396,7 +396,7 @@ function headOf(
         mainEntity: itemList(
           blogs.map((b) => ({
             url: b.listed ? `${origin}/s/${b.siteId}` : b.homeUrl,
-            name: b.name ?? displayHost(b.homeUrl),
+            name: b.name ?? blogAddress(b.homeUrl),
           })),
         ),
       },

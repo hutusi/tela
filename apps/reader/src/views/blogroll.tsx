@@ -19,7 +19,7 @@ import { ReportLink } from '../components/report-link'
 import { SiteAvatar } from '../components/site-avatar'
 import { daysAgo } from '../lib/days'
 import { blogrollFeedHref } from '../lib/feed-href'
-import { displayHost, relativeFormat, shortDate } from '../lib/format'
+import { blogAddress, relativeFormat, shortDate } from '../lib/format'
 import { outboundRel } from './post-link'
 import type { BlogrollBlog, BlogrollData, MemberControls, Person } from './types'
 
@@ -252,7 +252,7 @@ function BlogRow({
   const td = useTranslations('discover')
   const ts = useTranslations('site')
   const tf = useTranslations('settings.folders')
-  const host = blog.homeUrl ? displayHost(blog.homeUrl) : ''
+  const host = blog.homeUrl ? blogAddress(blog.homeUrl) : ''
   const name = blog.name ?? host
   const meta = [
     host,

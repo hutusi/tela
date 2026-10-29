@@ -542,6 +542,7 @@
     "optionGitHubUnlinked": "如果你的部落格和 GitHub 主頁已經互相連結，就什麼都不用加：先在<link>設定</link>裡把 GitHub 連結到你的 Tela 帳號，再回來驗證。",
     "optionRelMe": "指向你 Tela 個人頁的連結",
     "optionRelMeHint": "把它放在部落格的頁頭或頁尾。已有的連結也可以：帶 rel=\"me\" 的放在首頁任何位置都行；不帶的，需要放在 404 頁面也會顯示的頁頭或頁尾裡。",
+    "optionRelMeHintShared": "把它放在你部落格的頁面上。在與其他部落格共用的網站上，只有帶 rel=\"me\" 的連結才算數，放在這個頁面的任何位置都行：網站的其他部分屬於其上的所有部落格。",
     "optionMeta": "meta 標籤",
     "optionMetaHint": "放在首頁的 <head> 中。驗證完成後可以刪除。",
     "verify": "驗證",

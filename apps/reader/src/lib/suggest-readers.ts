@@ -7,7 +7,7 @@
 import type { Tables } from '@tela/sync'
 import { shownTitle } from '../store/selectors'
 import type { ReaderCandidate, ReaderPost, Reading } from '../views/types'
-import { displayHost } from './format'
+import { blogAddress } from './format'
 
 export type ReaderGroup = 'shared' | 'blogs' | 'early' | 'notes' | 'active'
 
@@ -63,7 +63,7 @@ export function mineOf(tables: Tables, excluded: ReadonlySet<string>, reading: R
     },
     blogOf(siteId) {
       const s = tables.sites.get(siteId)
-      return s ? (s.title ?? displayHost(s.homeUrl)) : null
+      return s ? (s.title ?? blogAddress(s.homeUrl)) : null
     },
   }
 }

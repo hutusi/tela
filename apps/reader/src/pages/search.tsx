@@ -7,7 +7,7 @@ import { LoadFailed } from '../components/load-failed'
 import { SearchField } from '../components/search-field'
 import { SiteAvatar } from '../components/site-avatar'
 import { SiteCard, type SiteCardData } from '../components/site-card'
-import { displayHost, relativeTime } from '../lib/format'
+import { blogAddress, relativeTime } from '../lib/format'
 import { readingHref } from '../lib/href'
 import { useMemberControls } from '../lib/member'
 import { readingPrefsOf } from '../lib/prefs'
@@ -214,8 +214,8 @@ function SiteRow({
   next: string
 }) {
   const t = useTranslations('discover')
-  const title = site.title ?? displayHost(site.homeUrl)
-  const host = displayHost(site.homeUrl)
+  const title = site.title ?? blogAddress(site.homeUrl)
+  const host = blogAddress(site.homeUrl)
   const subscribed = site.feedId !== null && member?.isSubscribed(site.feedId) === true
   return (
     <div

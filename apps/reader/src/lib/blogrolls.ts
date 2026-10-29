@@ -6,7 +6,7 @@
 import { MAX_BLOGROLL_BLOGS, MAX_BLOGROLLS } from '@tela/shared'
 import type { BlogrollBlogRow, BlogrollRow, Tables } from '@tela/sync'
 import type { MutationInput } from '../store/local'
-import { displayHost } from './format'
+import { blogAddress } from './format'
 
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
 /** 62 × 4: a byte from here up would favour the alphabet's first characters, so it is skipped. */
@@ -117,7 +117,7 @@ export function blogsCounted(
 
 /** A blog as a sentence names it: its name, else its blog's host. */
 export const blogLabel = (blog: { name: string | null; homeUrl: string }) =>
-  blog.name ?? displayHost(blog.homeUrl)
+  blog.name ?? blogAddress(blog.homeUrl)
 
 /** Whether the member follows a feed now. */
 const follows = (t: Pick<Tables, 'subscriptions'>, feedId: number) =>

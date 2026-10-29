@@ -542,6 +542,7 @@
     "optionGitHubUnlinked": "If your blog and your GitHub profile already link to each other, there is nothing to add: link GitHub to your Tela account in <link>Settings</link>, then come back.",
     "optionRelMe": "A link to your Tela profile",
     "optionRelMeHint": "Put this in your blog's header or footer. A link you already have works too: with rel=\"me\" anywhere on the home page; without it, only in a header or footer that your blog's 404 page shows as well.",
+    "optionRelMeHintShared": "Put this on your blog's page. On a host other blogs share, only a link with rel=\"me\" counts, anywhere on that page: the rest of the host belongs to every blog on it.",
     "optionMeta": "A meta tag",
     "optionMetaHint": "Put this in the <head> of your home page. You can remove it after verification.",
     "verify": "Verify",

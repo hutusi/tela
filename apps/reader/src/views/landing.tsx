@@ -13,7 +13,7 @@ import { useTranslations } from 'use-intl'
 import { type DoorRequest, opensSheet, useFrontDoor } from '../components/front-door'
 import { SiteFooter } from '../components/site-footer'
 import { bylineName, editionTitles, frontHref, pickLead, type TitlesMode } from '../lib/edition'
-import { displayHost, relativeTime, swatchColor } from '../lib/format'
+import { blogAddress, relativeTime, swatchColor } from '../lib/format'
 import { nameIn } from '../lib/language-name'
 import { PostLink } from './post-link'
 import type { FrontData, FrontPost, MemberControls } from './types'
@@ -247,7 +247,7 @@ function PostCard({
   const t = useTranslations('front')
   const { article, site, claimant } = post
   const shown = editionTitles(article, titles, reading, locale)
-  const source = site.title ?? displayHost(site.homeUrl)
+  const source = site.title ?? blogAddress(site.homeUrl)
   // Who wrote it, beside the blog: the member who claimed it, linked to their card, or the feed's
   // own byline on the lead, which has the room.
   const author = lead ? bylineName(article.author, source) : null

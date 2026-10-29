@@ -3,7 +3,7 @@
  * handle may hold, or for a name with nothing Latin in it (a CJK name), their blog's own name.
  * Only a suggestion: tela-api says whether it is free, and the member can change it in Settings.
  */
-import { HANDLE, isValidHandle } from '@tela/shared'
+import { HANDLE, isValidHandle, siteKeyOf } from '@tela/shared'
 
 /** Letters NFKD leaves whole, spelled as a handle would. */
 const SPELLED: Record<string, string> = {
@@ -56,8 +56,14 @@ export function blogHost(typed: string): string {
 /** Labels that name the kind of host, not whose it is. */
 const GENERIC = new Set(['www', 'blog', 'blogs', 'm', 'en', 'zh', 'cn', 'tw', 'hk', 'fr'])
 
-/** The blog's own name, from its host: `blog.hutusi.com` → `hutusi`, `jvns.ca` → `jvns`. */
+/**
+ * The blog's own name, from its host: `blog.hutusi.com` → `hutusi`, `jvns.ca` → `jvns`; on a host
+ * many writers share, from the writer's path: `world.hey.com/dhh` → `dhh` (ADR 0069).
+ */
 function hostLabel(typed: string): string {
+  const key = siteKeyOf(blogUrl(typed))
+  const writer = key ? new URL(key).pathname.split('/').filter(Boolean).at(-1) : undefined
+  if (writer) return handleOf(writer.replace(/-/g, '_'))
   const labels = blogHost(typed).toLowerCase().split('.').filter(Boolean)
   // The last label is the top-level domain, unless it is all there is.
   const named = (labels.length > 1 ? labels.slice(0, -1) : labels).filter((l) => !GENERIC.has(l))

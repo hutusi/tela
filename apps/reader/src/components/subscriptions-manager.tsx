@@ -20,7 +20,7 @@ import {
   useState,
 } from 'react'
 import { useTranslations } from 'use-intl'
-import { displayHost } from '../lib/format'
+import { blogAddress } from '../lib/format'
 import {
   clickRow,
   compareBy,
@@ -240,7 +240,7 @@ export function SubscriptionsManager({
   )
   const matches = matcher(query)
   const shown = pool
-    .filter((r) => matches([r.title, r.site ? displayHost(r.site.homeUrl) : null, r.feedUrl]))
+    .filter((r) => matches([r.title, r.site ? blogAddress(r.site.homeUrl) : null, r.feedUrl]))
     .sort(compareBy(sort))
   const shownIds = shown.map((r) => r.feedId)
   const picked = standing(ticks.picked, new Set(pool.map((r) => r.feedId)))

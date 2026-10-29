@@ -10,7 +10,7 @@ import { createPortal } from 'react-dom'
 import { Link } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { blogsApiPath } from '../lib/discover-href'
-import { displayHost } from '../lib/format'
+import { blogAddress } from '../lib/format'
 import { useMemberControls } from '../lib/member'
 import { useBottomBar } from '../lib/use-bottom-bar'
 import { BELOW_MD, useMediaQuery } from '../lib/use-media'
@@ -210,7 +210,7 @@ function StartBar({ subscribed, onStart }: { subscribed: number; onStart: () => 
  */
 function BlogCard({ site, member }: { site: DiscoverSite; member: MemberControls | undefined }) {
   const t = useTranslations('discover')
-  const title = site.title ?? displayHost(site.homeUrl)
+  const title = site.title ?? blogAddress(site.homeUrl)
   const { feedId } = site
   const on = feedId !== null && member?.isSubscribed(feedId) === true
   // Kept back below three readers (ADR 0041): tela-api sends none, and the card says nothing.
@@ -228,7 +228,7 @@ function BlogCard({ site, member }: { site: DiscoverSite; member: MemberControls
         <SiteAvatar id={site.id} title={title} faviconKey={site.faviconKey} size={36} radius={9} />
         <div className="min-w-0 flex-1">
           <div className="truncate font-medium">{title}</div>
-          <div className="truncate text-[12.5px] text-muted">{displayHost(site.homeUrl)}</div>
+          <div className="truncate text-[12.5px] text-muted">{blogAddress(site.homeUrl)}</div>
         </div>
         {site.primaryLang ? (
           <span className="shrink-0 rounded border border-line px-1.5 text-[11px] text-muted">
@@ -270,7 +270,7 @@ function BlogCard({ site, member }: { site: DiscoverSite; member: MemberControls
  */
 function BlogRow({ site, member }: { site: DiscoverSite; member: MemberControls | undefined }) {
   const t = useTranslations('discover')
-  const title = site.title ?? displayHost(site.homeUrl)
+  const title = site.title ?? blogAddress(site.homeUrl)
   const { feedId } = site
   const on = feedId !== null && member?.isSubscribed(feedId) === true
   return (

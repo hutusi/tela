@@ -4,7 +4,7 @@ import { useParams } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { CHECK, Glyph } from '../components/glyph'
 import { LoadFailedPage } from '../components/load-failed'
-import { displayHost } from '../lib/format'
+import { blogAddress } from '../lib/format'
 import { useMemberControls } from '../lib/member'
 import { readingPrefsOf } from '../lib/prefs'
 import { useTitle } from '../lib/title'
@@ -32,7 +32,7 @@ export function SitePage() {
   const reading = useMemo(() => ({ lang: readingLang, never }), [readingLang, never])
   const readers = useFollowedReaders(valid ? siteId : null, member !== undefined)
   const data = loaded.status === 'ready' ? siteDataOf(loaded.data) : null
-  useTitle(data ? (data.site.title ?? displayHost(data.site.homeUrl)) : null)
+  useTitle(data ? (data.site.title ?? blogAddress(data.site.homeUrl)) : null)
 
   if (!valid || loaded.status === 'missing') return <NotFoundPage />
   if (loaded.status === 'loading' && loaded.failed) return <LoadFailedPage onRetry={loaded.retry} />

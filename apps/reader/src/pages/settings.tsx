@@ -52,7 +52,7 @@ import { Switch } from '../components/switch'
 import { linkingReturn } from '../lib/account-api'
 import { useOpenSignup } from '../lib/door-config'
 import { canMakeFolder, filedIn, folderWith, groupRows, knownFolders } from '../lib/folders'
-import { displayHost } from '../lib/format'
+import { blogAddress } from '../lib/format'
 import type { ReadingMode } from '../lib/href'
 import { newId } from '../lib/id'
 import { type AddProblem, type Imported, importOpml, saveDownload } from '../lib/opml'
@@ -1209,11 +1209,11 @@ function SubscriptionsSection() {
   const shown = grouped.folders.map((g) => ({
     ...g,
     rows: g.rows.filter((r) =>
-      matches([r.title, r.site ? displayHost(r.site.homeUrl) : null, r.feedUrl]),
+      matches([r.title, r.site ? blogAddress(r.site.homeUrl) : null, r.feedUrl]),
     ),
   }))
   const shownUnfiled = grouped.unfiled.filter((r) =>
-    matches([r.title, r.site ? displayHost(r.site.homeUrl) : null, r.feedUrl]),
+    matches([r.title, r.site ? blogAddress(r.site.homeUrl) : null, r.feedUrl]),
   )
   const anyShown = shownUnfiled.length > 0 || shown.some((g) => g.rows.length > 0)
   const manage: Manage = {

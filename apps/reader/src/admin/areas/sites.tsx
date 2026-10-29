@@ -16,7 +16,7 @@ import {
 import { useMemo } from 'react'
 import { useLocale, useTranslations } from 'use-intl'
 import { SiteAvatar } from '../../components/site-avatar'
-import { displayHost } from '../../lib/format'
+import { blogAddress } from '../../lib/format'
 import { nameIn } from '../../lib/language-name'
 import { adminGet, adminList } from '../api'
 import type { AnyAreaSpec, AreaSpec, RecordProps, Status } from '../area'
@@ -25,7 +25,7 @@ import { History, KeyValues, Note, Section, StatusPill, useWhen } from '../compo
 export type Translate = ReturnType<typeof useTranslations>
 
 /** A blog's name: its title, or its address when it has none. */
-export const blogName = (title: string | null, homeUrl: string) => title || displayHost(homeUrl)
+export const blogName = (title: string | null, homeUrl: string) => title || blogAddress(homeUrl)
 
 /** The square a library row starts with: the blog's favicon, or its coloured initial. */
 export function BlogTile({
@@ -212,7 +212,7 @@ function sitesSpec(t: Translate, locale: string): AreaSpec<'sites', AdminSiteRow
     name: {
       label: t('names.site'),
       title: (row) => blogName(row.title, row.homeUrl),
-      sub: (row) => displayHost(row.homeUrl),
+      sub: (row) => blogAddress(row.homeUrl),
       tile: (row) => <BlogTile {...row} />,
     },
     columns: [

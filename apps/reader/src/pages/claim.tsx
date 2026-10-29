@@ -7,7 +7,7 @@
  * For writers' card lands here as `/claim?url=…`, the address filled in, and with `&taken=1`
  * when the handle it chose is another member's.
  */
-import type { ClaimReason } from '@tela/shared'
+import { type ClaimReason, isSharedHost } from '@tela/shared'
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { useTranslations } from 'use-intl'
@@ -288,7 +288,10 @@ export function ClaimSitePage() {
           </section>
           <section className="flex flex-col gap-3">
             <h2 className="font-serif text-[22px] font-medium">{t('optionRelMe')}</h2>
-            <p className="text-[14px] text-ink-2">{t('optionRelMeHint')}</p>
+            <p className="text-[14px] text-ink-2">
+              {/* On a shared host its 404 page is the host's, so only rel="me" counts (ADR 0069). */}
+              {t(isSharedHost(standing.homeUrl) ? 'optionRelMeHintShared' : 'optionRelMeHint')}
+            </p>
             <pre
               className="overflow-x-auto rounded-lg border border-line bg-surface px-4 py-3 text-[13px]"
               data-testid="rel-me-snippet"

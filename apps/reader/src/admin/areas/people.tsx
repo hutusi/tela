@@ -15,7 +15,7 @@ import type {
 import { useMemo } from 'react'
 import { useLocale, useTranslations } from 'use-intl'
 import { PersonAvatar } from '../../components/person-avatar'
-import { displayHost, relativeTime, shortDate } from '../../lib/format'
+import { blogAddress, relativeTime, shortDate } from '../../lib/format'
 import { adminGet, adminSearch } from '../api'
 import type { AnyAreaSpec, AreaSpec, RecordProps } from '../area'
 import { History, KeyValues, Note, Section } from '../components/record'
@@ -143,10 +143,10 @@ function PersonRecord({ row, detail, open }: RecordProps<AdminPersonRow, AdminPe
                   onClick={() => open('sites', String(blog.siteId))}
                   className="cursor-pointer self-start border-0 bg-transparent p-0 text-left font-medium text-ink underline decoration-thumb underline-offset-2 hover:decoration-ink"
                 >
-                  {blog.title || displayHost(blog.homeUrl)}
+                  {blog.title || blogAddress(blog.homeUrl)}
                 </button>
                 <span className="text-[12.5px] text-muted">
-                  {displayHost(blog.homeUrl)} ·{' '}
+                  {blogAddress(blog.homeUrl)} ·{' '}
                   {t('people.blogLine', {
                     listing: t(`listing.${blog.listing}`),
                     readers: blog.readerCount,

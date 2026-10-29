@@ -19,7 +19,7 @@ import { SiteAvatar } from '../components/site-avatar'
 import { Swatch } from '../components/swatch'
 import { READERS_PATH } from '../lib/discover-href'
 import { appendPage, mergeFirstPage } from '../lib/following-feed'
-import { displayHost, relativeTime, swatchColor } from '../lib/format'
+import { blogAddress, relativeTime, swatchColor } from '../lib/format'
 import { useMemberControls } from '../lib/member'
 import { suggestReaders } from '../lib/suggest-readers'
 import { useTitle } from '../lib/title'
@@ -450,7 +450,7 @@ function Activity({
         ) : item.kind === 'liked' ? (
           <ul className="m-0 flex list-none flex-col overflow-hidden rounded-xl border border-line bg-surface p-0">
             {item.posts.map((post, i) => {
-              const source = post.siteTitle ?? displayHost(post.homeUrl)
+              const source = post.siteTitle ?? blogAddress(post.homeUrl)
               return (
                 <li
                   key={post.article.id}
@@ -504,7 +504,7 @@ function PostCard({
   never: readonly string[]
 }) {
   const t = useTranslations('following')
-  const source = post.siteTitle ?? displayHost(post.homeUrl)
+  const source = post.siteTitle ?? blogAddress(post.homeUrl)
   const { title, excerpt, badge } = titleOf(post, lang, never)
   return (
     <div
@@ -550,7 +550,7 @@ function PostCard({
 
 function SiteRow({ site, member }: { site: Site; member: MemberControls | undefined }) {
   const td = useTranslations('discover')
-  const title = site.title ?? displayHost(site.homeUrl)
+  const title = site.title ?? blogAddress(site.homeUrl)
   const subscribed = site.feedId !== null && member?.isSubscribed(site.feedId) === true
   return (
     <div className="flex flex-wrap items-center gap-3.5 rounded-xl border border-line bg-surface px-[18px] py-4">

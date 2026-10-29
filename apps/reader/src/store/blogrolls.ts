@@ -2,7 +2,9 @@
  * What the member's own blogrolls look like from the local tables (ADR 0050): the owner's page,
  * profile tab and cards read these, never tela-api. Others' blogrolls come by RPC.
  */
+
 import type { BlogrollBlogRow, BlogrollRow, Tables } from '@tela/sync'
+import { blogAddress } from '../lib/format'
 import type { BlogrollBlog, BlogrollCard, BlogrollData, Person } from '../views/types'
 import { cached } from './selectors'
 
@@ -27,14 +29,6 @@ export function liveBlogs(t: Tables, blogrollId: string): BlogrollBlogRow[] {
   })
 }
 
-const hostOf = (url: string) => {
-  try {
-    return new URL(url).hostname.replace(/^www\./, '')
-  } catch {
-    return url
-  }
-}
-
 /**
  * What a blog in a blogroll is called, as tela-api names it for others (`BLOG_NAME`): its blog's
  * title, or the feed's own while the blogroll holds another live feed of the same blog, else the
@@ -48,7 +42,7 @@ export function blogNameIn(t: Tables, blogrollId: string, feedId: number): strin
     (b) => b.feedId !== feedId && t.feeds.get(b.feedId)?.siteId === feed.siteId,
   )
   const name = sibling ? (feed.title ?? site?.title) : (site?.title ?? feed.title)
-  return name ?? (site ? hostOf(site.homeUrl) : null)
+  return name ?? (site ? blogAddress(site.homeUrl) : null)
 }
 
 /**

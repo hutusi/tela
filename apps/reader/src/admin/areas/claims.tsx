@@ -7,7 +7,7 @@ import { describeClaimError } from '@tela/shared'
 import type { AdminClaimDetail, AdminClaimRow, AdminFilter } from '@tela/shared/admin'
 import { useMemo } from 'react'
 import { useLocale, useTranslations } from 'use-intl'
-import { displayHost, relativeTime } from '../../lib/format'
+import { blogAddress, relativeTime } from '../../lib/format'
 import { adminGet, adminList } from '../api'
 import type { AnyAreaSpec, AreaSpec, RecordProps } from '../area'
 import { Evidence, History, KeyValues, Note, useWhen } from '../components/record'
@@ -42,7 +42,7 @@ function claimsSpec(
     rowOf: (detail) => detail.claim,
     name: {
       label: t('names.blog'),
-      title: (row) => displayHost(row.homeUrl),
+      title: (row) => blogAddress(row.homeUrl),
       sub: (row) =>
         [row.siteTitle, row.claimant?.name ?? (row.claimant ? handleOf(t, row.claimant) : null)]
           .filter(Boolean)

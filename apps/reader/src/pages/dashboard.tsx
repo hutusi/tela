@@ -8,7 +8,7 @@ import { PersonAvatar } from '../components/person-avatar'
 import { SettingRow } from '../components/setting-row'
 import { SiteAvatar } from '../components/site-avatar'
 import { Switch } from '../components/switch'
-import { displayHost, shortDate } from '../lib/format'
+import { blogAddress, shortDate } from '../lib/format'
 import { useTitle } from '../lib/title'
 import { showToast } from '../lib/toasts'
 import { BELOW_MD, useMediaQuery } from '../lib/use-media'
@@ -254,7 +254,7 @@ function SiteDashboard({
   const now = useNow()
   // Rows in the table's place, and the tiles' short labels (Tela Mobile 14).
   const phone = useMediaQuery(BELOW_MD)
-  const title = site.title ?? displayHost(site.homeUrl)
+  const title = site.title ?? blogAddress(site.homeUrl)
   const names = LANGUAGE_NAMES[locale as UiLocale] ?? LANGUAGE_NAMES.en
   // In Discover's order, and only topics this build can name.
   const topics = TOPICS.filter((topic) => site.topics.includes(topic)).map((topic) =>
@@ -264,7 +264,7 @@ function SiteDashboard({
   // Only a blog in Discover is found under its topics: "private under Design" says nothing true.
   const inDiscover = site.listing === 'listed' || site.listing === 'featured'
   const meta = [
-    displayHost(site.homeUrl),
+    blogAddress(site.homeUrl),
     site.primaryLang
       ? ts('writtenIn', { lang: names[site.primaryLang] ?? site.primaryLang })
       : null,
