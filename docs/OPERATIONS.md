@@ -417,7 +417,8 @@ The account is on Workers Paid. Run wrangler from a real terminal (`wrangler log
        excerpts, as ADR 0068 accepts.
    - Blogs by path (ADR 0069): no migration and no `MIN_CLIENT` bump.
      - Before deploying, list the blogs that will be filed again. Each one unclaimed moves to its
-       writer's blog at its next changed fetch; a claimed one stays where it is:
+       writer's blog at its next changed fetch, and a blog split off a hidden one is hidden too; a
+       claimed one stays where it is:
        ```sh
        cd apps/api && bunx wrangler d1 execute tela --remote --command "select s.id, s.home_url,
          s.listing, s.claimed_by is not null as claimed, count(f.id) as feeds from sites s

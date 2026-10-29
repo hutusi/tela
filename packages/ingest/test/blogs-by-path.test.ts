@@ -4,7 +4,15 @@
  * one origin, so these tests name its host and paths in the rules they pass.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
-import { claimDue, first, type Lease, type TelaDb } from '@tela/data'
+import {
+  bumpSeq,
+  claimDue,
+  fileFeedUnder,
+  first,
+  isFenceRefusal,
+  type Lease,
+  type TelaDb,
+} from '@tela/data'
 import { addTestUser, createTestDb } from '@tela/data/testing'
 import { fakeClock, memoryBlobs } from '@tela/platform/portable'
 import { type BlogRules, claimReason } from '@tela/shared'
@@ -146,6 +154,106 @@ describe('filing a feed by its site key', () => {
     // Served from another writer's path, a feed is not the claimed blog's own: it moves there.
     expect(await fetchFeed(shared(), jason.feedId)).toMatchObject({ siteHome: 'detached' })
     expect(await homes()).toEqual(['', '/jason'])
+  })
+
+  test('a blog split off one an operator hid keeps every no it said', async () => {
+    const dhh = await registerFeed(db, { feedUrl: writer('dhh'), now: NOW })
+    const jason = await registerFeed(db, { feedUrl: writer('jason'), now: NOW })
+    await db.run(sql`update sites set listing = 'rejected', review = 'dismissed', reviewed_at = 5,
+      feed_only = 1, translation_opt_out = 1 where id = ${dhh.siteId}`)
+    expect(await fetchFeed(shared(), dhh.feedId)).toMatchObject({ siteHome: 'split' })
+    expect(await fetchFeed(shared(), jason.feedId)).toMatchObject({ siteHome: 'renamed' })
+    const after = await db.all<Record<string, unknown>>(sql`
+      select home_url, listing, review, reviewed_at, feed_only, translation_opt_out
+      from sites order by home_url`)
+    expect(
+      after.map((s) => ({ ...s, home_url: String(s.home_url).replace(server.origin, '') })),
+    ).toEqual(
+      ['/dhh', '/jason'].map((home_url) => ({
+        home_url,
+        listing: 'rejected',
+        review: 'dismissed',
+        reviewed_at: 5,
+        feed_only: 1,
+        translation_opt_out: 1,
+      })),
+    )
+  })
+
+  test("a blog a fetched feed moves to has the feed's name and its posts' language at once", async () => {
+    const dhh = await registerFeed(db, { feedUrl: writer('dhh'), now: NOW })
+    await registerFeed(db, { feedUrl: writer('jason'), now: NOW })
+    await fetchFeed({ sharedHosts: [], pathBlogs: [] }, dhh.feedId)
+    // Moved by anything but a fetch whose body changed (curate, a claim), no fetch fills it after.
+    const filed = await fileFeedUnder(
+      db,
+      { id: dhh.feedId, siteId: dhh.siteId },
+      { homeUrl: server.origin, claimedBy: null },
+      server.url('/dhh'),
+      NOW,
+    )
+    expect(filed.outcome).toBe('split')
+    await db.batch([bumpSeq(db), ...filed.statements] as never)
+    const moved = await first<Record<string, unknown>>(
+      db,
+      sql`select title, description, primary_lang from sites where home_url = ${server.url('/dhh')}`,
+    )
+    expect(moved).toEqual({ title: 'dhh', description: 'A test blog', primary_lang: 'en' })
+  })
+
+  test('a move decided before a claim was verified is refused, onto the blog or off it', async () => {
+    await addTestUser(db, 'u1')
+    const dhh = await registerFeed(db, { feedUrl: writer('dhh'), now: NOW })
+    await registerFeed(db, { feedUrl: writer('jason'), now: NOW })
+    const decide = () =>
+      fileFeedUnder(
+        db,
+        { id: dhh.feedId, siteId: dhh.siteId },
+        { homeUrl: server.origin, claimedBy: null },
+        server.url('/dhh'),
+        NOW,
+      )
+    const run = (filed: Awaited<ReturnType<typeof decide>>) =>
+      db.batch([bumpSeq(db), ...filed.statements] as never).then(
+        () => null,
+        (err: unknown) => err,
+      )
+
+    const onto = await decide()
+    await db.run(sql`insert into sites (home_url, claimed_by, created_at, updated_at)
+      values (${server.url('/dhh')}, 'u1', 1, 1)`)
+    expect(isFenceRefusal(await run(onto))).toBe(true)
+    await db.run(sql`delete from sites where home_url = ${server.url('/dhh')}`)
+
+    const off = await decide()
+    await db.run(sql`update sites set claimed_by = 'u1' where id = ${dhh.siteId}`)
+    expect(isFenceRefusal(await run(off))).toBe(true)
+    expect(await homes()).toEqual([''])
+    expect(
+      await first<{ site_id: number }>(db, sql`select site_id from feeds where id = ${dhh.feedId}`),
+    ).toEqual({
+      site_id: dhh.siteId,
+    })
+  })
+
+  test('a rename decided before another feed joined the blog is refused', async () => {
+    const dhh = await registerFeed(db, { feedUrl: writer('dhh'), now: NOW })
+    const filed = await fileFeedUnder(
+      db,
+      { id: dhh.feedId, siteId: dhh.siteId },
+      { homeUrl: server.origin, claimedBy: null },
+      server.url('/dhh'),
+      NOW,
+    )
+    expect(filed.outcome).toBe('renamed')
+    // Renamed now, the host's blog would take this writer's feed to the first writer's address.
+    await registerFeed(db, { feedUrl: writer('jason'), now: NOW })
+    const err = await db.batch([bumpSeq(db), ...filed.statements] as never).then(
+      () => null,
+      (e: unknown) => e,
+    )
+    expect(isFenceRefusal(err)).toBe(true)
+    expect(await homes()).toEqual([''])
   })
 
   test('a blog by path is leased by its host, as its feeds are', async () => {

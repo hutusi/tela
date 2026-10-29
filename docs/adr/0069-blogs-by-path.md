@@ -52,6 +52,19 @@ before this is on a placeholder keyed by its own address, so its next changed fe
 splits it onto its writer's blog. Lease hosts drop the path, so a blog by path is polite to its
 host along with that host's feeds.
 
+**A blog split off another keeps every no the other had said, and nothing else.** A feed that
+splits off its blog because its key changed (at a fetch, or by curate) lands on a new site with
+the old one's Hide, "Only use what my feed provides" and no translation: each is a decision about
+those posts, and a split must not list what an operator hid nor fetch the pages of a blog that
+asked for its feed alone. A listing is never kept; the new blog waits for review like any other.
+A feed detached from a claimed blog keeps none of them: it was never the owner's, and their
+decisions are about their blog (ADR 0065 sends its translations to apps again). Any site a move
+makes takes its name, description and language from the feed and its posts in the same batch,
+since a fetch fills them only when the feed's body changes. And a filing is decided from reads
+made before its batch, so the batch refuses it, as a lost lease's fence does, when a claim was
+verified on either blog, the feed moved, or (for a rename) another feed or site arrived
+meanwhile: curate holds no lease on the blogs it files.
+
 **Claims are keyed by the blog, and the 404 page counts only where the blog owns it.** A claim
 started at a writer's address claims that path. On a shared host no proof uses the blog's 404 page:
 it is the host's, the same for every writer, so a link in its footer is no writer's own, and

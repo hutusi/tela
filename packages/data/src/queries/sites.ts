@@ -19,29 +19,6 @@ export type SiteMeta = {
   primaryLang?: string | null
 }
 
-/** Insert the site keyed `home` unless it exists; fill metadata it lacks. */
-export function ensureHomeSite(db: TelaDb, home: string, now: number, meta: SiteMeta = {}) {
-  return db
-    .insert(sites)
-    .values({
-      homeUrl: home,
-      title: meta.title ?? null,
-      description: meta.description ?? null,
-      primaryLang: meta.primaryLang ?? null,
-      createdAt: now,
-      updatedAt: now,
-      seq: currentSeq,
-    })
-    .onConflictDoUpdate({
-      target: sites.homeUrl,
-      set: {
-        title: sql`coalesce(${sites.title}, excluded.title)`,
-        description: sql`coalesce(${sites.description}, excluded.description)`,
-        primaryLang: sql`coalesce(${sites.primaryLang}, excluded.primary_lang)`,
-      },
-    })
-}
-
 const siteIdOf = (home: string) => sql`(select id from sites where home_url = ${home})`
 
 /** The host of a site's key (`https://world.hey.com/dhh` → `world.hey.com`), in SQL, for leases. */
@@ -206,7 +183,8 @@ export async function restampTranslations(db: TelaDb, siteIds: readonly number[]
 /**
  * Re-point a feed to the site keyed `home` (creating it), drop the site it left if that was an
  * empty unclaimed placeholder, and recount both; moved off a blog that said no to translation onto
- * one that allows it, stamp its translations again. Statements for a batch that has already
+ * one that allows it, stamp its translations again. A site made here takes its name, description
+ * and language from the feed and its posts at once. Statements for a batch that has already
  * bumped the sync sequence.
  */
 export function moveFeedToHome(
@@ -214,6 +192,12 @@ export function moveFeedToHome(
   feed: { id: number; siteId: number },
   home: string,
   now: number,
+  /**
+   * Whether a site made here keeps every no the one the feed left had said (Hide, feed only, no
+   * translation): when the feed was that blog's and only its key changed (`fileFeedUnder`). A
+   * feed detached from a claimed blog was never the owner's, and takes none of their decisions.
+   */
+  keepNos = false,
 ) {
   // Moved from a blog that said no to translation onto one that allows it, the feed's titles and
   // body translations are shown to apps from now on, and stamped again so a delta carries them
@@ -224,8 +208,22 @@ export function moveFeedToHome(
   const backOn = sql`exists (select 1 from feeds f join sites s on s.id = f.site_id
       where f.id = ${feed.id} and s.translation_opt_out = 1)
     and exists (select 1 from sites where id = ${siteIdOf(home)} and translation_opt_out = 0)`
+  // Each no is a decision about these posts, so a blog split off the one that said it keeps it
+  // until someone decides again: a split must not list what an operator hid, nor fetch the pages
+  // of a blog that asked for its feed alone (ADR 0069). A yes is never kept: the new blog waits
+  // in the review queue like any other.
+  const keep = keepNos ? sql`true` : sql`false`
   return [
-    ensureHomeSite(db, home, now),
+    db.run(sql`
+      insert into sites (home_url, listing, review, reviewed_at, translation_opt_out, feed_only,
+        created_at, updated_at, seq)
+      select ${home}, case when ${keep} and listing = 'rejected' then 'rejected' else 'private' end,
+        case when ${keep} and listing = 'rejected' then review end,
+        case when ${keep} and listing = 'rejected' then reviewed_at end,
+        ${keep} and translation_opt_out, ${keep} and feed_only, ${now}, ${now}, ${currentSeq}
+      from sites where id = ${feed.siteId}
+      on conflict (home_url) do nothing
+    `),
     db.run(
       sql`update article_titles set seq = ${currentSeq} where feed_id = ${feed.id} and ${backOn}`,
     ),
@@ -238,6 +236,24 @@ export function moveFeedToHome(
     db.run(
       sql`update feeds set site_id = ${siteIdOf(home)}, updated_at = ${now}, seq = ${currentSeq} where id = ${feed.id}`,
     ),
+    // A fetch fills what a site lacks only when the feed's body changes, so a site this made from
+    // a feed already fetched would have no language (and so no place in a language's Discover)
+    // until the blog next posts. Both sites' languages follow the posts they now hold.
+    db.run(sql`
+      update sites set
+        title = case when id = ${siteIdOf(home)}
+          then coalesce(title, (select title from feeds where id = ${feed.id})) else title end,
+        description = case when id = ${siteIdOf(home)}
+          then coalesce(description, (select description from feeds where id = ${feed.id}))
+          else description end,
+        primary_lang = coalesce((
+          select a.source_lang from articles a join feeds f on f.id = a.feed_id
+          where f.site_id = sites.id and a.source_lang is not null
+          group by a.source_lang order by count(*) desc, a.source_lang limit 1
+        ), primary_lang),
+        updated_at = ${now}, seq = ${currentSeq}
+      where id in (${feed.siteId}, ${siteIdOf(home)})
+    `),
     ...recountReaders(db, sql`${feed.siteId}, ${siteIdOf(home)}`, now),
     db.run(sql`
       delete from sites where id = ${feed.siteId} and id <> ${siteIdOf(home)}
@@ -331,7 +347,9 @@ export type FiledOutcome = 'kept' | 'renamed' | 'joined' | 'split' | 'blocked'
  * Statements that file a feed under the site keyed `home`: rename its site when it is that site's
  * only feed and no site has the home yet, otherwise join the site there or split onto a new one.
  * Nothing moves off a claimed site or onto one: a claim settles which feeds are the blog's
- * (ADR 0011). For a batch that has already bumped the sync sequence.
+ * (ADR 0011). For a batch that has already bumped the sync sequence. That batch aborts, as a lost
+ * lease's fence does (`isFenceRefusal`), when what this decided on has changed by the time it
+ * runs: a claim verified on either site, the feed moved, or for a rename another feed or site.
  */
 export async function fileFeedUnder(
   db: TelaDb,
@@ -351,19 +369,30 @@ export async function fileFeedUnder(
     db,
     sql`select count(*) as n from feeds where site_id = ${feed.siteId} and id <> ${feed.id}`,
   )
+  // Read above, and decided on: a caller that holds no lease on these sites (curate) can find a
+  // claim verified, or the blog changed, between the reads and its batch.
+  const changed = sql`not exists (select 1 from feeds where id = ${feed.id} and site_id = ${feed.siteId})
+    or exists (select 1 from sites where (id = ${feed.siteId} or home_url = ${home})
+      and claimed_by is not null)`
   if (!target && (siblings?.n ?? 0) === 0) {
+    const notAlone = sql`exists (select 1 from sites where home_url = ${home})
+      or exists (select 1 from feeds where site_id = ${feed.siteId} and id <> ${feed.id})`
     return {
       statements: [
+        db.run(sql`insert into lease_fence (x) select null where ${changed} or ${notAlone}`),
         db.run(sql`
           update sites set home_url = ${home}, updated_at = ${now}, seq = ${currentSeq}
-          where id = ${feed.siteId} and not exists (select 1 from sites where home_url = ${home})
+          where id = ${feed.siteId}
         `),
       ],
       outcome: 'renamed',
     }
   }
   return {
-    statements: [...moveFeedToHome(db, feed, home, now)],
+    statements: [
+      db.run(sql`insert into lease_fence (x) select null where ${changed}`),
+      ...moveFeedToHome(db, feed, home, now, true),
+    ],
     outcome: target ? 'joined' : 'split',
   }
 }

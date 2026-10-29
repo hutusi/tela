@@ -219,6 +219,38 @@ describe('a section that became a blog of its own (ADR 0069)', () => {
     expect((await blogs()).map((s) => s.home_url)).toEqual([server.origin])
   })
 
+  test('a section split off a hidden blog stays hidden, and curate leaves both alone', async () => {
+    await lab()
+    await api.db.run(sql`update sites set listing = 'rejected', review = 'dismissed' where id = 1`)
+    expect((await entry(ENGINEERING, '/engineering', 'Lab Engineering')).status).toBe(200)
+    expect((await entry(RESEARCH, '/research', 'Lab Research')).status).toBe(200)
+    expect((await blogs()).map((s) => [s.home_url.replace(server.origin, ''), s.listing])).toEqual([
+      ['/research', 'rejected'],
+      ['/engineering', 'rejected'],
+    ])
+    const topics = await api.db.all<{ site_id: number }>(sql`select site_id from site_topics`)
+    expect(topics).toEqual([{ site_id: 1 }])
+  })
+
+  test('a section split off a blog already fetched has its language and description', async () => {
+    await lab()
+    await api.db.batch([
+      bumpSeq(api.db),
+      api.db.run(sql`update sites set description = 'The lab', primary_lang = 'en' where id = 1`),
+      api.db.run(sql`update feeds set description = 'How the lab builds' where id = 12`),
+      api.db.run(sql`insert into articles (feed_id, dedup_key, source_lang, fetched_at, sort_at)
+        values (11, 'r1', 'en', 1, 1), (11, 'r2', 'en', 1, 1), (12, 'e1', 'fr', 1, 1)`),
+    ] as never)
+    expect((await entry(ENGINEERING, '/engineering', 'Lab Engineering')).status).toBe(200)
+    const sites = await api.db.all<{ description: string; primary_lang: string }>(
+      sql`select description, primary_lang from sites order by id`,
+    )
+    expect(sites).toEqual([
+      { description: 'The lab', primary_lang: 'en' },
+      { description: 'How the lab builds', primary_lang: 'fr' },
+    ])
+  })
+
   test('refuses a home that is no address', async () => {
     await lab()
     const res = await curate({ feedUrl: RESEARCH, featured: false, home: 'research' })

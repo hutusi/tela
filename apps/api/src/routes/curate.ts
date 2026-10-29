@@ -5,7 +5,7 @@
  * unreachable feed does not stop the rest. Applying an entry again changes nothing that is
  * already right.
  */
-import { bumpSeq, currentSeq, fileFeedUnder, first } from '@tela/data'
+import { bumpSeq, currentSeq, fileFeedUnder, first, isFenceRefusal } from '@tela/data'
 import { isTopic, siteKeyOf } from '@tela/shared'
 import { sql } from 'drizzle-orm'
 import type { ApiDeps } from '../deps'
@@ -103,7 +103,8 @@ export async function curate(
  * Move a curated feed to the blog the list names, as its first fetch moves a feed to the home it
  * declares (`fileFeedUnder`): renaming the blog it is on when it is that blog's only feed, so the
  * blog keeps its readers and its address, or else onto the named one. Nothing moves off a claimed
- * blog or onto one. Answers where the feed is now.
+ * blog or onto one, and a blog split off a hidden one is hidden too, so `curate` then leaves it
+ * alone. Answers where the feed is now.
  */
 async function refile(
   deps: ApiDeps,
@@ -124,7 +125,14 @@ async function refile(
     key,
     deps.clock.now(),
   )
-  if (filed.statements.length > 0) await db.batch([bumpSeq(db), ...filed.statements] as never)
+  try {
+    if (filed.statements.length > 0) await db.batch([bumpSeq(db), ...filed.statements] as never)
+  } catch (err) {
+    // Curate holds no lease on these blogs: a claim verified, or the blog changed, since the
+    // reads above, and the batch refused the move. The feed stays where it is; the next run
+    // decides again.
+    if (!isFenceRefusal(err)) throw err
+  }
   const now = await first<{ site_id: number }>(
     db,
     sql`select site_id from feeds where id = ${added.feedId}`,
