@@ -2,6 +2,8 @@
 
 Status: accepted (2026-10-10). Amends 0011: its proofs stand, and two more are accepted beside
 them. Amends 0036's "Tela never calls a provider's API" for one public, tokenless lookup.
+Amended by 0069: on a host many blogs share, the 404 page is the host's and proves nothing, and
+GitHub's website names a blog by its key, not its host.
 
 ## Context
 
