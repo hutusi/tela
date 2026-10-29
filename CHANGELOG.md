@@ -18,12 +18,12 @@ everything so far sits under `[Unreleased]`.
   several feeds lists a post they share once, recommended by whoever recommended either copy, and
   its Subscribe adds the feed still fetched with the most posts, no longer whichever was added
   first. `MIN_CLIENT` 7.
-- **54 more blogs in Discover, from Hacker News' favourite personal blogs of 2025** (the HN
-  Popularity Contest's ranking). The editorial list grows to 220: 36 on programming and
+- **53 more blogs in Discover, from Hacker News' favourite personal blogs of 2025** (the HN
+  Popularity Contest's ranking). The editorial list grows to 221: 35 on programming and
   computing (Ken Shirriff, Armin Ronacher, Daniel Stenberg, Martin Fowler, Terence Eden…), 5 on AI
   (Ethan Mollick, Giles Thomas…), and 13 on science, history and ideas (Terence Tao, Dynomight,
   Construction Physics, A Collection of Unmitigated Pedantry, Astral Codex Ten…). None featured.
-  Left out: what is not one person's blog (neal.fun, companies, news sites), two Tela can't fetch,
+  Left out: what is not one person's blog (neal.fun, companies, news sites), three Tela can't fetch,
   one whose site asks that models not read it, blogs on a host other blogs share, the politics
   and paywalled newsletters, and anything quiet for 60 days.
 - **Members register their own apps** (ADR 0067), in Settings → Developer, as on GitHub: Testing

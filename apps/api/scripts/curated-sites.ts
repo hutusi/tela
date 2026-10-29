@@ -135,7 +135,8 @@ export const CURATED_SITES = [
   // From the HN Popularity Contest's ranking for 2025 (popularity.refactoringenglish.com), checked
   // on 2026-10-29: blogs one person writes, posted in the 60 days before, whose feed Tela reads.
   // Left out: what is not a person's blog (neal.fun, companies, news sites), rachelbythebay.com
-  // (it drops Cloudflare's connections), tedunangst.com (its certificate does not verify),
+  // (it drops Cloudflare's connections), brooker.co.za (unreachable from production twice on
+  // 2026-10-29, though it answers elsewhere), tedunangst.com (its certificate does not verify),
   // xeiaso.net (its robots.txt says `ai-input=no`, and Tela translates with a model), blogs on a
   // host other blogs share (buttondown.com, world.hey.com, and The Old New Thing on
   // devblogs.microsoft.com, beside the TypeScript and .NET blogs: a blog is an origin, so they
@@ -176,7 +177,6 @@ export const CURATED_SITES = [
   { feedUrl: 'https://soatok.blog/feed/', topics: ['tech'] },
   { feedUrl: 'https://daniel.haxx.se/blog/feed/', topics: ['tech'], title: 'Daniel Stenberg' },
   { feedUrl: 'https://www.tbray.org/ongoing/ongoing.atom', topics: ['tech', 'essays'] },
-  { feedUrl: 'https://brooker.co.za/blog/rss.xml', topics: ['tech'] },
   { feedUrl: 'https://alexwlchan.net/feed', topics: ['tech'] },
   { feedUrl: 'https://marginalia.nu/index.xml', topics: ['tech'], title: 'marginalia.nu' },
   { feedUrl: 'https://jyn.dev/atom.xml', topics: ['tech'], title: 'jyn' },

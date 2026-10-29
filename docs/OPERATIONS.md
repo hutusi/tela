@@ -401,7 +401,7 @@ The account is on Workers Paid. Run wrangler from a real terminal (`wrangler log
        tela-web, then tela-api within minutes; tela-gateway is unchanged.
      - Then `bun run admin curate`, never before tela-api: curate drops a topic tela-api does not
        know, and a lab listed under AI alone would be listed under nothing. The same run adds the
-       54 blogs from the HN Popularity Contest's list, about 1,550 posts in their feeds: expect
+       53 blogs from the HN Popularity Contest's list, about 1,390 posts in their feeds: expect
        their titles to spend about 1M tokens that day, as 20 blogs and 1,611 posts did on
        2026-10-09. Chris Siebenmann's server answers 429 to a client that asks too often; its
        first fetch may wait out a backoff.
