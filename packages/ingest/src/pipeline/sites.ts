@@ -15,7 +15,13 @@ import {
   siteHost,
   type TelaDb,
 } from '@tela/data'
-import type { ClaimMethod, ClaimReason, FetchRegion, HomeUnreachable } from '@tela/shared'
+import {
+  type ClaimMethod,
+  type ClaimReason,
+  type FetchRegion,
+  type HomeUnreachable,
+  isSharedHost,
+} from '@tela/shared'
 import { findAll, getAttributeValue } from 'domutils'
 import { type SQL, sql } from 'drizzle-orm'
 import { parseDocument } from 'htmlparser2'
@@ -176,6 +182,9 @@ async function notFoundPage(
 ): Promise<{ url: string; body: string } | null> {
   const origin = new URL(homeUrl)
   const url = new URL(notFoundProbe(token), origin).toString()
+  // A section that is a blog of its own is answered on its site's origin (ADR 0069); sent to the
+  // section, a missing address was sent home.
+  const home = origin.pathname.replace(/\/+$/, '')
   try {
     const res = await ctx.http.get(url, { region: 'global', accept: HTML_ACCEPT })
     const final = new URL(res.finalUrl)
@@ -185,7 +194,8 @@ async function notFoundPage(
       (final.protocol === origin.protocol || final.protocol === 'https:') &&
       final.hostname.replace(/^www\./, '') === origin.hostname.replace(/^www\./, '') &&
       final.port === origin.port &&
-      final.pathname !== '/'
+      final.pathname !== '/' &&
+      final.pathname.replace(/\/+$/, '') !== home
     return (res.status === 404 || res.status === 410) && res.body && own
       ? { url: res.finalUrl, body: res.body }
       : null
@@ -245,7 +255,7 @@ async function proofOf(
   }
   const login = gh?.login.toLowerCase()
   const theirs = (l: ProfileLink) => l.name === login
-  const namesThisSite = gh !== null && namesSite(gh.website, claim.home_url)
+  const namesThisSite = gh !== null && namesSite(gh.website, claim.home_url, ctx.blogRules)
   if (namesThisSite && home.github.some((l) => theirs(l) && l.me)) return { method: 'github' }
 
   // A link without rel="me" is the blog's own only if its 404 page, which has no post, shows it.
@@ -257,7 +267,12 @@ async function proofOf(
     if (claim.overruled) {
       return { reason: { reason: 'overruled', page: clip(page.finalUrl), target } }
     }
-    const second = await notFoundPage(ctx, claim.home_url, claim.token)
+    // On a shared host the 404 page is the host's, the same for every writer there: it shows
+    // nothing that is this blog's own, so only rel="me", the meta tag or GitHub prove it there
+    // (ADR 0069), and the member is told to add rel="me" as for a blog with no 404 page.
+    const second = isSharedHost(claim.home_url, ctx.blogRules)
+      ? null
+      : await notFoundPage(ctx, claim.home_url, claim.token)
     if (!second) {
       return { reason: { reason: 'no_not_found_page', page: clip(page.finalUrl), target } }
     }

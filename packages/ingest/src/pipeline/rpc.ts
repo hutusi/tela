@@ -5,10 +5,10 @@
  * bundle; in-process in tests. Every answer is a plain object: RPC across Workers carries data,
  * not errors.
  */
-import { asUrl, normalizeOrigin } from '@tela/content'
+import { asUrl } from '@tela/content'
 import { feedsFromOpml } from '@tela/content/opml'
 import { type Exempt, feedRoom, mainFeedOrder, type TelaDb } from '@tela/data'
-import { type BlogRules, FEED_FORMATS, type FeedFormat } from '@tela/shared'
+import { type BlogRules, FEED_FORMATS, type FeedFormat, siteKeyOf } from '@tela/shared'
 import { type SQL, sql } from 'drizzle-orm'
 import { type DiscoveredFeed, discoverFeeds } from '../discover'
 import type { HttpClient } from '../http'
@@ -234,11 +234,12 @@ export function createIngest(deps: {
       if ('error' in found) return found
       const feed = found.feeds[0]
       if (!feed) return { error: 'not_a_feed' }
-      // The home is the site the member typed, unless they typed the feed's own origin: then the
-      // feed's declared home says which site it is.
-      const typedOrigin = normalizeOrigin(typed.toString())
+      // The home is the blog the member typed, unless they typed the feed's own blog: then the
+      // feed's declared home says which it is. Either is a site key, so a writer on a shared host
+      // claims their own path and never the host (ADR 0069).
+      const typedHome = siteKeyOf(typed.toString(), rules)
       const homeUrl =
-        typedOrigin && typedOrigin !== normalizeOrigin(feed.url) ? typedOrigin : feed.homeUrl
+        typedHome && typedHome !== siteKeyOf(feed.url, rules) ? typedHome : feed.homeUrl
       const input = { feedUrl: feed.url, homeUrl, actorId, rules, now: now() }
       const registered = withinDay
         ? await registerFeed(db, { ...input, within: room(actorId, exempt) })

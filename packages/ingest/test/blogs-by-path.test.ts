@@ -4,13 +4,23 @@
  * one origin, so these tests name its host and paths in the rules they pass.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
-import { claimDue, type Lease, type TelaDb } from '@tela/data'
+import { claimDue, first, type Lease, type TelaDb } from '@tela/data'
 import { addTestUser, createTestDb } from '@tela/data/testing'
 import { fakeClock, memoryBlobs } from '@tela/platform/portable'
-import type { BlogRules } from '@tela/shared'
+import { type BlogRules, claimReason } from '@tela/shared'
 import { sql } from 'drizzle-orm'
 import { createHttpClient } from '../src/http'
-import { dueAssets, type IngestContext, ingestFeed, registerFeed } from '../src/pipeline'
+import {
+  createIngest,
+  dueAssets,
+  type IngestContext,
+  ingestFeed,
+  namesSite,
+  notFoundProbe,
+  registerFeed,
+  VERIFICATION_META,
+  verifyClaimJob,
+} from '../src/pipeline'
 import { FixtureServer, longHtml, rss } from './fixture-server'
 
 const NOW = Date.UTC(2026, 9, 30, 10)
@@ -142,5 +152,104 @@ describe('filing a feed by its site key', () => {
     await registerFeed(db, { feedUrl: writer('dhh'), rules: shared(), now: NOW })
     const due = await db.all<{ host: string }>(dueAssets())
     expect(due.map((d) => d.host)).toEqual([new URL(server.origin).host])
+  })
+})
+
+describe('claiming a blog by path', () => {
+  const TOKEN = 'tok-123'
+
+  async function owner() {
+    await addTestUser(db, 'owner')
+    await db.run(sql`insert into profiles (user_id, handle, created_at, updated_at)
+      values ('owner', 'owner', 1, 1)`)
+  }
+
+  function serveHtml(path: string, html: string, status = 200) {
+    server.set(path, (_req, res) => {
+      res.writeHead(status, { 'content-type': 'text/html; charset=utf-8' })
+      res.end(html)
+    })
+  }
+
+  /** The member's claim on `siteId`, under a lease the check holds. */
+  async function verify(siteId: number) {
+    await db.run(sql`insert into site_claims (site_id, user_id, method, token, created_at)
+      values (${siteId}, 'owner', 'meta', ${TOKEN}, ${NOW})
+      on conflict (site_id, user_id) do update set status = 'pending'`)
+    await db.run(sql`delete from leases`)
+    const row = await first<{ id: number }>(db, sql`select max(id) as id from site_claims`)
+    const id = row?.id ?? 0
+    await claimDue(db, {
+      kind: 'site.claim',
+      owner: 'w1',
+      now: clock.now(),
+      ttlMs: 120_000,
+      limit: 1,
+      due: sql`select ${id} as key, null as host, 0 as ord`,
+    })
+    const lease: Lease = { kind: 'site.claim', key: String(id), owner: 'w1' }
+    return verifyClaimJob({ ...ctx(shared()), publicUrl: 'https://tela.test' }, lease)
+  }
+
+  test("on a shared host, a plain link the host's 404 page shows too proves nothing", async () => {
+    await owner()
+    const { siteId } = await registerFeed(db, { feedUrl: writer('dhh'), rules: shared(), now: NOW })
+    const footer = '<footer><a href="https://tela.test/@owner">Tela</a></footer>'
+    serveHtml('/dhh', `<html><body><main>a post</main>${footer}</body></html>`)
+    // The host's page for a missing address shows the host's footer, which every writer shares.
+    serveHtml(notFoundProbe(TOKEN), `<html><body>${footer}</body></html>`, 404)
+    expect(await verify(siteId)).toMatchObject({ status: 'failed' })
+    const failed = await first<{ error: string }>(
+      db,
+      sql`select error from site_claims order by id desc limit 1`,
+    )
+    expect(claimReason(failed?.error ?? null)).toMatchObject({ reason: 'no_not_found_page' })
+    expect(server.requests.some((r) => r.path === notFoundProbe(TOKEN))).toBe(false)
+
+    // rel="me" on the writer's own page is theirs alone.
+    serveHtml(
+      '/dhh',
+      '<html><body><a rel="me" href="https://tela.test/@owner">me</a></body></html>',
+    )
+    expect(await verify(siteId)).toMatchObject({ status: 'verified', method: 'rel_me' })
+  })
+
+  test("verifying moves another writer's feed to that writer's blog, never to the host", async () => {
+    await owner()
+    const dhh = await registerFeed(db, { feedUrl: writer('dhh'), rules: shared(), now: NOW })
+    // Filed under dhh's blog while it was unclaimed, served from jason's path.
+    await db.run(sql`insert into feeds (site_id, feed_url, host, served_origin, next_fetch_at,
+        created_at, updated_at)
+      values (${dhh.siteId}, ${server.url('/jason/rss')}, '127.0.0.1', ${server.url('/jason')},
+        ${NOW}, 1, 1)`)
+    serveHtml(
+      '/dhh',
+      `<html><head><meta name="${VERIFICATION_META}" content="${TOKEN}"></head></html>`,
+    )
+    expect(await verify(dhh.siteId)).toMatchObject({ status: 'verified', method: 'meta' })
+    expect(await homes()).toEqual(['/dhh', '/jason'])
+  })
+
+  test('a claim started at a writer’s address files their blog, not the host', async () => {
+    await owner()
+    writer('dhh')
+    serveHtml(
+      '/dhh',
+      `<html><head><link rel="alternate" type="application/rss+xml" href="/dhh/rss"></head></html>`,
+    )
+    const ingest = createIngest({ db, http, now: () => clock.now(), rules: shared() })
+    const started = await ingest.startClaim({ url: server.url('/dhh'), actorId: 'owner' })
+    expect(started).toMatchObject({ feedId: expect.any(Number) })
+    expect(await homes()).toEqual(['/dhh'])
+  })
+
+  test("a GitHub profile names a writer's blog, not another's on the same host", () => {
+    expect(namesSite('world.hey.com/dhh', 'https://world.hey.com/dhh')).toBe(true)
+    expect(namesSite('https://world.hey.com/DHH/', 'https://world.hey.com/dhh')).toBe(true)
+    expect(namesSite('world.hey.com/jason', 'https://world.hey.com/dhh')).toBe(false)
+    expect(namesSite('world.hey.com', 'https://world.hey.com/dhh')).toBe(false)
+    // An ordinary blog, by any path on it, as before.
+    expect(namesSite('www.hutusi.com/about', 'https://hutusi.com')).toBe(true)
+    expect(namesSite('www.anthropic.com', 'https://www.anthropic.com/research')).toBe(false)
   })
 })
