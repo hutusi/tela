@@ -7,7 +7,7 @@
  */
 import { asUrl, normalizeOrigin } from '@tela/content'
 import { feedsFromOpml } from '@tela/content/opml'
-import { type Exempt, feedRoom, type TelaDb } from '@tela/data'
+import { type Exempt, feedRoom, mainFeedOrder, type TelaDb } from '@tela/data'
 import { FEED_FORMATS, type FeedFormat } from '@tela/shared'
 import { type SQL, sql } from 'drizzle-orm'
 import { type DiscoveredFeed, discoverFeeds } from '../discover'
@@ -97,8 +97,8 @@ function homesOf(url: string): string[] | null {
 
 /**
  * The live feeds of the blogs at `homes` that `which` picks, as discovery answers them: a row
- * with a null `url` is a blog with no such feed left. Active feeds first, then the blog's main
- * feed as its Subscribe has it, the one with the most posts (ADR 0068), then the oldest.
+ * with a null `url` is a blog with no such feed left. The blog's main feed first, as its
+ * Subscribe has it (`mainFeedOrder`, ADR 0068).
  */
 async function keptFeeds(db: TelaDb, homes: string[], which: SQL) {
   const rows = await db.all<{
@@ -113,7 +113,7 @@ async function keptFeeds(db: TelaDb, homes: string[], which: SQL) {
     from sites s left join feeds f on f.site_id = s.id and f.merged_into is null
       and f.status <> 'dead'
     where ${which} and s.home_url in (select value from json_each(${JSON.stringify(homes)}))
-    order by f.status = 'active' desc, items desc, f.id
+    order by ${mainFeedOrder('f')}
   `)
   const formatOf = (f: string | null): FeedFormat =>
     (FEED_FORMATS as readonly string[]).includes(f ?? '') ? (f as FeedFormat) : 'rss'

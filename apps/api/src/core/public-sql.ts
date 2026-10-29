@@ -9,6 +9,7 @@ import {
   avatarOf,
   BLOG_NAME,
   inDiscover,
+  mainFeedOrder,
   PUBLIC_ARTICLE_COLUMNS,
   publicReaderCount,
   standingOk,
@@ -27,32 +28,55 @@ export const PUBLIC_LISTING = sql.raw(`('listed', 'featured')`)
 /** A blog's reader count as anyone may see it (`publicReaderCount`), over `sites s`. */
 export const READER_COUNT = publicReaderCount('s')
 
-/** The order of a blog's feeds, over `feeds` aliased `alias`: the one with the most posts first. */
-const BY_MAIN = (alias: string) =>
-  `(select count(*) from articles mp where mp.feed_id = ${alias}.id) desc, ${alias}.id`
-
 /**
  * A blog's main feed, over the sites table aliased `alias`: what Subscribe adds from its card, its
- * page and Discover's OPML. The feed with the most posts, then the oldest (ADR 0068). A blog is an
- * origin, so one read through feeds kept elsewhere may hold several (Anthropic's Research and
- * Engineering), and the oldest was whichever a member happened to add first.
+ * page and Discover's OPML (`mainFeedOrder`: one still fetched, then the most posts, then the
+ * oldest; ADR 0068). A blog is an origin, so one read through feeds kept elsewhere may hold
+ * several (Anthropic's Research and Engineering), and the oldest was whichever a member happened
+ * to add first.
  */
 export const mainFeed = (alias: string): SQL =>
-  sql.raw(`(select mf.id from feeds mf where mf.site_id = ${alias}.id and mf.merged_into is null
-    order by ${BY_MAIN('mf')} limit 1)`)
+  sql`(select mf.id from feeds mf where mf.site_id = ${sql.raw(alias)}.id
+    and mf.merged_into is null order by ${mainFeedOrder('mf')} limit 1)`
 
 /** A blog's feeds as its page lists them, over `feeds f`: its main feed first (`mainFeed`). */
-export const FEEDS_BY_MAIN = sql.raw(BY_MAIN('f'))
+export const FEEDS_BY_MAIN = mainFeedOrder('f')
 
 /**
- * A post another live feed of its blog stored first at the same address, over `articles a` and
- * `feeds f` (ADR 0068). Two feeds of one blog that overlap without being one feed (ADR 0028), a
- * section's feed beside the whole blog's, store a shared post once each: a public list shows it
- * once, while a member's own list keeps the copy of each feed they follow.
+ * The post `a`'s copies in its blog's other live feeds, as `ra` in their feeds `rf`: posts at the
+ * same address, given the blog's id `site` and the post's own feed's `feed` (ADR 0068). Two feeds
+ * of one blog that overlap without being one feed (ADR 0028), a section's feed beside the whole
+ * blog's, store a shared post once each.
  */
-export const REPEATED_POST = sql.raw(`exists (select 1 from feeds rf join articles ra
-  on ra.feed_id = rf.id where rf.site_id = f.site_id and rf.id <> f.id
-    and rf.merged_into is null and ra.url = a.url and ra.id < a.id)`)
+const otherCopies = (a: string, site: string, feed: string) =>
+  `from feeds rf join articles ra on ra.feed_id = rf.id where rf.site_id = ${site}
+    and rf.id <> ${feed} and rf.merged_into is null and ra.url = ${a}.url`
+
+/**
+ * A post another copy of which comes first in the same public list, over `articles a` and its
+ * feed `f`: a public list shows a shared post once, as the feed that stored it first has it, while
+ * a member's own list keeps the copy of each feed they follow (ADR 0068). `also` is what the list
+ * asks of a post, over the other copy `ra` and its feed `rf`, so that a copy the list would not
+ * show hides nothing: a blogroll's feed reads only the feeds it holds, a month's count only posts
+ * dated in it.
+ */
+export const repeatedPost = (also: SQL = sql``): SQL =>
+  sql`exists (select 1 ${sql.raw(otherCopies('a', 'f.site_id', 'f.id'))} and ra.id < a.id ${also})`
+
+/**
+ * The first copy of the post `xa` in feed `xf`, the one public lists show (`repeatedPost`): its id,
+ * or the id of a copy another live feed of its blog stored before it.
+ */
+export const FIRST_COPY = sql.raw(`coalesce((select min(ra.id)
+  ${otherCopies('xa', 'xf.site_id', 'xf.id')} and ra.id < xa.id), xa.id)`)
+
+/**
+ * The post `a` on its blog `s` and its copies in the blog's other feeds: what was said of one was
+ * said of the post, which a public list shows once (`repeatedPost`).
+ */
+const COPIES = sql.raw(
+  `select a.id union all select ra.id ${otherCopies('a', 's.id', 'a.feed_id')}`,
+)
 
 /**
  * Whether search engines may index a public page (ADR 0060). What anyone can publish on Tela is
@@ -177,26 +201,28 @@ export function postOf(row: Row): { article: Row; site: PostSite } {
 export const RECOMMENDERS_SHOWN = 20
 
 /**
- * What readers did with a post, over `articles a`, from its live recommendations: how many were
- * made since `since` (`weekRecs`), who made them, newest first (`recommenders`, a JSON array of at
+ * What readers did with a post, over `articles a` and its blog `sites s`, from its live
+ * recommendations of it or of its copies in the blog's other feeds (ADR 0068): how many readers
+ * recommended it since `since` (`weekRecs`), who, newest first (`recommenders`, a JSON array of at
  * most `RECOMMENDERS_SHOWN` ids), and the newest with a note, with its person (`note`, a JSON
  * object or null). Newest is by id, the order tela-api first received them: `created_at` is the
  * device's `at`, which a device can date back, and a recommendation made again, or with its note
  * changed, keeps its row and so its place. Recommendations are public (ADR 0031), so a cached answer may carry them.
  */
 export const postExtras = (since: number): SQL => sql`
-  (select count(*) from recommendations r join profiles p on p.user_id = r.user_id
-    where r.article_id = a.id and r.deleted_at is null and r.created_at >= ${since}
+  (select count(distinct r.user_id) from recommendations r join profiles p on p.user_id = r.user_id
+    where r.article_id in (${COPIES}) and r.deleted_at is null and r.created_at >= ${since}
       and ${standingOk('p')}) as "weekRecs",
   (select json_group_array(x.user_id) from (
     select r.user_id from recommendations r join profiles p on p.user_id = r.user_id
-    where r.article_id = a.id and r.deleted_at is null and ${standingOk('p')}
-    order by r.id desc limit ${sql.raw(String(RECOMMENDERS_SHOWN))}) x) as "recommenders",
+    where r.article_id in (${COPIES}) and r.deleted_at is null and ${standingOk('p')}
+    group by r.user_id order by max(r.id) desc limit ${sql.raw(String(RECOMMENDERS_SHOWN))}) x)
+    as "recommenders",
   (select json_object('text', r.note, 'id', p.user_id, 'handle', p.handle,
       'displayName', p.display_name, 'avatar', ${avatarOf('p')})
     from recommendations r join profiles p on p.user_id = r.user_id
-    where r.article_id = a.id and r.deleted_at is null and r.note is not null and r.note <> ''
-      and ${standingOk('p')}
+    where r.article_id in (${COPIES}) and r.deleted_at is null and r.note is not null
+      and r.note <> '' and ${standingOk('p')}
     order by r.id desc limit 1) as "note"`
 
 /**
@@ -217,7 +243,9 @@ export const siteCard = (since: number, now: number): SQL => sql`
     where f.site_id = s.id and f.merged_into is null and a.sort_at <= ${now}) as "latestAt",
   (select count(*) from articles a join feeds f on f.id = a.feed_id
     where f.site_id = s.id and f.merged_into is null and a.sort_at >= ${since}
-      and a.sort_at <= ${now} and not ${REPEATED_POST}) as "postsLast30d"`
+      and a.sort_at <= ${now}
+      and not ${repeatedPost(sql`and ra.sort_at >= ${since} and ra.sort_at <= ${now}`)})
+    as "postsLast30d"`
 
 /**
  * The front page's edition (ADR 0035): the newest post of each public blog, newest first, 60 at

@@ -131,6 +131,42 @@ beforeEach(async () => {
   await person(BORIS, 'boris')
 })
 
+describe('a post two feeds of its blog hold (ADR 0068)', () => {
+  /** Blog 1 read through feeds 1 and 2, which both hold `/shared`, feed 1's copy stored first. */
+  async function overlapping() {
+    await blog(1)
+    await feed(2, 1)
+    await post(1, 1, { url: 'https://blog1.example/shared' })
+    await post(2, 2, { url: 'https://blog1.example/shared' })
+    await post(3, 2)
+  }
+
+  test("is listed once, in Discover's feed and a blogroll's holding both", async () => {
+    await overlapping()
+    await blogroll(ROLL, ANNA, [1, 2])
+    expect((await discoverFeed()).posts.map((p) => p.id)).toEqual([1, 3])
+    expect((await rollFeed()).posts.map((p) => p.id)).toEqual([1, 3])
+  })
+
+  test('is listed by a blogroll holding only the feed that stored it later', async () => {
+    await overlapping()
+    await blogroll(ROLL, ANNA, [2])
+    expect((await rollFeed()).posts.map((p) => p.id)).toEqual([2, 3])
+  })
+
+  test("Discover's OPML names a blog by a feed still fetched", async () => {
+    await overlapping()
+    await write(db.run(sql`update feeds set status = 'dead' where id = 2`))
+    expect((await discoverFeed()).blogs.map((b) => b.feedUrl)).toEqual([
+      'https://blog1.example/feed1',
+    ])
+    await write(db.run(sql`update feeds set status = 'active' where id = 2`))
+    expect((await discoverFeed()).blogs.map((b) => b.feedUrl)).toEqual([
+      'https://blog1.example/feed2',
+    ])
+  })
+})
+
 describe("a blogroll's feeds", () => {
   test('carry its listed blogs in its order, by the feed a merge made them, and nothing else', async () => {
     await blog(1, { listing: 'featured' })

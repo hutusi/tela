@@ -134,6 +134,39 @@ describe('a blog read through overlapping feeds (ADR 0068)', () => {
     expect(found.sites.map((s) => s.feedId)).toEqual([12])
   })
 
+  test('Subscribe adds a feed still fetched over a dead or paused one with more posts', async () => {
+    await lab()
+    for (const status of ['dead', 'paused']) {
+      await db.run(sql`update feeds set status = ${status} where id = 12`)
+      expect((await readSitePage(deps(), 1))?.feeds.map((f) => f.id)).toEqual([11, 12])
+      const blogs = await readDiscover(deps(), 'blogs')
+      expect(blogs.sites.map((s) => [s.id, s.feedId])).toEqual([[1, 11]])
+      const found = await search(deps(), reader, { q: 'Lab' })
+      expect(found.sites.map((s) => s.feedId)).toEqual([11])
+    }
+  })
+
+  test("a recommendation of either copy is the post's, listed once, as its first copy", async () => {
+    await lab()
+    const other = await signedIn(api, 'other@x.test')
+    const copies = await db.all<{ id: number }>(sql`select id from articles
+      where dedup_key = 'source-control' order by id`)
+    const [first, later] = copies.map((c) => c.id)
+    const now = api.clock.now()
+    // The reader recommended Research's copy, the other member both.
+    await db.run(sql`insert into recommendations (user_id, article_id, created_at, updated_at)
+      values (${reader.userId}, ${later}, ${now}, ${now}), (${other.userId}, ${later}, ${now}, ${now}),
+        (${other.userId}, ${first}, ${now}, ${now})`)
+    const articles = await readDiscover(deps(), 'articles')
+    const shared = (p: { article: Record<string, unknown> }) => p.article.title === 'source-control'
+    expect(
+      articles.recommended.map((p) => [p.article.id, p.weekRecs, p.recommenders.toSorted()]),
+    ).toEqual([[first, 2, [reader.userId, other.userId].toSorted()]])
+    expect(articles.posts.filter(shared).map((p) => p.article.id)).toEqual([first])
+    const week = await readDiscover(deps(), 'week')
+    expect(week.recommended.map((p) => [p.article.id, p.weekRecs])).toEqual([[first, 2]])
+  })
+
   test('a post both feeds hold is shown once, as the feed that stored it first has it', async () => {
     await lab()
     const shown = ['verification', 'proteins', 'agents', 'source-control']

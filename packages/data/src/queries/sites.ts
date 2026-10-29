@@ -89,6 +89,16 @@ export const publicReaderCount = (alias: string): SQL =>
     then ${alias}.reader_count end)`)
 
 /**
+ * The order of a blog's feeds, over `feeds` aliased `alias`, its main feed first (ADR 0068): one
+ * still fetched (an operator's pause and a dead feed are not), then the one with the most posts,
+ * then the oldest. What Subscribe adds from a blog's card, its page and Discover's OPML, and the
+ * order Add offers a listed blog's feeds in, so the two never name different feeds.
+ */
+export const mainFeedOrder = (alias: string): SQL =>
+  sql.raw(`(${alias}.status = 'active') desc,
+    (select count(*) from articles mp where mp.feed_id = ${alias}.id) desc, ${alias}.id`)
+
+/**
  * A blog's reader count as a member's device holds it, over the sites table aliased `alias`: the
  * count from three readers up, 0 below (ADR 0041). Below three, "2 readers on Tela" would tell a
  * subscriber that one other member reads the blog; the row's type is a number, so 0, not null.

@@ -1,6 +1,6 @@
 # 0068 — AI labs in Discover, under an AI topic
 
-Status: accepted (2026-10-28, amended 2026-10-29 after Codex's review). An exception to the curated
+Status: accepted (2026-10-28, amended 2026-10-29 after two rounds of Codex's review). An exception to the curated
 list's rule that Discover holds independent blogs written by people (ADR 0018's editorial door);
 adds a tenth topic, and changes which of a blog's feeds Subscribe adds.
 
@@ -58,20 +58,32 @@ paid newsletter's). Claims never take this path: a feed kept elsewhere proves no
 blog, and a claim that verified would detach it anyway (ADR 0011). The app API's
 `POST /v1/feeds/discover` answers the same, in the same format.
 
-**A blog's Subscribe adds its main feed, the one with the most posts, then the oldest**
-(`mainFeed` in `apps/api/src/core/public-sql.ts`), on its Discover card, its page, in search and
-in Discover's OPML. It was the oldest feed, whichever a member happened to add first: the owner
-had added Anthropic's Engineering feed, which posts about once a month, so everyone who subscribed
-to Anthropic from Discover would have had Engineering and not Research (191 posts to its 27). A
+**A blog's Subscribe adds its main feed: one still fetched, then the one with the most posts,
+then the oldest** (`mainFeedOrder` in `packages/data/src/queries/sites.ts`, through `mainFeed`), on
+its Discover card, its page, in search and in Discover's OPML; Add offers a listed blog's feeds in
+the same order. It was the oldest feed, whichever a member happened to add first: the owner had
+added Anthropic's Engineering feed, which posts about once a month, so everyone who subscribed to
+Anthropic from Discover would have had Engineering and not Research (191 posts to its 27). A
 blog's own feed beside a section's feed has more posts too, so the rule is right beyond the labs.
+A dead feed or one an operator paused keeps its posts and would win by them, so the count comes
+after whether the feed is still fetched (Codex's second review).
 
-**A post two of a blog's feeds hold is listed once in public** (`REPEATED_POST`): on the blog's
+**A post two of a blog's feeds hold is listed once in public** (`repeatedPost`): on the blog's
 page and in its post count, Discover's Articles and Tela's own RSS, as the feed that stored it
 first has it. Codex's review found Anthropic's News and Research both storing "Early progress on
 accelerating drug development with Claude", which the blog's page then listed twice: ADR 0028
 merges only feeds that hold the same posts, so a section's feed beside another keeps its own, and
 its posts are stored once per feed. A member's own list keeps the copy of each feed they follow,
 as ADR 0028 decided for a category feed. Research and Engineering share 2 posts of 218.
+
+Only a copy the same list would show hides another: a blogroll's RSS reads only the feeds the
+blogroll holds, so one holding only the feed that stored a post later lists that copy, and a
+count of the month's posts counts a copy whose twin is dated outside the month. And the post is
+one post to its readers too: a recommendation of either copy is the post's, so Discover's most
+recommended lists its first copy, counted by everyone who recommended either (`FIRST_COPY`), and
+every public post names the readers of both (`postExtras`). Listed as the copy recommended, the
+post came twice in Articles' default sort, once recommended and once among the newest (Codex's
+second review).
 
 **`MIN_CLIENT` goes to 7.** A protocol-6 shell renders a blog's topics by their key and would show
 "topics.ai" on the blog's page. From 7 the blog page and the console show only topics the build
@@ -89,7 +101,13 @@ can name, in Discover's order, as the dashboard already did, so the next topic n
 - Choosing the main feed counts a blog's posts per feed wherever a card is built: an index range
   per feed (`articles_feed_sort_idx`), about 50,000 index entries for Discover's OPML of every
   public blog, behind the colo's copy. Hiding a repeated post looks only at the blog's other feeds,
-  so a blog with one feed costs one probe of `feeds_site_idx`.
+  so a blog with one feed costs one probe of `feeds_site_idx`, and so does gathering a post's
+  recommendations from its copies. A blog with several reads its other feeds' posts for each of
+  its own, since nothing indexes a post's address: Anthropic's 218 posts cost about 10,000 rows on
+  a read that takes every public post before sorting. A blog with many feeds and many posts would
+  want an index on `articles.url`.
+- Copies of a post are taken to share its date and language when recommendations are gathered:
+  a recommended post is listed as its first copy, whose date and language a filter then reads.
 - A member subscribed to two overlapping feeds still sees the shared post twice in their own list.
 - Every feed from `www.microsoft.com` joins the Microsoft Research blog, as any feed joins the blog
   at its home's origin.
