@@ -400,7 +400,11 @@ The account is on Workers Paid. Run wrangler from a real terminal (`wrangler log
      - Deploy tela-jobs first (Add's discovery offering a listed blog's feeds runs there), then
        tela-web, then tela-api within minutes; tela-gateway is unchanged.
      - Then `bun run admin curate`, never before tela-api: curate drops a topic tela-api does not
-       know, and a lab listed under AI alone would be listed under nothing.
+       know, and a lab listed under AI alone would be listed under nothing. The same run adds the
+       55 blogs from the HN Popularity Contest's list, about 1,560 posts in their feeds: expect
+       their titles to spend about 1M tokens that day, as 20 blogs and 1,611 posts did on
+       2026-10-09. Chris Siebenmann's server answers 429 to a client that asks too often; its
+       first fetch may wait out a backoff.
      - Rolling back: tela-api and tela-web go back together. The labs stay listed; an older build
        shows them under All only, and `?topic=ai` reads as no topic. tela-jobs may go back alone:
        Add then says "No feed found" at a lab's address again.

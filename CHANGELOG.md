@@ -18,6 +18,14 @@ everything so far sits under `[Unreleased]`.
   several feeds lists a post they share once, recommended by whoever recommended either copy, and
   its Subscribe adds the feed still fetched with the most posts, no longer whichever was added
   first. `MIN_CLIENT` 7.
+- **55 more blogs in Discover, from Hacker News' favourite personal blogs of 2025** (the HN
+  Popularity Contest's ranking). The editorial list grows from 167 to 222: 37 on programming and
+  computing (Ken Shirriff, Armin Ronacher, Daniel Stenberg, Martin Fowler, Raymond Chen…), 5 on AI
+  (Ethan Mollick, Giles Thomas…), and 13 on science, history and ideas (Terence Tao, Dynomight,
+  Construction Physics, A Collection of Unmitigated Pedantry, Astral Codex Ten…). None featured.
+  Left out: what is not one person's blog (neal.fun, companies, news sites), two Tela can't fetch,
+  one whose site asks that models not read it, the politics and paywalled newsletters, and
+  anything quiet for 60 days.
 - **Members register their own apps** (ADR 0067), in Settings → Developer, as on GitHub: Testing
   for the developer alone, then Live for everyone. The operator reviews apps when asked and handles
   reports of them. An app Tela has not reviewed is shown as "Not reviewed by Tela" with its
