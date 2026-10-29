@@ -253,3 +253,57 @@ describe('claiming a blog by path', () => {
     expect(namesSite('www.anthropic.com', 'https://www.anthropic.com/research')).toBe(false)
   })
 })
+
+describe('Add on a blog by path', () => {
+  const both = (): BlogRules => ({
+    sharedHosts: [],
+    pathBlogs: [server.url('/research'), server.url('/engineering')],
+  })
+  const page = (path: string) =>
+    server.set(path, (_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+      res.end('<html><body>No feed declared here.</body></html>')
+    })
+
+  /** Two listed sections of the fixture's site, each read through a feed kept elsewhere. */
+  async function lab() {
+    for (const [section, feedUrl] of [
+      ['/research', 'https://feeds.example/research.xml'],
+      ['/engineering', 'https://feeds.example/engineering.xml'],
+    ] as const) {
+      await registerFeed(db, { feedUrl, homeUrl: server.url(section), rules: both(), now: NOW })
+    }
+    await db.run(sql`update sites set listing = 'listed'`)
+    page('/')
+    page('/research')
+    page('/engineering')
+    return createIngest({ db, http, now: () => clock.now(), rules: both() })
+  }
+
+  test("a section's address offers its own feed, and the site's address every section's", async () => {
+    const ingest = await lab()
+    const urls = async (url: string) => {
+      const found = await ingest.discover({ url })
+      return 'feeds' in found ? found.feeds.map((f) => f.url) : found
+    }
+    expect(await urls(server.url('/engineering'))).toEqual([
+      'https://feeds.example/engineering.xml',
+    ])
+    expect(await urls(server.url('/research/proteins'))).toEqual([
+      'https://feeds.example/research.xml',
+    ])
+    expect(await urls(server.url('/'))).toEqual([
+      'https://feeds.example/research.xml',
+      'https://feeds.example/engineering.xml',
+    ])
+  })
+
+  test("a writer's address on a shared host never finds the host's own feed", async () => {
+    server.text('/feed', rss({ title: 'The host', items: [{ guid: 'h', title: 'H' }] }))
+    page('/dhh')
+    const ingest = createIngest({ db, http, now: () => clock.now(), rules: shared() })
+    expect(await ingest.discover({ url: server.url('/dhh/a-post') })).toEqual({ feeds: [] })
+    expect(server.requests.some((r) => r.path === '/feed')).toBe(false)
+    expect(server.requests.some((r) => r.path === '/dhh/feed')).toBe(true)
+  })
+})

@@ -69,4 +69,10 @@ describe('discover', () => {
     expect(urls[0]).toBe('https://blog.example/feed')
     expect(urls).toContain('https://blog.example/index.xml')
   })
+
+  test("a blog by path finds them under its path, never at its host's root (ADR 0069)", () => {
+    const urls = candidateFeedUrls('https://world.hey.com/dhh')
+    expect(urls[0]).toBe('https://world.hey.com/dhh/feed')
+    expect(urls.every((u) => u.startsWith('https://world.hey.com/dhh/'))).toBe(true)
+  })
 })

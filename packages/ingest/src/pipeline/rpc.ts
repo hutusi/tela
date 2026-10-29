@@ -80,27 +80,31 @@ export interface Ingest {
 
 export { asUrl }
 
-/** The homes a member may mean by `url`'s host: with or without `www.`, over either scheme. */
-function homesOf(url: string): string[] | null {
-  let parsed: URL
-  try {
-    parsed = new URL(url)
-  } catch {
-    return null
-  }
+/**
+ * The homes a member may mean by `url`: its blog's site key (ADR 0069), with or without `www.`,
+ * over either scheme. `root` says the key is an origin, which blogs by path may be under.
+ */
+function homesOf(url: string, rules?: BlogRules): { homes: string[]; root: boolean } | null {
+  const key = siteKeyOf(url, rules)
+  if (!key) return null
+  const parsed = new URL(key)
   const bare = parsed.hostname.toLowerCase().replace(/^www\./, '')
   const port = parsed.port ? `:${parsed.port}` : ''
-  return ['https:', 'http:'].flatMap((scheme) =>
-    ['', 'www.'].map((www) => `${scheme}//${www}${bare}${port}`),
+  const path = parsed.pathname === '/' ? '' : parsed.pathname
+  const homes = ['https:', 'http:'].flatMap((scheme) =>
+    ['', 'www.'].map((www) => `${scheme}//${www}${bare}${port}${path}`),
   )
+  return { homes, root: path === '' }
 }
 
 /**
  * The live feeds of the blogs at `homes` that `which` picks, as discovery answers them: a row
  * with a null `url` is a blog with no such feed left. The blog's main feed first, as its
- * Subscribe has it (`mainFeedOrder`, ADR 0068).
+ * Subscribe has it (`mainFeedOrder`, ADR 0068). With `under`, blogs by path on those homes too:
+ * a site's own address finds the sections that are blogs of their own (ADR 0069).
  */
-async function keptFeeds(db: TelaDb, homes: string[], which: SQL) {
+async function keptFeeds(db: TelaDb, homes: string[], which: SQL, under = false) {
+  const at = JSON.stringify(homes)
   const rows = await db.all<{
     url: string | null
     title: string | null
@@ -112,7 +116,8 @@ async function keptFeeds(db: TelaDb, homes: string[], which: SQL) {
       (select count(*) from articles a where a.feed_id = f.id) as items
     from sites s left join feeds f on f.site_id = s.id and f.merged_into is null
       and f.status <> 'dead'
-    where ${which} and s.home_url in (select value from json_each(${JSON.stringify(homes)}))
+    where ${which} and (s.home_url in (select value from json_each(${at}))
+      ${under ? sql`or exists (select 1 from json_each(${at}) h where substr(s.home_url, 1, length(h.value) + 1) = h.value || '/')` : sql``})
     order by ${mainFeedOrder('f')}
   `)
   const formatOf = (f: string | null): FeedFormat =>
@@ -141,10 +146,14 @@ async function keptFeeds(db: TelaDb, homes: string[], which: SQL) {
  * a URL on any other blog, which discovery finds as it always has. The blog is found by its home,
  * with or without `www.` and over either scheme, as a member might type it.
  */
-export async function feedOnlyFeeds(db: TelaDb, url: string): Promise<DiscoveredFeed[] | null> {
-  const homes = homesOf(url)
-  if (!homes) return null
-  const kept = await keptFeeds(db, homes, sql`s.feed_only = 1`)
+export async function feedOnlyFeeds(
+  db: TelaDb,
+  url: string,
+  rules?: BlogRules,
+): Promise<DiscoveredFeed[] | null> {
+  const at = homesOf(url, rules)
+  if (!at) return null
+  const kept = await keptFeeds(db, at.homes, sql`s.feed_only = 1`)
   return kept.blogs === 0 ? null : kept.feeds
 }
 
@@ -156,10 +165,15 @@ export async function feedOnlyFeeds(db: TelaDb, url: string): Promise<Discovered
  * already (`sitePage`), while a private blog's feeds are what its readers chose, and a feed URL
  * can carry a secret (a paid newsletter's, say).
  */
-export async function listedFeeds(db: TelaDb, url: string): Promise<DiscoveredFeed[]> {
-  const homes = homesOf(url)
-  if (!homes) return []
-  return (await keptFeeds(db, homes, sql`s.listing in ('listed', 'featured')`)).feeds
+export async function listedFeeds(
+  db: TelaDb,
+  url: string,
+  rules?: BlogRules,
+): Promise<DiscoveredFeed[]> {
+  const at = homesOf(url, rules)
+  if (!at) return []
+  const listed = sql`s.listing in ('listed', 'featured')`
+  return (await keptFeeds(db, at.homes, listed, at.root)).feeds
 }
 
 export function createIngest(deps: {
@@ -175,11 +189,11 @@ export function createIngest(deps: {
     sql`${feedRoom(actorId, now(), exempt ?? ('is_admin' satisfies Exempt))} > 0`
   const find = async (url: string, maxCandidates: number): Promise<DiscoverResult> => {
     // A feed-only blog's own feeds, without a request to it; none left is no feed to offer.
-    const kept = await feedOnlyFeeds(db, url)
+    const kept = await feedOnlyFeeds(db, url, rules)
     if (kept)
       return kept.length > 0 ? { feeds: kept.slice(0, maxCandidates) } : { error: 'not_a_feed' }
     try {
-      return { feeds: await discoverFeeds(http, url, { maxCandidates }) }
+      return { feeds: await discoverFeeds(http, url, { maxCandidates, rules }) }
     } catch (err) {
       if (err instanceof HttpError) {
         return { error: err.kind === 'too_large' ? 'feed_too_large' : 'unreachable' }
@@ -199,7 +213,7 @@ export function createIngest(deps: {
       if (!nothing) return found
       // Nothing to add at that address: a blog in Discover may still be read through a feed kept
       // elsewhere (ADR 0068). Adding only; a claim must find the blog's own feed.
-      const listed = await listedFeeds(db, parsed.toString())
+      const listed = await listedFeeds(db, parsed.toString(), rules)
       return listed.length > 0 ? { feeds: listed.slice(0, 5) } : found
     },
 
