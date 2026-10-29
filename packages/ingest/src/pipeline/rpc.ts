@@ -8,7 +8,7 @@
 import { asUrl, normalizeOrigin } from '@tela/content'
 import { feedsFromOpml } from '@tela/content/opml'
 import { type Exempt, feedRoom, mainFeedOrder, type TelaDb } from '@tela/data'
-import { FEED_FORMATS, type FeedFormat } from '@tela/shared'
+import { type BlogRules, FEED_FORMATS, type FeedFormat } from '@tela/shared'
 import { type SQL, sql } from 'drizzle-orm'
 import { type DiscoveredFeed, discoverFeeds } from '../discover'
 import type { HttpClient } from '../http'
@@ -162,8 +162,14 @@ export async function listedFeeds(db: TelaDb, url: string): Promise<DiscoveredFe
   return (await keptFeeds(db, homes, sql`s.listing in ('listed', 'featured')`)).feeds
 }
 
-export function createIngest(deps: { db: TelaDb; http: HttpClient; now: () => number }): Ingest {
-  const { db, http, now } = deps
+export function createIngest(deps: {
+  db: TelaDb
+  http: HttpClient
+  now: () => number
+  /** Which blogs are by path (ADR 0069); unset is `BLOG_RULES`. Tests name the fixture's paths. */
+  rules?: BlogRules
+}): Ingest {
+  const { db, http, now, rules } = deps
   // No `exempt` is a tela-api from before the actor (ADR 0065): `is_admin` decides, as it did.
   const room = (actorId: string, exempt: boolean | undefined) =>
     sql`${feedRoom(actorId, now(), exempt ?? ('is_admin' satisfies Exempt))} > 0`
@@ -214,7 +220,7 @@ export function createIngest(deps: { db: TelaDb; http: HttpClient; now: () => nu
       // page URL yields the feed the page declares: either way what is registered was parsed.
       const feed = found.feeds.find((f) => f.url === parsed.toString()) ?? found.feeds[0]
       if (!feed) return { error: 'not_a_feed' }
-      const input = { feedUrl: feed.url, homeUrl: feed.homeUrl, actorId, now: now() }
+      const input = { feedUrl: feed.url, homeUrl: feed.homeUrl, actorId, rules, now: now() }
       if (!withinDay || actorId === null) return registerFeed(db, input)
       // Counted in the statements that write it: a redirect to a feed Tela has is still free.
       const added = await registerFeed(db, { ...input, within: room(actorId, exempt) })
@@ -233,7 +239,7 @@ export function createIngest(deps: { db: TelaDb; http: HttpClient; now: () => nu
       const typedOrigin = normalizeOrigin(typed.toString())
       const homeUrl =
         typedOrigin && typedOrigin !== normalizeOrigin(feed.url) ? typedOrigin : feed.homeUrl
-      const input = { feedUrl: feed.url, homeUrl, actorId, now: now() }
+      const input = { feedUrl: feed.url, homeUrl, actorId, rules, now: now() }
       const registered = withinDay
         ? await registerFeed(db, { ...input, within: room(actorId, exempt) })
         : await registerFeed(db, input)

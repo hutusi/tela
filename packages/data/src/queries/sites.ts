@@ -1,13 +1,17 @@
 /**
  * Sites and feeds as the ingest pipeline and the API create and move them. Statements address
- * sites by origin (`home_url`) rather than by an id read earlier, so a move stays correct even if
- * another feed's fetch created that site a moment ago.
+ * sites by their key (`home_url`: the blog's origin, or for a blog by path that origin and its
+ * path, `siteKeyOf` in @tela/shared, ADR 0069) rather than by an id read earlier, so a move stays
+ * correct even if another feed's fetch created that site a moment ago.
  */
 import { COMMUNITY_LISTING_MIN_READERS, type FetchRegion } from '@tela/shared'
 import { eq, type SQL, sql } from 'drizzle-orm'
 import type { TelaDb } from '../db'
+import { first } from '../first'
 import { feeds, sites } from '../schema'
 import { bumpSeq, currentSeq } from '../seq'
+
+type BatchItem = Parameters<TelaDb['batch']>[0][number]
 
 export type SiteMeta = {
   title?: string | null
@@ -15,12 +19,12 @@ export type SiteMeta = {
   primaryLang?: string | null
 }
 
-/** Insert the site for `origin` unless it exists; fill metadata it lacks. */
-export function ensureOriginSite(db: TelaDb, origin: string, now: number, meta: SiteMeta = {}) {
+/** Insert the site keyed `home` unless it exists; fill metadata it lacks. */
+export function ensureHomeSite(db: TelaDb, home: string, now: number, meta: SiteMeta = {}) {
   return db
     .insert(sites)
     .values({
-      homeUrl: origin,
+      homeUrl: home,
       title: meta.title ?? null,
       description: meta.description ?? null,
       primaryLang: meta.primaryLang ?? null,
@@ -38,24 +42,29 @@ export function ensureOriginSite(db: TelaDb, origin: string, now: number, meta: 
     })
 }
 
-const siteIdOf = (origin: string) => sql`(select id from sites where home_url = ${origin})`
+const siteIdOf = (home: string) => sql`(select id from sites where home_url = ${home})`
+
+/** The host of a site's key (`https://world.hey.com/dhh` → `world.hey.com`), in SQL, for leases. */
+export const siteHost = (homeUrl: SQL) =>
+  sql`substr(substr(${homeUrl}, instr(${homeUrl}, '://') + 3), 1,
+    instr(substr(${homeUrl}, instr(${homeUrl}, '://') + 3) || '/', '/') - 1)`
 
 /**
- * `ensureOriginSite` for a feed about to be inserted, and nothing when that feed exists already:
+ * `ensureHomeSite` for a feed about to be inserted, and nothing when that feed exists already:
  * it keeps the site it has, so a site made for it here would hold no feed and show in Discover as
  * a card with no name and no posts. In the batch that inserts the feed, so the two agree.
  */
 function ensureSiteForNewFeed(
   db: TelaDb,
   feedUrl: string,
-  origin: string,
+  home: string,
   now: number,
   meta: SiteMeta,
   within: SQL,
 ) {
   return db.run(sql`
     insert into sites (home_url, title, description, primary_lang, created_at, updated_at, seq)
-    select ${origin}, ${meta.title ?? null}, ${meta.description ?? null}, ${meta.primaryLang ?? null},
+    select ${home}, ${meta.title ?? null}, ${meta.description ?? null}, ${meta.primaryLang ?? null},
       ${now}, ${now}, ${currentSeq}
     where not exists (select 1 from feeds where feed_url = ${feedUrl}) and ${within}
     on conflict (home_url) do update set
@@ -195,15 +204,15 @@ export async function restampTranslations(db: TelaDb, siteIds: readonly number[]
 }
 
 /**
- * Re-point a feed to the site for `origin` (creating it), drop the site it left if that was an
+ * Re-point a feed to the site keyed `home` (creating it), drop the site it left if that was an
  * empty unclaimed placeholder, and recount both; moved off a blog that said no to translation onto
  * one that allows it, stamp its translations again. Statements for a batch that has already
  * bumped the sync sequence.
  */
-export function moveFeedToOrigin(
+export function moveFeedToHome(
   db: TelaDb,
   feed: { id: number; siteId: number },
-  origin: string,
+  home: string,
   now: number,
 ) {
   // Moved from a blog that said no to translation onto one that allows it, the feed's titles and
@@ -214,9 +223,9 @@ export function moveFeedToOrigin(
   // what its own fetches have written, at most its archive.
   const backOn = sql`exists (select 1 from feeds f join sites s on s.id = f.site_id
       where f.id = ${feed.id} and s.translation_opt_out = 1)
-    and exists (select 1 from sites where id = ${siteIdOf(origin)} and translation_opt_out = 0)`
+    and exists (select 1 from sites where id = ${siteIdOf(home)} and translation_opt_out = 0)`
   return [
-    ensureOriginSite(db, origin, now),
+    ensureHomeSite(db, home, now),
     db.run(
       sql`update article_titles set seq = ${currentSeq} where feed_id = ${feed.id} and ${backOn}`,
     ),
@@ -227,11 +236,11 @@ export function moveFeedToOrigin(
         and ${backOn}
     `),
     db.run(
-      sql`update feeds set site_id = ${siteIdOf(origin)}, updated_at = ${now}, seq = ${currentSeq} where id = ${feed.id}`,
+      sql`update feeds set site_id = ${siteIdOf(home)}, updated_at = ${now}, seq = ${currentSeq} where id = ${feed.id}`,
     ),
-    ...recountReaders(db, sql`${feed.siteId}, ${siteIdOf(origin)}`, now),
+    ...recountReaders(db, sql`${feed.siteId}, ${siteIdOf(home)}`, now),
     db.run(sql`
-      delete from sites where id = ${feed.siteId} and id <> ${siteIdOf(origin)}
+      delete from sites where id = ${feed.siteId} and id <> ${siteIdOf(home)}
         and claimed_by is null and not exists (select 1 from feeds where site_id = ${feed.siteId})
     `),
   ] as const
@@ -240,8 +249,8 @@ export function moveFeedToOrigin(
 export type EnsureFeedInput = {
   feedUrl: string
   host: string
-  /** The site origin to file the feed under: its declared home when honoured, else its own. */
-  siteOrigin: string
+  /** The site key to file the feed under: its declared home's when honoured, else its own. */
+  siteHome: string
   title?: string | null
   description?: string | null
   format?: 'rss' | 'atom' | 'rdf' | 'json' | null
@@ -273,13 +282,13 @@ export async function ensureFeed(
   const within = input.within ?? sql`true`
   const [, , inserted] = (await db.batch([
     bumpSeq(db),
-    ensureSiteForNewFeed(db, input.feedUrl, input.siteOrigin, input.now, input.site ?? {}, within),
+    ensureSiteForNewFeed(db, input.feedUrl, input.siteHome, input.now, input.site ?? {}, within),
     // A feed that exists already made no site above; its own site keeps the column filled until
     // the conflict below drops the row.
     db.all(sql`
       insert into feeds (site_id, feed_url, host, title, description, format, hub_url, added_by,
         fetch_region, next_fetch_at, created_at, updated_at, seq)
-      select coalesce(${siteIdOf(input.siteOrigin)},
+      select coalesce(${siteIdOf(input.siteHome)},
           (select site_id from feeds where feed_url = ${input.feedUrl})),
         ${input.feedUrl}, ${input.host}, ${input.title ?? null}, ${input.description ?? null},
         ${input.format ?? null}, ${input.hubUrl ?? null}, ${input.addedBy ?? null},
@@ -304,15 +313,59 @@ export async function ensureFeed(
 /** Where a declared home may file a feed: an unclaimed site, or one the acting member claimed. */
 export async function declaredHomeHonoured(
   db: TelaDb,
-  declaredOrigin: string,
+  declaredHome: string,
   actorId: string | null,
 ): Promise<boolean> {
   const rows = await db
     .select({ claimedBy: sites.claimedBy })
     .from(sites)
-    .where(eq(sites.homeUrl, declaredOrigin))
+    .where(eq(sites.homeUrl, declaredHome))
   const claimedBy = rows[0]?.claimedBy ?? null
   return claimedBy === null || claimedBy === actorId
+}
+
+/** What filing a feed under another home did (`fileFeedUnder`). */
+export type FiledOutcome = 'kept' | 'renamed' | 'joined' | 'split' | 'blocked'
+
+/**
+ * Statements that file a feed under the site keyed `home`: rename its site when it is that site's
+ * only feed and no site has the home yet, otherwise join the site there or split onto a new one.
+ * Nothing moves off a claimed site or onto one: a claim settles which feeds are the blog's
+ * (ADR 0011). For a batch that has already bumped the sync sequence.
+ */
+export async function fileFeedUnder(
+  db: TelaDb,
+  feed: { id: number; siteId: number },
+  site: { homeUrl: string; claimedBy: string | null },
+  home: string,
+  now: number,
+): Promise<{ statements: BatchItem[]; outcome: FiledOutcome }> {
+  if (home === site.homeUrl) return { statements: [], outcome: 'kept' }
+  if (site.claimedBy !== null) return { statements: [], outcome: 'blocked' }
+  const target = await first<{ id: number; claimed_by: string | null }>(
+    db,
+    sql`select id, claimed_by from sites where home_url = ${home}`,
+  )
+  if (target?.claimed_by) return { statements: [], outcome: 'blocked' }
+  const siblings = await first<{ n: number }>(
+    db,
+    sql`select count(*) as n from feeds where site_id = ${feed.siteId} and id <> ${feed.id}`,
+  )
+  if (!target && (siblings?.n ?? 0) === 0) {
+    return {
+      statements: [
+        db.run(sql`
+          update sites set home_url = ${home}, updated_at = ${now}, seq = ${currentSeq}
+          where id = ${feed.siteId} and not exists (select 1 from sites where home_url = ${home})
+        `),
+      ],
+      outcome: 'renamed',
+    }
+  }
+  return {
+    statements: [...moveFeedToHome(db, feed, home, now)],
+    outcome: target ? 'joined' : 'split',
+  }
 }
 
 /**
@@ -355,8 +408,7 @@ export async function importFeedUrls(
   return ((results as unknown[])[3] as { id: number }[]).map((r) => r.id)
 }
 
-/** Claims a member asked to verify. Leased by the site's host, so one claim per site at a time. */
+/** Claims a member asked to verify. Leased by the site's host, so one claim per host at a time. */
 export const dueClaims = (): SQL =>
-  sql`select c.id as key, substr(s.home_url, instr(s.home_url, '://') + 3) as host,
-        c.created_at as ord
+  sql`select c.id as key, ${siteHost(sql`s.home_url`)} as host, c.created_at as ord
       from site_claims c join sites s on s.id = c.site_id where c.status = 'pending'`

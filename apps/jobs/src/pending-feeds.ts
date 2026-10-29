@@ -9,7 +9,6 @@
  * again adds nothing twice, since a feed added is one Tela has and a subscription made is held.
  * Nothing is fetched here; the feed sweep fetches each new feed as it fetches an import's.
  */
-import { normalizeOrigin } from '@tela/content/url'
 import {
   addPendingFeeds,
   type BroughtFeed,
@@ -17,6 +16,7 @@ import {
   type Lease,
   pendingFeedsOf,
 } from '@tela/data'
+import { siteKeyOf } from '@tela/shared'
 import type { StepResult, WorkContext } from './kinds'
 
 export const PENDING_FEEDS_TTL_MS = 2 * 60_000
@@ -31,7 +31,7 @@ export async function pendingFeedsJob(
   const feeds: BroughtFeed[] = []
   const drop: string[] = []
   for (const row of rows) {
-    const origin = normalizeOrigin(row.feed_url)
+    const origin = siteKeyOf(row.feed_url)
     if (origin) {
       feeds.push({
         feedUrl: row.feed_url,

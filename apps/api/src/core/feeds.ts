@@ -9,7 +9,7 @@
  * is, ADR 0064). A refusal says which limit, and when it lifts, so a surface can say when to try
  * again (`retryAfterSec`, `resetsAt`).
  */
-import { asUrl, normalizeOrigin } from '@tela/content/url'
+import { asUrl } from '@tela/content/url'
 import {
   type Actor,
   type BroughtFeed,
@@ -31,6 +31,7 @@ import {
 } from '@tela/data'
 import type { DiscoverResult, IngestError } from '@tela/ingest/pipeline'
 import type { Jobs } from '@tela/platform'
+import { siteKeyOf } from '@tela/shared'
 import type { FeedRow, SiteRow } from '@tela/sync'
 import { sql } from 'drizzle-orm'
 import type { ApiDeps } from '../deps'
@@ -241,7 +242,8 @@ export async function importFeeds(
   const read = await deps.ingest.readOpml({ opml })
   if ('error' in read) return read
   const feeds = read.urls.flatMap((feedUrl): BroughtFeed[] => {
-    const origin = normalizeOrigin(feedUrl)
+    // The blog's key, so two writers on one shared host wait on two placeholders (ADR 0069).
+    const origin = siteKeyOf(feedUrl)
     return origin ? [{ feedUrl, host: new URL(feedUrl).hostname.toLowerCase(), origin }] : []
   })
   const brought = await bringFeeds(db, { userId: actor.userId, exempt: actor.exempt, feeds, now })

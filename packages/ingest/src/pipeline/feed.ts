@@ -30,14 +30,14 @@ import {
   existingArticles,
   type FeedForFetch,
   feedIsVouched,
+  fileFeedUnder,
   fillSiteMetadata,
-  first,
   insertArticles,
   insertVersions,
   type Lease,
   loadFeedForFetch,
   mergeFeed,
-  moveFeedToOrigin,
+  moveFeedToHome,
   type NewArticle,
   type NewVersion,
   noteHub,
@@ -49,7 +49,7 @@ import {
   updateFeed,
   wantsExtraction,
 } from '@tela/data'
-import type { ContentMode } from '@tela/shared'
+import { type ContentMode, siteKeyOf } from '@tela/shared'
 import { sql } from 'drizzle-orm'
 import {
   type ContentSample,
@@ -161,30 +161,33 @@ function successSet(
 }
 
 /**
- * The feed belongs to the origin that served it (ADR 0011). On a claimed site that does not vouch
- * for it, move it to the served origin's site before anything is stored under the member's name.
+ * The feed belongs to the blog that served it (ADR 0011): the site key of the address it was
+ * served from, so on a shared host the writer's own path (ADR 0069). On a claimed site that does
+ * not vouch for it, move it to that blog's site before anything is stored under the member's name.
  */
 function provenance(
   ctx: IngestContext,
   feed: FeedForFetch,
-  servedOrigin: string | null,
+  served: string | null,
   now: number,
 ): { statements: Statement[]; detached: boolean } {
   const statements: Statement[] = []
-  if (servedOrigin && servedOrigin !== feed.servedOrigin) {
-    statements.push(updateFeed(ctx.db, feed.id, { servedOrigin }, now))
+  if (served && served !== feed.servedOrigin) {
+    statements.push(updateFeed(ctx.db, feed.id, { servedOrigin: served }, now))
   }
-  const current = { ...feed, servedOrigin: servedOrigin ?? feed.servedOrigin }
-  if (!servedOrigin || feedIsVouched(current, feed.site)) return { statements, detached: false }
-  statements.push(...moveFeedToOrigin(ctx.db, feed, servedOrigin, now))
+  const current = { ...feed, servedOrigin: served ?? feed.servedOrigin }
+  if (!served || feedIsVouched(current, feed.site)) return { statements, detached: false }
+  statements.push(...moveFeedToHome(ctx.db, feed, served, now))
   return { statements, detached: true }
 }
 
 /**
- * A feed added by URL starts on a placeholder site keyed by its own origin. Once it declares its
- * home, move it there: rename the placeholder when it is the only feed and the home is free,
- * otherwise join an unclaimed site for that home or split onto a new one. A claimed placeholder
- * or a claimed target is left alone.
+ * A feed added by URL starts on a placeholder site keyed by its own address. Once it declares its
+ * home, move it there (`fileFeedUnder`): rename the placeholder when it is the only feed and the
+ * home is free, otherwise join an unclaimed site for that home or split onto a new one. A claimed
+ * placeholder or a claimed target is left alone. A feed on a shared host that Tela filed under the
+ * bare host before blogs by path (ADR 0069) is on such a placeholder too, and moves to its writer's
+ * blog by the home it declares, or by its own address when it declares none.
  */
 async function adoptDeclaredHome(
   ctx: IngestContext,
@@ -192,39 +195,15 @@ async function adoptDeclaredHome(
   declaredHome: string | null,
   now: number,
 ): Promise<{ statements: Statement[]; outcome: HomeUrlOutcome }> {
-  const declared = declaredHome ? normalizeOrigin(declaredHome) : null
+  const rules = ctx.blogRules
+  const own = siteKeyOf(feed.feedUrl, rules)
+  const declared = (declaredHome ? siteKeyOf(declaredHome, rules) : null) ?? own
   const site = feed.site
-  const keyedByFeedHost = site.homeUrl === normalizeOrigin(feed.feedUrl)
+  const keyedByFeedHost = site.homeUrl === own || site.homeUrl === normalizeOrigin(feed.feedUrl)
   if (!declared || declared === site.homeUrl || !keyedByFeedHost) {
     return { statements: [], outcome: 'kept' }
   }
-  if (site.claimedBy !== null) return { statements: [], outcome: 'blocked' }
-  const { db } = ctx
-  const target = await first<{ id: number; claimed_by: string | null }>(
-    db,
-    sql`select id, claimed_by from sites where home_url = ${declared}`,
-  )
-  if (target?.claimed_by) return { statements: [], outcome: 'blocked' }
-  const siblings = await first<{ n: number }>(
-    db,
-    sql`select count(*) as n from feeds where site_id = ${site.id} and id <> ${feed.id}`,
-  )
-  if (!target && (siblings?.n ?? 0) === 0) {
-    return {
-      statements: [
-        db.run(sql`
-          update sites set home_url = ${declared}, updated_at = ${now},
-            seq = (select v from counters where k = 'seq')
-          where id = ${site.id} and not exists (select 1 from sites where home_url = ${declared})
-        `),
-      ],
-      outcome: 'renamed',
-    }
-  }
-  return {
-    statements: [...moveFeedToOrigin(db, feed, declared, now)],
-    outcome: target ? 'joined' : 'split',
-  }
+  return fileFeedUnder(ctx.db, feed, site, declared, now)
 }
 
 /** What the plan needs of an item: its content object and raw HTML are written and let go. */
@@ -529,7 +508,7 @@ export async function ingestFeed(ctx: IngestContext, lease: Lease): Promise<Inge
     }
   }
 
-  const served = normalizeOrigin(res.finalUrl)
+  const served = siteKeyOf(res.finalUrl, ctx.blogRules)
   if (res.status === 304) {
     const moved = provenance(ctx, feed, served, now)
     const set = successSet(ctx, feed, now, startedAt, {
@@ -586,7 +565,7 @@ export async function ingestFeed(ctx: IngestContext, lease: Lease): Promise<Inge
     throw err
   }
 
-  // Provenance first: the feed belongs to the origin that served it before a post is stored.
+  // Provenance first: the feed belongs to the blog that served it before a post is stored.
   const moved = provenance(ctx, feed, served, now)
   const items = selectItems(parsed.items)
   // Which article each item is, before any body is made: an item's objects are then written as it

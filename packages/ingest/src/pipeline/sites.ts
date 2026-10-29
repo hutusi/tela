@@ -7,11 +7,12 @@ import { absoluteUrl, findFeedLinks } from '@tela/content'
 import {
   bumpSeq,
   currentSeq,
+  feedHome,
   feedIsVouched,
-  feedOrigin,
   first,
   type Lease,
-  moveFeedToOrigin,
+  moveFeedToHome,
+  siteHost,
   type TelaDb,
 } from '@tela/data'
 import type { ClaimMethod, ClaimReason, FetchRegion, HomeUnreachable } from '@tela/shared'
@@ -24,9 +25,6 @@ import { requestHubSubscription } from '../websub'
 import { commit, type IngestContext, type Statement } from './context'
 import { namesSite, type ProfileLink, profileHosts, readProofs } from './proofs'
 import { checkLanded, checkRobots } from './robots'
-
-/** The host of a site's origin (`https://blog.example` → `blog.example`), in SQL. */
-const siteHost = (homeUrl: SQL) => sql`substr(${homeUrl}, instr(${homeUrl}, '://') + 3)`
 
 // ---------------------------------------------------------------------------------------------
 // Favicons
@@ -424,7 +422,8 @@ export async function verifyClaimJob(ctx: IngestContext, lease: Lease): Promise<
   const proof = found
 
   // The feeds the home page declares are the ones the owner vouches for; every other feed that
-  // joined while the site was unclaimed moves to the origin that serves it.
+  // joined while the site was unclaimed moves to the blog that serves it: its origin, or on a
+  // shared host its writer's path, never the bare host (ADR 0069).
   const declared = await resolveDeclaredFeeds(
     ctx.http,
     findFeedLinks(page.body, page.finalUrl)
@@ -444,9 +443,9 @@ export async function verifyClaimJob(ctx: IngestContext, lease: Lease): Promise<
   for (const f of feeds) {
     const feed = { feedUrl: f.feed_url, servedOrigin: f.served_origin, addedBy: f.added_by }
     if (feedIsVouched(feed, site)) continue
-    const origin = feedOrigin(feed)
-    if (origin && origin !== claim.home_url) {
-      moves.push(...moveFeedToOrigin(db, { id: f.id, siteId: claim.site_id }, origin, now))
+    const home = feedHome(feed, ctx.blogRules)
+    if (home && home !== claim.home_url) {
+      moves.push(...moveFeedToHome(db, { id: f.id, siteId: claim.site_id }, home, now))
     }
   }
   // Another member's claim on this blog may have been verified while this one read the page. Then
