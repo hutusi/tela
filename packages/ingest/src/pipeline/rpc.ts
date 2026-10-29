@@ -181,7 +181,7 @@ export function createIngest(deps: {
   http: HttpClient
   now: () => number
   /** Which blogs are by path (ADR 0069); unset is `BLOG_RULES`. Tests name the fixture's paths. */
-  rules?: BlogRules
+  rules?: BlogRules | undefined
 }): Ingest {
   const { db, http, now, rules } = deps
   // No `exempt` is a tela-api from before the actor (ADR 0065): `is_admin` decides, as it did.

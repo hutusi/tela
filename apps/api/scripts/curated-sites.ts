@@ -20,6 +20,12 @@ export type CuratedSite = {
    */
   title?: string
   /**
+   * The blog the feed belongs to, where Tela filed it under another before: a section of a site
+   * that became a blog of its own (`BLOG_RULES`, ADR 0069). Curate moves the feed there. A feed
+   * new to Tela is filed by the home it declares, and needs none.
+   */
+  home?: string
+  /**
    * Known mainland-China host. Kept as a note: every such feed fetched from Cloudflare in spike
    * S2, so it is registered like any other until one times out (OPERATIONS.md, the relay).
    */

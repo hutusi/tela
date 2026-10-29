@@ -5,8 +5,8 @@
  * unreachable feed does not stop the rest. Applying an entry again changes nothing that is
  * already right.
  */
-import { bumpSeq, currentSeq, first } from '@tela/data'
-import { isTopic } from '@tela/shared'
+import { bumpSeq, currentSeq, fileFeedUnder, first } from '@tela/data'
+import { isTopic, siteKeyOf } from '@tela/shared'
 import { sql } from 'drizzle-orm'
 import type { ApiDeps } from '../deps'
 import { fetchSoon } from './feeds'
@@ -29,10 +29,16 @@ export async function curate(
   featured: boolean,
   /** The blog's name where its feed gives a poor one; the feed's stands when this is null. */
   title: string | null = null,
+  /**
+   * The blog the feed belongs to, where Tela filed it elsewhere before: a section that became a
+   * blog of its own (ADR 0069). A new feed is filed by the home it declares, and needs none.
+   */
+  home: string | null = null,
 ): Promise<CurateResult> {
   const { db } = deps
-  const added = await deps.ingest.addFeed({ feedUrl, actorId: null })
-  if ('error' in added) return added
+  const found = await deps.ingest.addFeed({ feedUrl, actorId: null })
+  if ('error' in found) return found
+  const added = home ? await refile(deps, found, home) : found
   const chosen = [...new Set(topics.filter(isTopic))]
   const site = await first<{ listing: string; claimed_by: string | null }>(
     db,
@@ -91,4 +97,37 @@ export async function curate(
     title: after?.title ?? null,
     topics: stored.map((t) => t.topic),
   }
+}
+
+/**
+ * Move a curated feed to the blog the list names, as its first fetch moves a feed to the home it
+ * declares (`fileFeedUnder`): renaming the blog it is on when it is that blog's only feed, so the
+ * blog keeps its readers and its address, or else onto the named one. Nothing moves off a claimed
+ * blog or onto one. Answers where the feed is now.
+ */
+async function refile(
+  deps: ApiDeps,
+  added: { feedId: number; siteId: number; created: boolean },
+  home: string,
+): Promise<{ feedId: number; siteId: number; created: boolean }> {
+  const { db } = deps
+  const key = siteKeyOf(home, deps.blogRules)
+  const site = await first<{ home_url: string; claimed_by: string | null }>(
+    db,
+    sql`select home_url, claimed_by from sites where id = ${added.siteId}`,
+  )
+  if (!key || !site) return added
+  const filed = await fileFeedUnder(
+    db,
+    { id: added.feedId, siteId: added.siteId },
+    { homeUrl: site.home_url, claimedBy: site.claimed_by },
+    key,
+    deps.clock.now(),
+  )
+  if (filed.statements.length > 0) await db.batch([bumpSeq(db), ...filed.statements] as never)
+  const now = await first<{ site_id: number }>(
+    db,
+    sql`select site_id from feeds where id = ${added.feedId}`,
+  )
+  return { ...added, siteId: now?.site_id ?? added.siteId }
 }

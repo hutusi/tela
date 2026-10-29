@@ -91,6 +91,7 @@ for (const site of CURATED_SITES as readonly CuratedSite[]) {
       topics: site.topics,
       featured: site.featured === true,
       title: site.title,
+      home: site.home,
     },
     true,
   )

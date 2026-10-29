@@ -5,6 +5,7 @@
 import type { JobQueues, TelaDb } from '@tela/data'
 import type { Ingest } from '@tela/ingest/pipeline'
 import type { Blobs, Clock, Jobs, Mail } from '@tela/platform'
+import type { BlogRules } from '@tela/shared'
 
 /** An app registered with a sign-in provider (ADR 0036). */
 export type OAuthClient = { clientId: string; clientSecret: string }
@@ -52,4 +53,6 @@ export type ApiDeps = {
   /** Test mode only: tela-jobs' sweeps, run to completion now (the e2e stack fires no crons). */
   cycle?: (options?: { refetch?: boolean }) => Promise<unknown>
   config: ApiConfig
+  /** Tests only: which blogs are by path (ADR 0069), as tela-jobs is given. Unset is `BLOG_RULES`. */
+  blogRules?: BlogRules
 }

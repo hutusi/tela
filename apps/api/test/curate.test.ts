@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
-import { first } from '@tela/data'
+import { bumpSeq, currentSeq, first } from '@tela/data'
 import { sql } from 'drizzle-orm'
 import { FixtureServer, rss } from '../../../packages/ingest/test/fixture-server'
 import { ADMIN_TOKEN, createTestApi, signedIn, type TestApi } from './helpers'
@@ -150,5 +150,79 @@ describe('curating Discover', () => {
     })
     const gone = await curate({ feedUrl: server.url('/feed.xml'), featured: true })
     expect(gone.status).toBe(422)
+  })
+})
+
+describe('a section that became a blog of its own (ADR 0069)', () => {
+  const RESEARCH = 'https://feeds.example/research.xml'
+  const ENGINEERING = 'https://feeds.example/engineering.xml'
+
+  /**
+   * The lab as Tela had it before blogs by path: one blog at the fixture's origin read through
+   * two section feeds kept elsewhere, listed under AI, with a reader.
+   */
+  async function lab() {
+    api = await createTestApi(
+      {},
+      {
+        blogRules: {
+          sharedHosts: [],
+          pathBlogs: [server.url('/research'), server.url('/engineering')],
+        },
+      },
+    )
+    await api.db.batch([
+      bumpSeq(api.db),
+      api.db.run(sql`insert into sites (id, home_url, title, listing, created_at, updated_at, seq)
+        values (1, ${server.origin}, 'Lab', 'listed', 0, 0, ${currentSeq})`),
+      api.db.run(sql`insert into site_topics (site_id, topic) values (1, 'ai')`),
+      api.db.run(sql`insert into feeds (id, site_id, feed_url, host, last_fetched_at, next_fetch_at,
+          created_at, updated_at, seq)
+        values (11, 1, ${RESEARCH}, 'feeds.example', 1, 0, 0, 0, ${currentSeq}),
+          (12, 1, ${ENGINEERING}, 'feeds.example', 1, 0, 0, 0, ${currentSeq})`),
+    ] as never)
+  }
+
+  const entry = (feedUrl: string, section: string, title: string) =>
+    curate({ feedUrl, topics: ['ai'], featured: false, title, home: server.url(section) })
+  const blogs = () =>
+    api.db.all<{ id: number; home_url: string; title: string; listing: string }>(
+      sql`select id, home_url, title, listing from sites order by id`,
+    )
+
+  test('splits the first off and renames the blog for the last, which keeps its id', async () => {
+    await lab()
+    expect((await entry(ENGINEERING, '/engineering', 'Lab Engineering')).status).toBe(200)
+    expect((await entry(RESEARCH, '/research', 'Lab Research')).status).toBe(200)
+    const after = await blogs()
+    expect(after.map((s) => [s.home_url.replace(server.origin, ''), s.title, s.listing])).toEqual([
+      ['/research', 'Lab Research', 'listed'],
+      ['/engineering', 'Lab Engineering', 'listed'],
+    ])
+    expect(after[0]?.id).toBe(1)
+    const topics = await api.db.all<{ site_id: number; topic: string }>(
+      sql`select site_id, topic from site_topics order by site_id`,
+    )
+    expect(topics.map((t) => t.topic)).toEqual(['ai', 'ai'])
+
+    // Again, nothing moves.
+    await entry(ENGINEERING, '/engineering', 'Lab Engineering')
+    await entry(RESEARCH, '/research', 'Lab Research')
+    expect(await blogs()).toEqual(after)
+  })
+
+  test('moves nothing off a blog someone claimed', async () => {
+    await lab()
+    const blogger = await signedIn(api, 'lab@x.test')
+    await api.db.run(sql`update sites set claimed_by = ${blogger.userId} where id = 1`)
+    expect((await entry(ENGINEERING, '/engineering', 'Lab Engineering')).status).toBe(200)
+    expect((await blogs()).map((s) => s.home_url)).toEqual([server.origin])
+  })
+
+  test('refuses a home that is no address', async () => {
+    await lab()
+    const res = await curate({ feedUrl: RESEARCH, featured: false, home: 'research' })
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ error: 'invalid_home' })
   })
 })

@@ -4,6 +4,7 @@ import { createTestDb } from '@tela/data/testing'
 import { createHttpClient } from '@tela/ingest/http'
 import { createIngest } from '@tela/ingest/pipeline'
 import { fakeClock, memoryBlobs, memoryJobs, memoryMail } from '@tela/platform/portable'
+import type { BlogRules } from '@tela/shared'
 import { CLIENT_HEADER, MEMBER_HEADER, MIN_CLIENT } from '@tela/sync'
 import { createApp } from '../src/app'
 import type { ApiConfig } from '../src/deps'
@@ -18,7 +19,7 @@ type ConfigOverrides = { [K in keyof ApiConfig]?: ApiConfig[K] | undefined }
 
 export async function createTestApi(
   overrides: ConfigOverrides = {},
-  options: { db?: TelaDb } = {},
+  options: { db?: TelaDb; blogRules?: BlogRules } = {},
 ) {
   const config: Record<string, unknown> = {
     publicUrl: ORIGIN,
@@ -42,7 +43,8 @@ export async function createTestApi(
     allowPrivateHosts: true,
     timeoutMs: 2000,
   })
-  const ingest = createIngest({ db, http, now: () => clock.now() })
+  const blogRules = options.blogRules
+  const ingest = createIngest({ db, http, now: () => clock.now(), rules: blogRules })
   const { app, auth } = createApp({
     db,
     blobs,
@@ -51,6 +53,7 @@ export async function createTestApi(
     mail,
     ingest,
     config: config as ApiConfig,
+    ...(blogRules ? { blogRules } : {}),
   })
   /**
    * A request as the browser sends it through tela-web: same origin, JSON, cookies. `as` is a
