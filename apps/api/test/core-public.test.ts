@@ -93,3 +93,112 @@ describe("a writer's choices", () => {
     expect(titles).toEqual({ 1: 'Billet', 2: null })
   })
 })
+
+describe('a blog read through overlapping feeds (ADR 0068)', () => {
+  /**
+   * Blog 1 read through two section feeds kept elsewhere, as Anthropic's are: Engineering (11),
+   * added first with two posts, and Research (12) with three, one of them Engineering's too.
+   */
+  async function lab() {
+    const now = api.clock.now()
+    const feed = (id: number, name: string) =>
+      db.run(sql`insert into feeds (id, site_id, feed_url, host, title, next_fetch_at, created_at,
+          updated_at, seq)
+        values (${id}, 1, ${`https://feeds.example/${name}.xml`}, 'feeds.example', ${name}, 0, 0, 0,
+          ${currentSeq})`)
+    const post = (feedId: number, ago: number, slug: string) =>
+      db.run(sql`insert into articles (feed_id, dedup_key, url, title, title_hash, fetched_at,
+          sort_at, source_lang, content_key, seq)
+        values (${feedId}, ${slug}, ${`https://lab.example/research/${slug}`}, ${slug},
+          ${`h-${slug}`}, 0, ${now - 1000 * ago}, 'en', ${`c${feedId}-${slug}`}, ${currentSeq})`)
+    await db.batch([
+      bumpSeq(db),
+      db.run(sql`insert into sites (id, home_url, title, listing, created_at, updated_at, seq)
+        values (1, 'https://lab.example', 'Lab', 'listed', 0, 0, ${currentSeq})`),
+      feed(11, 'engineering'),
+      feed(12, 'research'),
+      post(11, 5, 'source-control'),
+      post(11, 4, 'agents'),
+      post(12, 3, 'source-control'),
+      post(12, 2, 'proteins'),
+      post(12, 1, 'verification'),
+    ] as never)
+  }
+
+  test('Subscribe adds the feed with the most posts, not the one a member added first', async () => {
+    await lab()
+    expect((await readSitePage(deps(), 1))?.feeds.map((f) => f.id)).toEqual([12, 11])
+    const blogs = await readDiscover(deps(), 'blogs')
+    expect(blogs.sites.map((s) => [s.id, s.feedId])).toEqual([[1, 12]])
+    const found = await search(deps(), reader, { q: 'Lab' })
+    expect(found.sites.map((s) => s.feedId)).toEqual([12])
+  })
+
+  test('Subscribe adds a feed still fetched over a dead or paused one with more posts', async () => {
+    await lab()
+    for (const status of ['dead', 'paused']) {
+      await db.run(sql`update feeds set status = ${status} where id = 12`)
+      expect((await readSitePage(deps(), 1))?.feeds.map((f) => f.id)).toEqual([11, 12])
+      const blogs = await readDiscover(deps(), 'blogs')
+      expect(blogs.sites.map((s) => [s.id, s.feedId])).toEqual([[1, 11]])
+      const found = await search(deps(), reader, { q: 'Lab' })
+      expect(found.sites.map((s) => s.feedId)).toEqual([11])
+    }
+  })
+
+  test("a recommendation of either copy is the post's, listed once, as its first copy", async () => {
+    await lab()
+    const other = await signedIn(api, 'other@x.test')
+    const copies = await db.all<{ id: number }>(sql`select id from articles
+      where dedup_key = 'source-control' order by id`)
+    const [first, later] = copies.map((c) => c.id)
+    const now = api.clock.now()
+    // The reader recommended Research's copy, the other member both.
+    await db.run(sql`insert into recommendations (user_id, article_id, created_at, updated_at)
+      values (${reader.userId}, ${later}, ${now}, ${now}), (${other.userId}, ${later}, ${now}, ${now}),
+        (${other.userId}, ${first}, ${now}, ${now})`)
+    const articles = await readDiscover(deps(), 'articles')
+    const shared = (p: { article: Record<string, unknown> }) => p.article.title === 'source-control'
+    expect(
+      articles.recommended.map((p) => [p.article.id, p.weekRecs, p.recommenders.toSorted()]),
+    ).toEqual([[first, 2, [reader.userId, other.userId].toSorted()]])
+    expect(articles.posts.filter(shared).map((p) => p.article.id)).toEqual([first])
+    const week = await readDiscover(deps(), 'week')
+    expect(week.recommended.map((p) => [p.article.id, p.weekRecs])).toEqual([[first, 2]])
+  })
+
+  test('a recommendation of a duplicate left on a merged feed ranks nothing', async () => {
+    await lab()
+    const now = api.clock.now()
+    // Feed 13 turned out to be another address for Research (ADR 0028): paused, merged into 12,
+    // its copy of "proteins" left behind as a duplicate, which a member had recommended.
+    await db.batch([
+      bumpSeq(db),
+      db.run(sql`insert into feeds (id, site_id, feed_url, host, status, merged_into,
+          next_fetch_at, created_at, updated_at, seq)
+        values (13, 1, 'https://lab.example/research.xml', 'lab.example', 'paused', 12, 0, 0, 0,
+          ${currentSeq})`),
+      db.run(sql`insert into articles (feed_id, dedup_key, url, title, title_hash, fetched_at,
+          sort_at, source_lang, content_key, seq)
+        values (13, 'proteins', 'https://lab.example/research/proteins', 'proteins', 'h-proteins',
+          0, ${now - 2000}, 'en', 'c13-proteins', ${currentSeq})`),
+    ] as never)
+    await db.run(sql`insert into recommendations (user_id, article_id, created_at, updated_at)
+      select ${reader.userId}, id, ${now}, ${now} from articles where feed_id = 13`)
+    expect((await readDiscover(deps(), 'articles')).recommended).toEqual([])
+    expect((await readDiscover(deps(), 'week')).recommended).toEqual([])
+  })
+
+  test('a post both feeds hold is shown once, as the feed that stored it first has it', async () => {
+    await lab()
+    const shown = ['verification', 'proteins', 'agents', 'source-control']
+    const page = await readSitePage(deps(), 1)
+    expect(page?.posts.map((p) => p.title)).toEqual(shown)
+    expect(page?.posts.at(-1)?.feedId).toBe(11)
+    expect(page?.site.postsLast30d).toBe(4)
+    const articles = await readDiscover(deps(), 'articles')
+    expect(articles.posts.map((p) => p.article.title)).toEqual(shown)
+    const card = (await readDiscover(deps(), 'blogs')).sites[0]
+    expect(card?.postsLast30d).toBe(4)
+  })
+})

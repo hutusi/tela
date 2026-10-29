@@ -32,9 +32,10 @@ export type CuratedSite = {
  * operator's review of the blogs members add (ADR 0041) needs members to have added some. Before
  * any of that the directory is empty, which reads as a broken page, not as an empty one. These
  * are independent blogs written by people, which is what the directory is for; a publication with
- * a masthead does not belong here.
+ * a masthead does not belong here. The AI labs at the end are the one exception (ADR 0068): listed
+ * under AI alone and never featured, so the front shelf and the other chips stay the writers'.
  *
- * All nine topics are covered on purpose: /discover renders every chip whether or not anything
+ * All ten topics are covered on purpose: /discover renders every chip whether or not anything
  * is behind it, and a chip that lands on "No blogs listed here yet" is worse than no chip.
  *
  * Each entry was verified to serve a parseable feed under the body cap when it was added, and to
@@ -49,14 +50,14 @@ export type CuratedSite = {
  */
 export const CURATED_SITES = [
   // English
-  { feedUrl: 'https://simonwillison.net/atom/everything/', topics: ['tech'], featured: true },
+  { feedUrl: 'https://simonwillison.net/atom/everything/', topics: ['ai', 'tech'], featured: true },
   { feedUrl: 'https://jvns.ca/atom.xml', topics: ['tech'] },
   { feedUrl: 'https://overreacted.io/rss.xml', topics: ['tech'] },
   { feedUrl: 'https://daringfireball.net/feeds/main', topics: ['tech'] },
   { feedUrl: 'https://macwright.com/rss.xml', topics: ['tech', 'life'] },
   { feedUrl: 'https://hillelwayne.com/index.xml', topics: ['tech', 'science'] },
-  { feedUrl: 'https://www.interconnects.ai/feed', topics: ['tech', 'science'] },
-  { feedUrl: 'https://magazine.sebastianraschka.com/feed', topics: ['tech', 'science'] },
+  { feedUrl: 'https://www.interconnects.ai/feed', topics: ['ai', 'tech', 'science'] },
+  { feedUrl: 'https://magazine.sebastianraschka.com/feed', topics: ['ai', 'tech', 'science'] },
   { feedUrl: 'https://sive.rs/en.atom', topics: ['essays'] },
   { feedUrl: 'https://robinsloan.com/feed.xml', topics: ['essays'], featured: true },
   {
@@ -131,12 +132,102 @@ export const CURATED_SITES = [
     feedUrl: 'https://idiotic-hat.blogspot.com/feeds/posts/default',
     topics: ['photography', 'essays'],
   },
+  // From the HN Popularity Contest's ranking for 2025 (popularity.refactoringenglish.com), checked
+  // on 2026-10-29: blogs one person writes, posted in the 60 days before, whose feed Tela reads.
+  // Left out: what is not a person's blog (neal.fun, companies, news sites), rachelbythebay.com
+  // (it drops Cloudflare's connections), tedunangst.com (its certificate does not verify),
+  // xeiaso.net (its robots.txt says `ai-input=no`, and Tela translates with a model), blogs on a
+  // host other blogs share (buttondown.com, world.hey.com, and The Old New Thing on
+  // devblogs.microsoft.com, beside the TypeScript and .NET blogs: a blog is an origin, so they
+  // would be one blog), the politics and economics newsletters and the paywalled ones (the
+  // owner's call), and anything quiet 60 days.
+  {
+    feedUrl: 'https://www.seangoedecke.com/rss.xml',
+    topics: ['tech', 'ai'],
+    title: 'Sean Goedecke',
+  },
+  { feedUrl: 'https://jeffgeerling.com/rss.xml', topics: ['tech'] },
+  { feedUrl: 'https://krebsonsecurity.com/feed/', topics: ['tech'] },
+  { feedUrl: 'https://idiallo.com/feed.rss', topics: ['tech', 'essays'], title: 'iDiallo' },
+  { feedUrl: 'https://maurycyz.com/index.xml', topics: ['tech', 'science'] },
+  {
+    feedUrl: 'https://blog.coredump.cx/feed',
+    topics: ['tech', 'science'],
+    note: 'Michał Zalewski (lcamtuf); lcamtuf.substack.com redirects here',
+  },
+  { feedUrl: 'https://mitchellh.com/feed.xml', topics: ['tech'] },
+  { feedUrl: 'https://www.righto.com/feeds/posts/default', topics: ['tech', 'science'] },
+  { feedUrl: 'https://lucumr.pocoo.org/feed.atom', topics: ['tech', 'ai'] },
+  { feedUrl: 'https://matklad.github.io/feed.xml', topics: ['tech'] },
+  { feedUrl: 'https://evanhahn.com/feed.xml', topics: ['tech'], title: 'Evan Hahn' },
+  { feedUrl: 'https://xania.org/feed.atom', topics: ['tech'] },
+  { feedUrl: 'https://nesbitt.io/feed.xml', topics: ['tech'] },
+  { feedUrl: 'https://borretti.me/feed', topics: ['tech', 'essays'] },
+  {
+    feedUrl: 'https://eli.thegreenplace.net/feeds/all.atom.xml',
+    topics: ['tech'],
+    title: 'Eli Bendersky',
+  },
+  { feedUrl: 'https://matduggan.com/rss/', topics: ['tech', 'essays'], title: 'Mat Duggan' },
+  { feedUrl: 'https://bernsteinbear.com/feed.xml', topics: ['tech'] },
+  { feedUrl: 'https://www.troyhunt.com/rss/', topics: ['tech'] },
+  { feedUrl: 'https://herman.bearblog.dev/feed/', topics: ['tech', 'life'] },
+  { feedUrl: 'https://filippo.io/atom.xml', topics: ['tech'] },
+  { feedUrl: 'https://soatok.blog/feed/', topics: ['tech'] },
+  { feedUrl: 'https://daniel.haxx.se/blog/feed/', topics: ['tech'], title: 'Daniel Stenberg' },
+  { feedUrl: 'https://www.tbray.org/ongoing/ongoing.atom', topics: ['tech', 'essays'] },
+  { feedUrl: 'https://brooker.co.za/blog/rss.xml', topics: ['tech'] },
+  { feedUrl: 'https://alexwlchan.net/feed', topics: ['tech'] },
+  { feedUrl: 'https://marginalia.nu/index.xml', topics: ['tech'], title: 'marginalia.nu' },
+  { feedUrl: 'https://jyn.dev/atom.xml', topics: ['tech'], title: 'jyn' },
+  { feedUrl: 'https://micahflee.com/rss/', topics: ['tech'] },
+  { feedUrl: 'https://oldvcr.blogspot.com/feeds/posts/default', topics: ['tech'] },
+  { feedUrl: 'https://martinfowler.com/feed.atom', topics: ['tech'] },
+  { feedUrl: 'https://blogsystem5.substack.com/feed', topics: ['tech'] },
+  { feedUrl: 'https://ounapuu.ee/index.xml', topics: ['tech'] },
+  { feedUrl: 'https://entropicthoughts.com/feed', topics: ['tech', 'essays'] },
+  { feedUrl: 'https://www.downtowndougbrown.com/feed/', topics: ['tech'] },
+  {
+    feedUrl: 'https://www.gilesthomas.com/feed/rss.xml',
+    topics: ['ai', 'tech'],
+    title: 'Giles Thomas',
+  },
+  { feedUrl: 'https://minimaxir.com/index.xml', topics: ['ai', 'tech'] },
+  { feedUrl: 'https://www.dbreunig.com/feed.xml', topics: ['ai', 'tech'] },
+  {
+    feedUrl: 'https://www.oneusefulthing.org/feed',
+    topics: ['ai', 'essays'],
+    note: 'Ethan Mollick',
+  },
+  { feedUrl: 'https://martinalderson.com/feed.xml', topics: ['ai', 'tech'] },
+  { feedUrl: 'https://dynomight.net/feed.xml', topics: ['science', 'essays'], title: 'Dynomight' },
+  { feedUrl: 'https://www.construction-physics.com/feed', topics: ['science', 'cities'] },
+  { feedUrl: 'https://tedium.co/feed', topics: ['essays', 'tech'], note: 'Ernie Smith' },
+  { feedUrl: 'https://www.filfre.net/feed/', topics: ['essays', 'tech'] },
+  { feedUrl: 'https://computer.rip/rss.xml', topics: ['tech', 'essays'] },
+  { feedUrl: 'https://acoup.blog/feed/', topics: ['essays'] },
+  { feedUrl: 'https://www.henrikkarlsson.xyz/feed', topics: ['essays'] },
+  { feedUrl: 'https://steveblank.com/feed/', topics: ['essays', 'tech'] },
+  { feedUrl: 'https://www.anildash.com/feed.xml', topics: ['essays', 'tech'] },
+  { feedUrl: 'https://resobscura.substack.com/feed', topics: ['essays', 'science'] },
+  // Each of these posts four times a week or more, so they lead Discover's newest whenever they
+  // write: kept on the owner's word, for who they are.
+  { feedUrl: 'https://www.johndcook.com/blog/feed/', topics: ['science', 'tech'] },
+  { feedUrl: 'https://terrytao.wordpress.com/feed/', topics: ['science'], title: 'Terence Tao' },
+  { feedUrl: 'https://shkspr.mobi/blog/feed/atom/', topics: ['tech', 'essays'] },
+  { feedUrl: 'https://www.astralcodexten.com/feed', topics: ['essays', 'science'] },
+  {
+    feedUrl: 'https://utcc.utoronto.ca/~cks/space/blog/?atom',
+    topics: ['tech'],
+    title: 'Chris Siebenmann',
+    note: 'Rate-limits a client that asks too often (429)',
+  },
 
   // 简体中文
   { feedUrl: 'https://www.ruanyifeng.com/blog/atom.xml', topics: ['tech'], featured: true },
   { feedUrl: 'https://blog.codingnow.com/atom.xml', topics: ['tech'] },
-  { feedUrl: 'https://kexue.fm/feed', topics: ['science', 'tech'] },
-  { feedUrl: 'https://baoyu.io/feed.xml', topics: ['tech'] },
+  { feedUrl: 'https://kexue.fm/feed', topics: ['ai', 'science', 'tech'] },
+  { feedUrl: 'https://baoyu.io/feed.xml', topics: ['ai', 'tech'] },
   {
     feedUrl: 'https://www.zhangxinxu.com/wordpress/feed/',
     topics: ['design', 'tech'],
@@ -454,8 +545,8 @@ export const CURATED_SITES = [
   // names: listed without a topic, a blog shows under All and under no chip. They came in by
   // review rather than by this list's bar, so one stays while it has posted in six months.
   { feedUrl: 'https://addyosmani.com/rss.xml', topics: ['tech'], title: 'Addy Osmani' },
-  { feedUrl: 'https://lilianweng.github.io/index.xml', topics: ['science', 'tech'] },
-  { feedUrl: 'https://swyx.io/rss.xml', topics: ['tech', 'essays'], title: 'swyx' },
+  { feedUrl: 'https://lilianweng.github.io/index.xml', topics: ['ai', 'science', 'tech'] },
+  { feedUrl: 'https://swyx.io/rss.xml', topics: ['ai', 'tech', 'essays'], title: 'swyx' },
   {
     feedUrl: 'https://brennan.day/feed.xml',
     topics: ['essays', 'tech'],
@@ -485,6 +576,45 @@ export const CURATED_SITES = [
   { feedUrl: 'https://macshuo.com/?feed=rss2', topics: ['tech'], title: 'MacTalk' },
   { feedUrl: 'https://www.changhai.org/feed.xml', topics: ['science', 'essays'], title: '卢昌海' },
   { feedUrl: 'https://depp.wang/rss2.xml', topics: ['essays', 'tech', 'life'] },
+
+  // AI labs (ADR 0068), the exception to blogs written by people: under AI alone, never featured,
+  // and named as the lab, since their feeds name a section ("OpenAI News"). A lab with no feed of
+  // its own is read through a maintained one elsewhere whose <link> names the lab, so it files
+  // under the lab's blog and Add finds it from the lab's address. Never rsshub.app: it refuses
+  // feed readers and says it is for testing. Left out on 2026-10-28: NVIDIA's (the whole
+  // company's news), Meta AI's and xAI's (nothing in 30 days; x.ai answers bots 403), Qwen's
+  // (quiet since 2025-08), and on 2026-10-29 Microsoft Research's: www.microsoft.com is also the
+  // Security blog's host, and a blog is an origin, so a member's subscription to it would join
+  // the lab under AI and could take its Subscribe.
+  {
+    feedUrl: 'https://openai.com/news/rss.xml',
+    topics: ['ai'],
+    title: 'OpenAI',
+    note: 'No text in the feed and openai.com answers bots 403 (2026-10-28): posts may stay excerpts',
+  },
+  { feedUrl: 'https://deepmind.google/blog/rss.xml', topics: ['ai'], title: 'Google DeepMind' },
+  { feedUrl: 'https://research.google/blog/rss/', topics: ['ai'], title: 'Google Research' },
+  { feedUrl: 'https://huggingface.co/blog/feed.xml', topics: ['ai'], title: 'Hugging Face' },
+  { feedUrl: 'https://mistral.ai/news/rss', topics: ['ai'], title: 'Mistral AI' },
+  {
+    feedUrl:
+      'https://raw.githubusercontent.com/Olshansk/rss-feeds/main/feeds/feed_anthropic_research.xml',
+    topics: ['ai'],
+    title: 'Anthropic',
+    note: 'Kept by github.com/Olshansk/rss-feeds, as Engineering is. Not News: it repeats Research',
+  },
+  {
+    feedUrl:
+      'https://raw.githubusercontent.com/Olshansk/rss-feeds/main/feeds/feed_anthropic_engineering.xml',
+    topics: ['ai'],
+    title: 'Anthropic',
+  },
+  {
+    feedUrl: 'https://raw.githubusercontent.com/Olshansk/rss-feeds/main/feeds/feed_cohere.xml',
+    topics: ['ai'],
+    title: 'Cohere',
+    note: 'No feed of its own; kept by the same repository',
+  },
 ] as const satisfies readonly CuratedSite[]
 
 // Deliberately absent: rachelbythebay.com. She runs a feed-reader conformance test and blocks

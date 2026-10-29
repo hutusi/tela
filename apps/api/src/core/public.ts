@@ -41,7 +41,10 @@ import {
   DAY,
   EXCERPTS,
   editionStatement,
+  FEEDS_BY_MAIN,
+  FIRST_COPY,
   LANG,
+  mainFeed,
   POST_SITE,
   type PostSite,
   PUBLIC_LISTING,
@@ -50,6 +53,7 @@ import {
   profileIndexable,
   READER_COUNT,
   RECOMMENDERS_SHOWN,
+  repeatedPost,
   SITE_INDEXABLE,
   siteCard,
   TITLES,
@@ -172,15 +176,23 @@ function discoverPost(row: Row): DiscoverPost {
 
 /**
  * Posts on public blogs recommended between `since` and `now`, the most recommended first, then
- * the newest; `filters` narrows them further, over `articles a` and `sites s`.
+ * the newest; `filters` narrows them further, over `articles a` and `sites s`. A post two of its
+ * blog's feeds hold is one post, by as many readers as recommended either copy, listed as its
+ * first copy, as the newest posts list it (ADR 0068): listed as the copy recommended, it would
+ * come twice in Articles, here and among the newest. A recommendation of a duplicate left on a
+ * merged feed counts for nothing, as before: a merge carries reads to the target, not
+ * recommendations (ADR 0028), and `postExtras` would not name its reader, so the post would rank
+ * on a vote it never shows.
  */
 const recommendedStatement = (now: number, since: number, filters: SQL, limit: number) => sql`
   select ${PUBLIC_ARTICLE_COLUMNS}, ${TITLES}, ${EXCERPTS}, ${POST_SITE}, ${postExtras(since)}
-  from (select rr.article_id, count(*) as n from recommendations rr
-        join profiles rp on rp.user_id = rr.user_id
+  from (select ${FIRST_COPY} as article_id, count(distinct rr.user_id) as n
+        from recommendations rr join profiles rp on rp.user_id = rr.user_id
+        join articles xa on xa.id = rr.article_id
+        join feeds xf on xf.id = xa.feed_id and xf.merged_into is null
         where rr.deleted_at is null and rr.created_at >= ${since} and rr.created_at <= ${now}
           and ${standingOk('rp')}
-        group by rr.article_id) w
+        group by 1) w
   join articles a on a.id = w.article_id
   join feeds f on f.id = a.feed_id and f.merged_into is null
   join sites s on s.id = f.site_id
@@ -545,7 +557,9 @@ async function readArticles(
   const byTopic = isTopic(topic)
     ? sql`and exists (select 1 from site_topics t where t.site_id = s.id and t.topic = ${topic})`
     : sql``
-  const byLang = lang && LANG.test(lang) ? sql`and a.source_lang = ${lang}` : sql``
+  const inLang = (alias: string) =>
+    lang && LANG.test(lang) ? sql`and ${sql.raw(alias)}.source_lang = ${lang}` : sql``
+  const byLang = inLang('a')
   const cursor = CURSOR.exec(query.cursor ?? '')
   const page = cursor ? 1 : pageOf(query.page)
   const after = cursor
@@ -559,6 +573,7 @@ async function readArticles(
       join feeds f on f.id = a.feed_id and f.merged_into is null
       join sites s on s.id = f.site_id
       where s.listing in ${PUBLIC_LISTING} and a.sort_at <= ${now} ${byTopic} ${byLang} ${after}
+        and not ${repeatedPost(sql`and ra.sort_at <= ${now} ${inLang('ra')}`)}
       order by a.sort_at desc, a.id desc
       limit ${ARTICLES_PAGE + 1} offset ${(page - 1) * ARTICLES_PAGE}
     `),
@@ -652,8 +667,8 @@ export async function readSitePage(
         ${SITE_INDEXABLE} as indexable, p.handle as "claimedBy", p.display_name as "claimantName", p.bio as "claimantBio",
         ${avatarOf('p')} as "claimantAvatar",
         (select count(*) from articles a join feeds f on f.id = a.feed_id
-          where f.site_id = s.id and f.merged_into is null and a.sort_at >= ${since})
-          as "postsLast30d"
+          where f.site_id = s.id and f.merged_into is null and a.sort_at >= ${since}
+            and not ${repeatedPost(sql`and ra.sort_at >= ${since}`)}) as "postsLast30d"
       from sites s left join profiles p on p.user_id = s.claimed_by and ${standingOk('p')}
       where s.id = ${siteId} and s.listing in ${PUBLIC_LISTING}
     `),
@@ -661,14 +676,16 @@ export async function readSitePage(
       select f.id, f.feed_url as "feedUrl", f.title from feeds f
       join sites s on s.id = f.site_id
       where f.site_id = ${siteId} and f.merged_into is null and s.listing in ${PUBLIC_LISTING}
-      order by f.id
+      order by ${FEEDS_BY_MAIN}
     `),
     // Posts as the reader holds them, so a member can open one from here. A merged feed's
-    // posts are duplicates of its target's (ADR 0028).
+    // posts are duplicates of its target's (ADR 0028), and a post two of its feeds hold is
+    // shown once (ADR 0068).
     db.all(sql`
       select ${PUBLIC_ARTICLE_COLUMNS}, ${TITLES}
       from articles a join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
       where f.site_id = ${siteId} and f.merged_into is null and s.listing in ${PUBLIC_LISTING}
+        and not ${repeatedPost()}
       order by a.sort_at desc, a.id desc
       limit ${SITE_POSTS_PAGE + 1} offset ${(at - 1) * SITE_POSTS_PAGE}
     `),
@@ -1032,8 +1049,7 @@ export async function search(
   const [sites, articles] = (await db.batch([
     db.all(sql`
       select s.id, s.title, s.home_url as "homeUrl", s.description, s.favicon_key as "faviconKey",
-        ${publicReaderCount('s')} as "readerCount",
-        (select min(id) from feeds where site_id = s.id and merged_into is null) as "feedId"
+        ${publicReaderCount('s')} as "readerCount", ${mainFeed('s')} as "feedId"
       from sites s
       where (s.listing in ('listed', 'featured') or s.id in (
           select f.site_id from subscriptions sub join feeds f on f.id = sub.feed_id

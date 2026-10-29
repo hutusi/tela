@@ -29,12 +29,14 @@ import type { ApiEnv } from '../app'
 import type { ApiDeps } from '../deps'
 import {
   BLOGROLL_UPDATED_AT,
+  mainFeed,
   PROFILE_CACHE,
   PUBLIC_CACHE,
   PUBLIC_LISTING,
   parseLangMap,
   publicNotFound,
   READER_COUNT,
+  repeatedPost,
 } from './public-sql'
 
 /** Posts in a feed: about a month of a busy directory, and what readers expect of one. */
@@ -86,16 +88,25 @@ const POST = sql.raw(`a.id, a.url, a.title, a.excerpt, a.source_lang as "sourceL
   s.id as "siteId", coalesce(s.title, f.title) as "blogName", s.home_url as "homeUrl",
   f.feed_url as "feedUrl"`)
 
-/** The newest public posts of the feeds `feeds` names (a subquery of feed ids), or of all. */
-const postsStatement = (now: number, filter: SQL) => sql`
-  select ${POST}
-  from articles a
-  join feeds f on f.id = a.feed_id and f.merged_into is null
-  join sites s on s.id = f.site_id
-  where s.listing in ${PUBLIC_LISTING} and a.sort_at <= ${now} and ${WEB_URL} ${filter}
-  order by a.sort_at desc, a.id desc
-  limit ${FEED_POSTS}
-`
+/**
+ * The newest public posts narrowed by `filter`, or of all; `among` (a subquery of feed ids) keeps
+ * only those feeds' posts. A post two feeds of its blog hold comes once, as the feed that stored
+ * it first has it, among the feeds read (ADR 0068): a blogroll holding only the later copy's feed
+ * still lists the post.
+ */
+const postsStatement = (now: number, filter: SQL, among?: SQL) => {
+  const read = (feed: string) => (among ? sql`and ${sql.raw(feed)} in (${among})` : sql``)
+  return sql`
+    select ${POST}
+    from articles a
+    join feeds f on f.id = a.feed_id and f.merged_into is null
+    join sites s on s.id = f.site_id
+    where s.listing in ${PUBLIC_LISTING} and a.sort_at <= ${now} and ${WEB_URL} ${filter}
+      ${read('a.feed_id')} and not ${repeatedPost(sql`and ra.sort_at <= ${now} ${read('rf.id')}`)}
+    order by a.sort_at desc, a.id desc
+    limit ${FEED_POSTS}
+  `
+}
 
 function postOf(r: Row): FeedPost {
   return {
@@ -157,9 +168,9 @@ export function publicFeedRoutes(deps: ApiDeps) {
       db.all(
         postsStatement(
           now,
-          sql`and a.feed_id in (
-            select coalesce(f.merged_into, f.id) from blogrolls r, ${visibleBlogsFrom('r')}
-              and ${SHOWN_BLOGROLL(id)} and s.listing in ${PUBLIC_LISTING})`,
+          sql``,
+          sql`select coalesce(f.merged_into, f.id) from blogrolls r, ${visibleBlogsFrom('r')}
+            and ${SHOWN_BLOGROLL(id)} and s.listing in ${PUBLIC_LISTING}`,
         ),
       ),
     ] as never)) as unknown as Row[][]
@@ -201,8 +212,7 @@ export function publicFeedRoutes(deps: ApiDeps) {
         select s.id as "siteId", coalesce(s.title, f.title) as name, s.home_url as "homeUrl",
           f.feed_url as "feedUrl"
         from sites s
-        join feeds f on f.id = (
-          select min(f2.id) from feeds f2 where f2.site_id = s.id and f2.merged_into is null)
+        join feeds f on f.id = ${mainFeed('s')}
         where s.listing in ${PUBLIC_LISTING} ${byTopic}
         order by s.listing = 'featured' desc, s.claimed_by is not null desc,
           coalesce(${READER_COUNT}, 0) desc, s.id

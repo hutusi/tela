@@ -1,7 +1,11 @@
-/** The nine topics from the design. Slugs are stored in sites.topics. */
+/**
+ * The design's nine topics and AI (ADR 0068), in the order Discover shows them. Slugs are stored in
+ * sites.topics.
+ */
 export const TOPICS = [
   'essays',
   'tech',
+  'ai',
   'cities',
   'food',
   'design',

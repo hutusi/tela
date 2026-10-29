@@ -3,7 +3,7 @@
  * readers said of them. Pure: the SPA and the edge both render it. The readers a member follows
  * come in by props, from a member call beside this cached page, never in it.
  */
-import { LANGUAGE_NAMES, recommendationKey, type UiLocale } from '@tela/shared'
+import { LANGUAGE_NAMES, recommendationKey, TOPICS, type UiLocale } from '@tela/shared'
 import { Link } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { CHECK, Glyph } from '../components/glyph'
@@ -46,6 +46,8 @@ export function SiteView({
   const vouched = site.indexable === true
   const title = site.title ?? displayHost(site.homeUrl)
   const primary = data.feeds[0]
+  // In Discover's order, and only topics this build can name.
+  const topics = TOPICS.filter((topic) => data.topics.includes(topic))
   const subscribed = primary !== undefined && member?.isSubscribed(primary.id) === true
   const here = `/s/${site.id}`
   const names = LANGUAGE_NAMES[locale as UiLocale] ?? LANGUAGE_NAMES.en
@@ -111,9 +113,9 @@ export function SiteView({
               <span>{t('readersOnTela', { n: site.readerCount })}</span>
             )}
           </div>
-          {data.topics.length > 0 ? (
+          {topics.length > 0 ? (
             <div className="mt-2 flex flex-wrap gap-1.5">
-              {data.topics.map((topic) => (
+              {topics.map((topic) => (
                 <Link
                   key={topic}
                   to={blogsHref({ topic })}
