@@ -57,7 +57,9 @@ splits off its blog because its key changed (at a fetch, or by curate) lands on 
 the old one's Hide, "Only use what my feed provides" and no translation: each is a decision about
 those posts, and a split must not list what an operator hid nor fetch the pages of a blog that
 asked for its feed alone. A listing is never kept; the new blog waits for review like any other.
-A feed detached from a claimed blog keeps none of them: it was never the owner's, and their
+Nor does a feed join a blog that exists and has not said the same no: the move is refused and the
+feed stays, since copying the no onto that blog would reach its other feeds' posts, which it
+never covered. A feed detached from a claimed blog keeps none of them: it was never the owner's, and their
 decisions are about their blog (ADR 0065 sends its translations to apps again). Any site a move
 makes takes its name, description and language from the feed and its posts in the same batch,
 since a fetch fills them only when the feed's body changes. And a filing is decided from reads
@@ -86,7 +88,9 @@ page is the writer's page, and the well-known feed paths are tried under the wri
 elsewhere before, since no fetch moves a feed off a blog that is not its placeholder: the first to
 leave splits onto a blog of its own, and the last renames the blog it was on, which keeps its id,
 address and readers. Anthropic's Engineering entry comes first, so Research keeps `/s/409`, the
-blog Discover's Subscribe has added all along.
+blog Discover's Subscribe has added all along. An entry whose feed could not move applies nothing
+and answers `home_blocked`: its name, topics and listing are the named blog's, and written to the
+blog the feed stayed on they would rename and relist that one.
 
 **A blog by path shows its path** (`blogAddress`): `anthropic.com/research`, `world.hey.com/dhh`.
 

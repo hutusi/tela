@@ -1423,7 +1423,10 @@ A public reader count is shown only from three readers.
   writer's segment. Then list the blog's feed in `curated-sites.ts`; if Tela had filed it under
   the site's blog before, give the entry `home`, the section's address, and curate moves it. Of
   two feeds leaving one blog, the last to leave renames that blog and keeps its readers, so put
-  first the one that should not.
+  first the one that should not. `✗ … home_blocked` means the feed could not move and nothing of
+  the entry was applied: either blog is claimed, or the blog it is on said a no (Hidden, feed
+  only, translation off) that the named blog, which exists already, has not. Decide in the
+  console, then apply the list again.
 - **Review the blogs members add:** Discover → To review lists each private, unclaimed blog that
   someone reads and a live feed has filled, with its language, its posts of the last 30 days, its
   latest post, its readers and when it was added. List it, or Not for Discover; either takes it

@@ -201,7 +201,24 @@ describe('filing a feed by its site key', () => {
     expect(moved).toEqual({ title: 'dhh', description: 'A test blog', primary_lang: 'en' })
   })
 
-  test('a move decided before a claim was verified is refused, onto the blog or off it', async () => {
+  test('a feed stays on a blog that said a no rather than join one that has not', async () => {
+    const nos = [sql`listing = 'rejected'`, sql`feed_only = 1`, sql`translation_opt_out = 1`]
+    for (const no of nos) {
+      db = (await createTestDb()).db
+      const dhh = await registerFeed(db, { feedUrl: writer('dhh'), now: NOW })
+      await registerFeed(db, { feedUrl: writer('jason'), now: NOW })
+      await db.run(sql`update sites set ${no} where id = ${dhh.siteId}`)
+      await db.run(sql`insert into sites (home_url, created_at, updated_at)
+        values (${server.url('/dhh')}, 1, 1)`)
+      expect(await fetchFeed(shared(), dhh.feedId)).toMatchObject({ siteHome: 'blocked' })
+      // Once that blog says it too, nothing it covers is loosened, and the feed joins it.
+      await db.run(sql`update sites set ${no} where home_url = ${server.url('/dhh')}`)
+      await db.run(sql`update feeds set last_body_hash = null, etag = null, last_modified = null`)
+      expect(await fetchFeed(shared(), dhh.feedId)).toMatchObject({ siteHome: 'joined' })
+    }
+  })
+
+  test('a move decided before a claim was verified, or a no was said, is refused', async () => {
     await addTestUser(db, 'u1')
     const dhh = await registerFeed(db, { feedUrl: writer('dhh'), now: NOW })
     await registerFeed(db, { feedUrl: writer('jason'), now: NOW })
@@ -224,6 +241,15 @@ describe('filing a feed by its site key', () => {
       values (${server.url('/dhh')}, 'u1', 1, 1)`)
     expect(isFenceRefusal(await run(onto))).toBe(true)
     await db.run(sql`delete from sites where home_url = ${server.url('/dhh')}`)
+
+    // The writer's blog appears unhidden while the host's is hidden: a split became a join.
+    const loosening = await decide()
+    await db.run(sql`insert into sites (home_url, created_at, updated_at)
+      values (${server.url('/dhh')}, 1, 1)`)
+    await db.run(sql`update sites set listing = 'rejected' where id = ${dhh.siteId}`)
+    expect(isFenceRefusal(await run(loosening))).toBe(true)
+    await db.run(sql`delete from sites where home_url = ${server.url('/dhh')}`)
+    await db.run(sql`update sites set listing = 'private' where id = ${dhh.siteId}`)
 
     const off = await decide()
     await db.run(sql`update sites set claimed_by = 'u1' where id = ${dhh.siteId}`)

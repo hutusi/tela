@@ -39,6 +39,9 @@ export async function curate(
   const found = await deps.ingest.addFeed({ feedUrl, actorId: null })
   if ('error' in found) return found
   const added = home ? await refile(deps, found, home) : found
+  // Everything below is about the blog the list names: written to whichever blog the feed is on,
+  // a blocked move would give that blog the entry's name, topics and listing.
+  if ('error' in added) return added
   const chosen = [...new Set(topics.filter(isTopic))]
   const site = await first<{ listing: string; claimed_by: string | null }>(
     db,
@@ -102,15 +105,16 @@ export async function curate(
 /**
  * Move a curated feed to the blog the list names, as its first fetch moves a feed to the home it
  * declares (`fileFeedUnder`): renaming the blog it is on when it is that blog's only feed, so the
- * blog keeps its readers and its address, or else onto the named one. Nothing moves off a claimed
- * blog or onto one, and a blog split off a hidden one is hidden too, so `curate` then leaves it
- * alone. Answers where the feed is now.
+ * blog keeps its readers and its address, or else onto the named one. A blog split off a hidden
+ * one is hidden too, so `curate` then leaves it alone. Answers where the feed is now, or
+ * `home_blocked` when it is not on the named blog: a claim on either blog, a no the blog it would
+ * leave said and the named one has not, or a change since the decision was read.
  */
 async function refile(
   deps: ApiDeps,
   added: { feedId: number; siteId: number; created: boolean },
   home: string,
-): Promise<{ feedId: number; siteId: number; created: boolean }> {
+): Promise<{ feedId: number; siteId: number; created: boolean } | { error: string }> {
   const { db } = deps
   const key = siteKeyOf(home, deps.blogRules)
   const site = await first<{ home_url: string; claimed_by: string | null }>(
@@ -129,13 +133,14 @@ async function refile(
     if (filed.statements.length > 0) await db.batch([bumpSeq(db), ...filed.statements] as never)
   } catch (err) {
     // Curate holds no lease on these blogs: a claim verified, or the blog changed, since the
-    // reads above, and the batch refused the move. The feed stays where it is; the next run
-    // decides again.
+    // reads above, and the batch refused the move. The feed stays where it is.
     if (!isFenceRefusal(err)) throw err
   }
-  const now = await first<{ site_id: number }>(
+  const now = await first<{ site_id: number; home_url: string }>(
     db,
-    sql`select site_id from feeds where id = ${added.feedId}`,
+    sql`select s.id as site_id, s.home_url from feeds f join sites s on s.id = f.site_id
+      where f.id = ${added.feedId}`,
   )
-  return { ...added, siteId: now?.site_id ?? added.siteId }
+  if (now?.home_url !== key) return { error: 'home_blocked' }
+  return { ...added, siteId: now.site_id }
 }

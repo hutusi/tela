@@ -347,9 +347,12 @@ export type FiledOutcome = 'kept' | 'renamed' | 'joined' | 'split' | 'blocked'
  * Statements that file a feed under the site keyed `home`: rename its site when it is that site's
  * only feed and no site has the home yet, otherwise join the site there or split onto a new one.
  * Nothing moves off a claimed site or onto one: a claim settles which feeds are the blog's
- * (ADR 0011). For a batch that has already bumped the sync sequence. That batch aborts, as a lost
- * lease's fence does (`isFenceRefusal`), when what this decided on has changed by the time it
- * runs: a claim verified on either site, the feed moved, or for a rename another feed or site.
+ * (ADR 0011), and nothing joins a site that has not said a no the one it leaves had said (Hide,
+ * feed only, no translation): a split keeps them (`moveFeedToHome`), but a site that exists is
+ * another blog's decision, and copying the no onto it would reach posts it never covered. For a
+ * batch that has already bumped the sync sequence. That batch aborts, as a lost lease's fence
+ * does (`isFenceRefusal`), when what this decided on has changed by the time it runs: a claim
+ * verified on either site, a no said, the feed moved, or for a rename another feed or site.
  */
 export async function fileFeedUnder(
   db: TelaDb,
@@ -360,11 +363,15 @@ export async function fileFeedUnder(
 ): Promise<{ statements: BatchItem[]; outcome: FiledOutcome }> {
   if (home === site.homeUrl) return { statements: [], outcome: 'kept' }
   if (site.claimedBy !== null) return { statements: [], outcome: 'blocked' }
-  const target = await first<{ id: number; claimed_by: string | null }>(
+  const loosens = sql`exists (select 1 from sites s join sites t on t.home_url = ${home}
+    where s.id = ${feed.siteId} and ((s.listing = 'rejected' and t.listing <> 'rejected')
+      or (s.feed_only = 1 and t.feed_only = 0)
+      or (s.translation_opt_out = 1 and t.translation_opt_out = 0)))`
+  const target = await first<{ id: number; claimed_by: string | null; loosens: number }>(
     db,
-    sql`select id, claimed_by from sites where home_url = ${home}`,
+    sql`select id, claimed_by, ${loosens} as loosens from sites where home_url = ${home}`,
   )
-  if (target?.claimed_by) return { statements: [], outcome: 'blocked' }
+  if (target?.claimed_by || target?.loosens) return { statements: [], outcome: 'blocked' }
   const siblings = await first<{ n: number }>(
     db,
     sql`select count(*) as n from feeds where site_id = ${feed.siteId} and id <> ${feed.id}`,
@@ -373,7 +380,8 @@ export async function fileFeedUnder(
   // claim verified, or the blog changed, between the reads and its batch.
   const changed = sql`not exists (select 1 from feeds where id = ${feed.id} and site_id = ${feed.siteId})
     or exists (select 1 from sites where (id = ${feed.siteId} or home_url = ${home})
-      and claimed_by is not null)`
+      and claimed_by is not null)
+    or ${loosens}`
   if (!target && (siblings?.n ?? 0) === 0) {
     const notAlone = sql`exists (select 1 from sites where home_url = ${home})
       or exists (select 1 from feeds where site_id = ${feed.siteId} and id <> ${feed.id})`

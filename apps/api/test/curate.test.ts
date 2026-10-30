@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
-import { bumpSeq, currentSeq, first } from '@tela/data'
+import { bumpSeq, currentSeq, first, type TelaDb } from '@tela/data'
+import { createTestDb } from '@tela/data/testing'
 import { sql } from 'drizzle-orm'
 import { FixtureServer, rss } from '../../../packages/ingest/test/fixture-server'
 import { ADMIN_TOKEN, createTestApi, signedIn, type TestApi } from './helpers'
@@ -161,7 +162,7 @@ describe('a section that became a blog of its own (ADR 0069)', () => {
    * The lab as Tela had it before blogs by path: one blog at the fixture's origin read through
    * two section feeds kept elsewhere, listed under AI, with a reader.
    */
-  async function lab() {
+  async function lab(db?: TelaDb) {
     api = await createTestApi(
       {},
       {
@@ -169,6 +170,7 @@ describe('a section that became a blog of its own (ADR 0069)', () => {
           sharedHosts: [],
           pathBlogs: [server.url('/research'), server.url('/engineering')],
         },
+        ...(db ? { db } : {}),
       },
     )
     await api.db.batch([
@@ -211,12 +213,97 @@ describe('a section that became a blog of its own (ADR 0069)', () => {
     expect(await blogs()).toEqual(after)
   })
 
+  /** Engineering's entry, featured and tagged otherwise, so a write to the wrong blog shows. */
+  const featuredEntry = () =>
+    curate({
+      feedUrl: ENGINEERING,
+      topics: ['tech'],
+      featured: true,
+      title: 'Lab Engineering',
+      home: server.url('/engineering'),
+    })
+  /** The lab's blog: its name, listing, topics and how many feeds it holds. */
+  const labBlog = () =>
+    first(
+      api.db,
+      sql`select title, listing,
+          (select group_concat(topic) from site_topics where site_id = 1) as topics,
+          (select count(*) from feeds where site_id = 1) as feeds
+        from sites where id = 1`,
+    )
+  const untouched = { title: 'Lab', listing: 'listed', topics: 'ai', feeds: 2 }
+
   test('moves nothing off a blog someone claimed', async () => {
     await lab()
     const blogger = await signedIn(api, 'lab@x.test')
     await api.db.run(sql`update sites set claimed_by = ${blogger.userId} where id = 1`)
-    expect((await entry(ENGINEERING, '/engineering', 'Lab Engineering')).status).toBe(200)
+    const res = await entry(ENGINEERING, '/engineering', 'Lab Engineering')
+    expect(res.status).toBe(422)
+    expect(await res.json()).toEqual({ error: 'home_blocked' })
     expect((await blogs()).map((s) => s.home_url)).toEqual([server.origin])
+  })
+
+  test('names, tags and lists nothing when the feed cannot reach the blog the list names', async () => {
+    await lab()
+    const blogger = await signedIn(api, 'lab@x.test')
+    await api.db.run(sql`insert into sites (home_url, claimed_by, created_at, updated_at)
+      values (${server.url('/engineering')}, ${blogger.userId}, 0, 0)`)
+    const res = await featuredEntry()
+    expect(res.status).toBe(422)
+    expect(await res.json()).toEqual({ error: 'home_blocked' })
+    expect(await labBlog()).toEqual(untouched)
+  })
+
+  test('a claim verified while curate moves the feed stops the whole entry', async () => {
+    const base = (await createTestDb()).db
+    let meanwhile: (() => Promise<unknown>) | null = null
+    let raced = false
+    const isMove = (items: unknown[]) =>
+      items.some((i) =>
+        (i as { getQuery?: () => { sql: string } }).getQuery?.().sql.includes('lease_fence'),
+      )
+    // The claim lands after curate decided the move and before its batch runs.
+    const db = new Proxy(base, {
+      get(target, prop) {
+        const value = Reflect.get(target, prop, target)
+        if (prop !== 'batch') return typeof value === 'function' ? value.bind(target) : value
+        return async (items: unknown[]) => {
+          if (meanwhile && isMove(items)) {
+            await meanwhile()
+            meanwhile = null
+            raced = true
+          }
+          return target.batch(items as never)
+        }
+      },
+    })
+    await lab(db)
+    const blogger = await signedIn(api, 'lab@x.test')
+    meanwhile = () =>
+      base.run(sql`insert into sites (home_url, claimed_by, created_at, updated_at)
+        values (${server.url('/engineering')}, ${blogger.userId}, 0, 0)`)
+    const res = await featuredEntry()
+    expect(raced).toBe(true)
+    expect(res.status).toBe(422)
+    expect(await res.json()).toEqual({ error: 'home_blocked' })
+    expect(await labBlog()).toEqual(untouched)
+  })
+
+  test("moves no feed of a hidden blog onto one that isn't, nor drops its other no's", async () => {
+    await lab()
+    await api.db.batch([
+      bumpSeq(api.db),
+      api.db.run(sql`update sites set listing = 'rejected', review = 'dismissed', feed_only = 1,
+        translation_opt_out = 1 where id = 1`),
+      api.db.run(sql`insert into sites (id, home_url, listing, created_at, updated_at, seq)
+        values (2, ${server.url('/engineering')}, 'listed', 0, 0, ${currentSeq})`),
+    ] as never)
+    const res = await entry(ENGINEERING, '/engineering', 'Lab Engineering')
+    expect(res.status).toBe(422)
+    expect(await res.json()).toEqual({ error: 'home_blocked' })
+    const feeds = await api.db.all<{ site_id: number }>(sql`select site_id from feeds`)
+    expect(feeds).toEqual([{ site_id: 1 }, { site_id: 1 }])
+    expect((await blogs()).map((s) => s.listing)).toEqual(['rejected', 'listed'])
   })
 
   test('a section split off a hidden blog stays hidden, and curate leaves both alone', async () => {
