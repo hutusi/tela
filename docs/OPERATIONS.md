@@ -429,7 +429,7 @@ The account is on Workers Paid. Run wrangler from a real terminal (`wrangler log
      - Deploy tela-jobs (filing, claims and Add run there), then tela-api, then tela-web;
        tela-gateway is unchanged. Then `bun run admin curate`, after tela-api, which takes `home`.
        It moves Anthropic's Engineering feed onto a blog of its own and renames the lab's blog to
-       Anthropic Research, which keeps `/s/409`, and adds Microsoft Research, The Old New Thing,
+       Anthropic Research, which keeps `/s/409`, and adds The Old New Thing,
        Computer Things, DHH and OpenAI Developers.
      - Rolling back: tela-jobs and tela-api go back together. Blogs already split stay split, and
        an older build files a new feed on a shared host under the bare host again. An older

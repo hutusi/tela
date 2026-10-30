@@ -4,7 +4,8 @@ Status: accepted (2026-10-28, amended 2026-10-29 after three rounds of Codex's r
 list's rule that Discover holds independent blogs written by people (ADR 0018's editorial door);
 adds a tenth topic, and changes which of a blog's feeds Subscribe adds.
 Amended by 0069 (2026-10-30): a blog can be a path, so Anthropic's Research and Engineering are
-two blogs and Microsoft Research is listed; "a blog is an origin" below is no longer the rule.
+two blogs, and Microsoft Research could be listed but refuses Cloudflare's fetch (0069's
+consequences); "a blog is an origin" below is no longer the rule.
 
 ## Context
 

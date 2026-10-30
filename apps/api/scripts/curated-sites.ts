@@ -601,11 +601,12 @@ export const CURATED_SITES = [
   // under the lab's blog and Add finds it from the lab's address. Never rsshub.app: it refuses
   // feed readers and says it is for testing. Left out on 2026-10-28: NVIDIA's (the whole
   // company's news), Meta AI's and xAI's (nothing in 30 days; x.ai answers bots 403), Qwen's
-  // (quiet since 2025-08). A lab's section that is a blog of its own is a path on the lab's host
-  // (`BLOG_RULES`, ADR 0069): Microsoft Research beside the Security blog on www.microsoft.com,
-  // and Anthropic's Research and Engineering, which were one blog until 2026-10-30. Their `home`
-  // moves the feeds Tela had filed under the lab: Engineering's first, so Research, which keeps
-  // the blog that was Anthropic's, its readers and its address, is the last to leave.
+  // (quiet since 2025-08). Left out on 2026-10-30: Microsoft Research's, whose feed answers
+  // Cloudflare's fetch 403 while it answers other readers 200; Tela does not get past a bot wall.
+  // A lab's section that is a blog of its own is a path on the lab's host (`BLOG_RULES`,
+  // ADR 0069): Anthropic's Research and Engineering, which were one blog until 2026-10-30. Their
+  // `home` moves the feeds Tela had filed under the lab: Engineering's first, so Research, which
+  // keeps the blog that was Anthropic's, its readers and its address, is the last to leave.
   {
     feedUrl: 'https://openai.com/news/rss.xml',
     topics: ['ai'],
@@ -631,11 +632,6 @@ export const CURATED_SITES = [
     title: 'Anthropic Research',
     home: 'https://www.anthropic.com/research',
     note: 'Not News: it repeats Research',
-  },
-  {
-    feedUrl: 'https://www.microsoft.com/en-us/research/feed/',
-    topics: ['ai'],
-    title: 'Microsoft Research',
   },
   {
     feedUrl:

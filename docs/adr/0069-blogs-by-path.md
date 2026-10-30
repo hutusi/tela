@@ -109,3 +109,8 @@ blog the feed stayed on they would rename and relist that one.
   out would list each of those posts twice. Its Developer Blog is its own origin and needed no
   rule.
 - A shared host's bare origin stays a blog for the host's own feed, if anyone adds one.
+- Microsoft Research is not on the list after all. Curated on 2026-10-30, its feed answered
+  Cloudflare's fetch 403 while it answers other readers 200, and Tela does not get past a bot
+  wall (ADR 0068), so it was hidden the same day and taken off the list. Its section stays in
+  `BLOG_RULES`, since it describes the site: if the feed lets Tela in later, Restore and a curate
+  entry bring the blog back.
