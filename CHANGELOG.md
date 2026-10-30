@@ -9,6 +9,15 @@ everything so far sits under `[Unreleased]`.
 
 ### Changed
 
+- **A blog can be a path** (ADR 0069). On a host other blogs share (world.hey.com,
+  buttondown.com, devblogs.microsoft.com) each writer's blog is their own, where every writer
+  there was one blog before, and a claim there is the writer's, proved by `rel="me"`, a meta tag
+  or GitHub, never by the host's 404 page. A few sections of a site are blogs of their own:
+  Anthropic Research and Anthropic Engineering are now two blogs, and Microsoft Research is listed
+  beside the Security blog on www.microsoft.com. Such a blog shows its path
+  (`anthropic.com/research`), and Add finds it at its own address. With it, five more blogs
+  in Discover: Microsoft Research, OpenAI Developers, The Old New Thing, Hillel Wayne's Computer
+  Things and DHH; the editorial list grows to 226.
 - **AI in Discover** (ADR 0068). A tenth topic, AI, holds the independent AI writers and the AI
   labs: OpenAI, Google DeepMind, Google Research, Hugging Face, Mistral,
   Anthropic (Research and Engineering) and Cohere, the one exception to Discover's blogs written by people, never featured.

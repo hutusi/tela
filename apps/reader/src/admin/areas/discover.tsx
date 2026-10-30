@@ -25,7 +25,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { useLocale, useTranslations } from 'use-intl'
 import { Swatch } from '../../components/swatch'
-import { displayHost, personColor, relativeTime } from '../../lib/format'
+import { blogAddress, personColor, relativeTime } from '../../lib/format'
 import { adminGet, adminList } from '../api'
 import type { AnyAreaSpec, AreaSpec, Column, RecordProps, Status } from '../area'
 import { History, KeyValues, Note, Section, StatusPill, useWhen } from '../components/record'
@@ -128,7 +128,7 @@ function discoverSub(t: Translate, row: AdminSiteRow, locale: string): string {
       : t('noTopics')
     : t('addedWhen', { when: relativeTime(row.createdAt, locale) })
   const lang = row.primaryLang ? languageOf(t, row.primaryLang, locale) : null
-  return [displayHost(row.homeUrl), row.owner ? personName(t, row.owner) : null, lang, about]
+  return [blogAddress(row.homeUrl), row.owner ? personName(t, row.owner) : null, lang, about]
     .filter(Boolean)
     .join(' · ')
 }

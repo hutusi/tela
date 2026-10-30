@@ -9,7 +9,7 @@ import type { AdminTranslationReport, AdminTranslationRow } from '@tela/shared/a
 import { useMemo } from 'react'
 import { useLocale, useTranslations } from 'use-intl'
 import { Swatch } from '../../components/swatch'
-import { displayHost, pillLabel } from '../../lib/format'
+import { blogAddress, pillLabel } from '../../lib/format'
 import { nameIn } from '../../lib/language-name'
 import { adminList } from '../api'
 import type { AnyAreaSpec, AreaSpec, RecordProps, Status } from '../area'
@@ -260,7 +260,7 @@ export function useTranslationArea(): AnyAreaSpec {
       maximumFractionDigits: 1,
     })
     const title = (row: AdminTranslationRow) =>
-      row.label ?? (row.homeUrl ? displayHost(row.homeUrl) : row.id)
+      row.label ?? (row.homeUrl ? blogAddress(row.homeUrl) : row.id)
     const languages = (row: AdminTranslationRow) => {
       const into = row.targets.map(pillLabel).join(', ')
       return row.sourceLang ? `${pillLabel(row.sourceLang)} → ${into}` : into
@@ -283,7 +283,7 @@ export function useTranslationArea(): AnyAreaSpec {
         title,
         sub: (row) =>
           row.kind === 'blog'
-            ? displayHost(row.homeUrl ?? '')
+            ? blogAddress(row.homeUrl ?? '')
             : row.kind === 'job' && row.label && JOBS.has(row.label)
               ? t(`translation.jobs.${row.label}`)
               : t('translation.model'),

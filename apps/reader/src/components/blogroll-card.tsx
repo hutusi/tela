@@ -11,7 +11,7 @@
 import { Link } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { blogrollHref } from '../lib/blogroll-href'
-import { displayHost, swatchColor } from '../lib/format'
+import { blogAddress, swatchColor } from '../lib/format'
 import type { BlogrollCard as BlogrollCardData } from '../views/types'
 import { Glyph, LOCK } from './glyph'
 import { PersonAvatar } from './person-avatar'
@@ -21,7 +21,7 @@ import { Swatch } from './swatch'
 const SHOWN = { profile: 3, discover: 5 } as const
 
 type Blog = BlogrollCardData['blogs'][number]
-const nameOf = (blog: Blog) => blog.name ?? displayHost(blog.homeUrl)
+const nameOf = (blog: Blog) => blog.name ?? blogAddress(blog.homeUrl)
 
 export function BlogrollCard({
   card,

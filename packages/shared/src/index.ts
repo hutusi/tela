@@ -1,5 +1,6 @@
 export * from './apps'
 export * from './blogrolls'
+export * from './blogs'
 export * from './claims'
 export * from './constants'
 export * from './developer'

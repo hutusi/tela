@@ -12,7 +12,7 @@ import { BLOGROLL_GRID, BlogrollCard } from '../components/blogroll-card'
 import { PersonAvatar } from '../components/person-avatar'
 import { ReportLink } from '../components/report-link'
 import { SiteAvatar } from '../components/site-avatar'
-import { displayHost, monthYear, shortDate, swatchColor } from '../lib/format'
+import { blogAddress, monthYear, shortDate, swatchColor } from '../lib/format'
 import { publicTitle } from '../lib/public-title'
 import { PostLink } from './post-link'
 import type {
@@ -204,7 +204,7 @@ export function ProfileView({
                       faviconKey={site.faviconKey}
                       size={18}
                     />
-                    {site.title ?? displayHost(site.homeUrl)}
+                    {site.title ?? blogAddress(site.homeUrl)}
                   </Link>
                 ))}
               </div>
@@ -304,7 +304,7 @@ function Posts({
   return (
     <div data-testid={testId}>
       {items.map((item) => {
-        const source = item.siteTitle ?? displayHost(item.homeUrl)
+        const source = item.siteTitle ?? blogAddress(item.homeUrl)
         const { title, badge } = publicTitle(item.article, reading)
         return (
           <article
@@ -442,7 +442,7 @@ function Subscriptions({
       data-testid="profile-subscriptions"
     >
       {subscriptions.map((s) => {
-        const title = s.title ?? displayHost(s.homeUrl)
+        const title = s.title ?? blogAddress(s.homeUrl)
         return (
           <li
             key={s.id}
@@ -462,7 +462,7 @@ function Subscriptions({
                 ) : (
                   <span className="font-medium">{title}</span>
                 )}
-                <div className="truncate text-[12.5px] text-muted">{displayHost(s.homeUrl)}</div>
+                <div className="truncate text-[12.5px] text-muted">{blogAddress(s.homeUrl)}</div>
               </div>
             </div>
             {s.description ? (

@@ -106,7 +106,11 @@ export function findMetaRefresh(html: string, baseUrl: string): string | null {
   return null
 }
 
-/** Well-known feed locations for a site origin. */
-export function candidateFeedUrls(origin: string): string[] {
-  return COMMON_FEED_PATHS.map((p) => new URL(p, origin).toString())
+/**
+ * Well-known feed locations for a blog, by its site key: under its origin, or for a blog by path
+ * under that path (ADR 0069), so a writer's address on a shared host never finds the host's feed.
+ */
+export function candidateFeedUrls(home: string): string[] {
+  const base = home.endsWith('/') ? home : `${home}/`
+  return COMMON_FEED_PATHS.map((p) => new URL(p.slice(1), base).toString())
 }

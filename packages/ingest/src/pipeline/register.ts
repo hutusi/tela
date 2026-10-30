@@ -1,7 +1,7 @@
 /** Registering a feed the way discovery, the add-feed RPC and the editorial seed do. */
-import { normalizeLangTag, normalizeOrigin, type ParsedFeed } from '@tela/content'
+import { normalizeLangTag, type ParsedFeed } from '@tela/content'
 import { declaredHomeHonoured, type EnsuredFeed, ensureFeed, type TelaDb } from '@tela/data'
-import type { FetchRegion } from '@tela/shared'
+import { type BlogRules, type FetchRegion, siteKeyOf } from '@tela/shared'
 import type { SQL } from 'drizzle-orm'
 
 export type RegisterFeedInput = {
@@ -17,14 +17,17 @@ export type RegisterFeedInput = {
    * 0063). Refused, nothing is written and the answer is null.
    */
   within?: SQL
+  /** Which blogs are by path (ADR 0069); unset is `BLOG_RULES`. */
+  rules?: BlogRules | undefined
   now: number
 }
 
 /**
  * Find or create the feed and its site. The site is keyed by the declared home when that home is
- * unclaimed or claimed by the acting member, otherwise by the feed's own origin (a placeholder
+ * unclaimed or claimed by the acting member, otherwise by the feed's own address (a placeholder
  * the first fetch may move), so a feed cannot put its posts under another member's site by
- * declaring it.
+ * declaring it. Either is a site key: an origin, or a path on a shared host or in a named
+ * section (ADR 0069).
  */
 export async function registerFeed(
   db: TelaDb,
@@ -35,19 +38,19 @@ export async function registerFeed(
   db: TelaDb,
   input: RegisterFeedInput,
 ): Promise<EnsuredFeed | null> {
-  const feedOrigin = normalizeOrigin(input.feedUrl)
-  if (!feedOrigin) throw new Error(`cannot derive a site origin from ${input.feedUrl}`)
+  const own = siteKeyOf(input.feedUrl, input.rules)
+  if (!own) throw new Error(`cannot derive a site key from ${input.feedUrl}`)
   const parsed = input.parsed ?? null
   const declaredUrl = input.homeUrl ?? parsed?.homeUrl ?? null
-  const declared = declaredUrl ? normalizeOrigin(declaredUrl) : null
+  const declared = declaredUrl ? siteKeyOf(declaredUrl, input.rules) : null
   const honoured =
     declared !== null &&
-    (declared === feedOrigin || (await declaredHomeHonoured(db, declared, input.actorId ?? null)))
-  const siteOrigin = honoured && declared ? declared : feedOrigin
+    (declared === own || (await declaredHomeHonoured(db, declared, input.actorId ?? null)))
+  const siteHome = honoured && declared ? declared : own
   const feed = {
     feedUrl: input.feedUrl,
     host: new URL(input.feedUrl).hostname.toLowerCase(),
-    siteOrigin,
+    siteHome,
     title: parsed?.title ?? null,
     description: parsed?.description ?? null,
     format: parsed?.format ?? null,

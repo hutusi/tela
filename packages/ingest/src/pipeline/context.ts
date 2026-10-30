@@ -1,6 +1,7 @@
 import type { Lease, TelaDb } from '@tela/data'
 import { bumpSeq, fence, isFenceRefusal, release } from '@tela/data'
 import type { Blobs, Clock } from '@tela/platform'
+import type { BlogRules } from '@tela/shared'
 import { sql } from 'drizzle-orm'
 import type { GitHub } from '../github'
 import type { HttpClient } from '../http'
@@ -28,6 +29,8 @@ export type IngestContext = {
   github?: GitHub
   /** Tests only: let side requests the HTTP client does not make (WebSub hubs) reach localhost. */
   allowPrivateHosts?: boolean
+  /** Which blogs are by path (ADR 0069); unset is `BLOG_RULES`. Tests name the fixture's paths. */
+  blogRules?: BlogRules
 }
 
 /** A statement for a batch (anything drizzle's batch accepts). */

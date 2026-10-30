@@ -10,7 +10,7 @@ import { MAX_BLOGROLL_BLOGS } from '@tela/shared'
 import { type RefObject, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useTranslations } from 'use-intl'
 import { blogsCounted } from '../lib/blogrolls'
-import { displayHost } from '../lib/format'
+import { blogAddress } from '../lib/format'
 import { matcher } from '../lib/subscriptions'
 import { BELOW_MD, useMediaQuery } from '../lib/use-media'
 import { liveBlogs } from '../store/blogrolls'
@@ -105,7 +105,7 @@ function AddBlogsBody({
           return {
             feedId: s.feedId,
             title: feedTitle(tables, s.feedId) || '…',
-            host: site ? displayHost(site.homeUrl) : null,
+            host: site ? blogAddress(site.homeUrl) : null,
             feedUrl: feed?.feedUrl ?? null,
             site,
           }

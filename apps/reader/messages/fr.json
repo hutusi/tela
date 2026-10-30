@@ -542,6 +542,7 @@
     "optionGitHubUnlinked": "Si votre blog et votre profil GitHub renvoient déjà l’un vers l’autre, il n’y a rien à ajouter : associez GitHub à votre compte Tela dans les <link>Paramètres</link>, puis revenez ici.",
     "optionRelMe": "Un lien vers votre profil Tela",
     "optionRelMeHint": "Placez-le dans l’en-tête ou le pied de page de votre blog. Un lien existant convient aussi : avec rel=\"me\", n’importe où sur la page d’accueil ; sans, seulement dans un en-tête ou un pied de page que la page 404 de votre blog affiche aussi.",
+    "optionRelMeHintShared": "Placez-le sur la page de votre blog. Sur un site que d’autres blogs partagent, seul un lien avec rel=\"me\" compte, n’importe où sur cette page : le reste du site appartient à tous ses blogs.",
     "optionMeta": "Une balise meta",
     "optionMetaHint": "Placez-la dans le <head> de votre page d’accueil. Vous pourrez la retirer après la vérification.",
     "verify": "Vérifier",

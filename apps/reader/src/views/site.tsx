@@ -12,7 +12,7 @@ import { PersonAvatar } from '../components/person-avatar'
 import { ReportLink } from '../components/report-link'
 import { SiteAvatar } from '../components/site-avatar'
 import { blogsHref } from '../lib/discover-href'
-import { cadenceKey, displayHost, shortDate } from '../lib/format'
+import { blogAddress, cadenceKey, shortDate } from '../lib/format'
 import { publicTitle } from '../lib/public-title'
 import { outboundRel, PostLink } from './post-link'
 import type { MemberControls, Person, Reading, SiteData } from './types'
@@ -44,7 +44,7 @@ export function SiteView({
   const { site } = data
   // An operator listed it, so its page is indexed and its links are followed (ADR 0060).
   const vouched = site.indexable === true
-  const title = site.title ?? displayHost(site.homeUrl)
+  const title = site.title ?? blogAddress(site.homeUrl)
   const primary = data.feeds[0]
   // In Discover's order, and only topics this build can name.
   const topics = TOPICS.filter((topic) => data.topics.includes(topic))
@@ -76,7 +76,7 @@ export function SiteView({
         />
         <div className="flex min-w-[260px] flex-1 flex-col gap-2 max-md:mt-4 max-md:flex-none max-md:gap-0">
           <div className="flex flex-wrap gap-1.5 text-[13px] text-muted md:gap-2">
-            <span className="min-w-0 [overflow-wrap:anywhere]">{displayHost(site.homeUrl)}</span>
+            <span className="min-w-0 [overflow-wrap:anywhere]">{blogAddress(site.homeUrl)}</span>
             {claimant ? (
               <>
                 <span>·</span>

@@ -7,14 +7,21 @@ import { absoluteUrl, findFeedLinks } from '@tela/content'
 import {
   bumpSeq,
   currentSeq,
+  feedHome,
   feedIsVouched,
-  feedOrigin,
   first,
   type Lease,
-  moveFeedToOrigin,
+  moveFeedToHome,
+  siteHost,
   type TelaDb,
 } from '@tela/data'
-import type { ClaimMethod, ClaimReason, FetchRegion, HomeUnreachable } from '@tela/shared'
+import {
+  type ClaimMethod,
+  type ClaimReason,
+  type FetchRegion,
+  type HomeUnreachable,
+  isSharedHost,
+} from '@tela/shared'
 import { findAll, getAttributeValue } from 'domutils'
 import { type SQL, sql } from 'drizzle-orm'
 import { parseDocument } from 'htmlparser2'
@@ -24,9 +31,6 @@ import { requestHubSubscription } from '../websub'
 import { commit, type IngestContext, type Statement } from './context'
 import { namesSite, type ProfileLink, profileHosts, readProofs } from './proofs'
 import { checkLanded, checkRobots } from './robots'
-
-/** The host of a site's origin (`https://blog.example` → `blog.example`), in SQL. */
-const siteHost = (homeUrl: SQL) => sql`substr(${homeUrl}, instr(${homeUrl}, '://') + 3)`
 
 // ---------------------------------------------------------------------------------------------
 // Favicons
@@ -178,6 +182,9 @@ async function notFoundPage(
 ): Promise<{ url: string; body: string } | null> {
   const origin = new URL(homeUrl)
   const url = new URL(notFoundProbe(token), origin).toString()
+  // A section that is a blog of its own is answered on its site's origin (ADR 0069); sent to the
+  // section, a missing address was sent home.
+  const home = origin.pathname.replace(/\/+$/, '')
   try {
     const res = await ctx.http.get(url, { region: 'global', accept: HTML_ACCEPT })
     const final = new URL(res.finalUrl)
@@ -187,7 +194,8 @@ async function notFoundPage(
       (final.protocol === origin.protocol || final.protocol === 'https:') &&
       final.hostname.replace(/^www\./, '') === origin.hostname.replace(/^www\./, '') &&
       final.port === origin.port &&
-      final.pathname !== '/'
+      final.pathname !== '/' &&
+      final.pathname.replace(/\/+$/, '') !== home
     return (res.status === 404 || res.status === 410) && res.body && own
       ? { url: res.finalUrl, body: res.body }
       : null
@@ -247,7 +255,7 @@ async function proofOf(
   }
   const login = gh?.login.toLowerCase()
   const theirs = (l: ProfileLink) => l.name === login
-  const namesThisSite = gh !== null && namesSite(gh.website, claim.home_url)
+  const namesThisSite = gh !== null && namesSite(gh.website, claim.home_url, ctx.blogRules)
   if (namesThisSite && home.github.some((l) => theirs(l) && l.me)) return { method: 'github' }
 
   // A link without rel="me" is the blog's own only if its 404 page, which has no post, shows it.
@@ -259,7 +267,12 @@ async function proofOf(
     if (claim.overruled) {
       return { reason: { reason: 'overruled', page: clip(page.finalUrl), target } }
     }
-    const second = await notFoundPage(ctx, claim.home_url, claim.token)
+    // On a shared host the 404 page is the host's, the same for every writer there: it shows
+    // nothing that is this blog's own, so only rel="me", the meta tag or GitHub prove it there
+    // (ADR 0069), and the member is told to add rel="me" as for a blog with no 404 page.
+    const second = isSharedHost(claim.home_url, ctx.blogRules)
+      ? null
+      : await notFoundPage(ctx, claim.home_url, claim.token)
     if (!second) {
       return { reason: { reason: 'no_not_found_page', page: clip(page.finalUrl), target } }
     }
@@ -424,7 +437,8 @@ export async function verifyClaimJob(ctx: IngestContext, lease: Lease): Promise<
   const proof = found
 
   // The feeds the home page declares are the ones the owner vouches for; every other feed that
-  // joined while the site was unclaimed moves to the origin that serves it.
+  // joined while the site was unclaimed moves to the blog that serves it: its origin, or on a
+  // shared host its writer's path, never the bare host (ADR 0069).
   const declared = await resolveDeclaredFeeds(
     ctx.http,
     findFeedLinks(page.body, page.finalUrl)
@@ -444,9 +458,9 @@ export async function verifyClaimJob(ctx: IngestContext, lease: Lease): Promise<
   for (const f of feeds) {
     const feed = { feedUrl: f.feed_url, servedOrigin: f.served_origin, addedBy: f.added_by }
     if (feedIsVouched(feed, site)) continue
-    const origin = feedOrigin(feed)
-    if (origin && origin !== claim.home_url) {
-      moves.push(...moveFeedToOrigin(db, { id: f.id, siteId: claim.site_id }, origin, now))
+    const home = feedHome(feed, ctx.blogRules)
+    if (home && home !== claim.home_url) {
+      moves.push(...moveFeedToHome(db, { id: f.id, siteId: claim.site_id }, home, now))
     }
   }
   // Another member's claim on this blog may have been verified while this one read the page. Then

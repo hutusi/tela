@@ -415,6 +415,29 @@ The account is on Workers Paid. Run wrangler from a real terminal (`wrangler log
        fetched, whether their extraction got through (`select extract_state, count(*) from
        articles where url_host = 'openai.com' group by 1`). If it was refused, its posts stay
        excerpts, as ADR 0068 accepts.
+   - Blogs by path (ADR 0069): no migration and no `MIN_CLIENT` bump.
+     - Before deploying, list the blogs that will be filed again. Each one unclaimed moves to its
+       writer's blog at its next changed fetch, and a blog split off a hidden one is hidden too; a
+       claimed one stays where it is:
+       ```sh
+       cd apps/api && bunx wrangler d1 execute tela --remote --command "select s.id, s.home_url,
+         s.listing, s.claimed_by is not null as claimed, count(f.id) as feeds from sites s
+         left join feeds f on f.site_id = s.id where s.home_url in ('https://world.hey.com',
+         'https://buttondown.com', 'https://buttondown.email', 'https://devblogs.microsoft.com',
+         'https://www.microsoft.com', 'https://www.anthropic.com') group by s.id"
+       ```
+     - Deploy tela-jobs (filing, claims and Add run there), then tela-api, then tela-web;
+       tela-gateway is unchanged. Then `bun run admin curate`, after tela-api, which takes `home`.
+       It moves Anthropic's Engineering feed onto a blog of its own and renames the lab's blog to
+       Anthropic Research, which keeps `/s/409`, and adds Microsoft Research, The Old New Thing,
+       Computer Things, DHH and OpenAI Developers.
+     - Rolling back: tela-jobs and tela-api go back together. Blogs already split stay split, and
+       an older build files a new feed on a shared host under the bare host again. An older
+       tela-web shows a blog by path by its host.
+     - After deploy, check that Discover's AI chip lists Anthropic Research and Anthropic
+       Engineering as two blogs, `/s/409` reading Anthropic Research; that Add, given
+       `https://www.anthropic.com/engineering`, offers Engineering only, and given
+       `https://www.anthropic.com`, both; and that the five new blogs have posts.
    - Protocol 2 (2026-09-29) keeps each device's copy in IndexedDB `tela-2`; earlier shells use
      `tela`, which the newer shell empties at each boot and marks as seen. A tela-web rollback
      leaves the `tela-2` copies in place, and the older shell starts over in `tela`. On the way
@@ -1393,6 +1416,17 @@ A public reader count is shown only from three readers.
   names it poorly ("feed - …", a bare address, none at all): no fetch rewrites a blog's name, and
   the reader shows it before the feed's. Running it again changes nothing that is already right.
   A rejected blog is left alone; a claimed one keeps its owner's topics and name.
+- **Add a blog by path** (ADR 0069): a section of a site that is a blog of its own (a lab's
+  research), or a host whose writers each have a path (`world.hey.com/<name>`). Add the section's
+  address, or the host, to `BLOG_RULES` in `packages/shared/src/blogs.ts`, and deploy tela-jobs
+  and tela-api. A host belongs there only if its feeds and their `<link>`s both live under the
+  writer's segment. Then list the blog's feed in `curated-sites.ts`; if Tela had filed it under
+  the site's blog before, give the entry `home`, the section's address, and curate moves it. Of
+  two feeds leaving one blog, the last to leave renames that blog and keeps its readers, so put
+  first the one that should not. `✗ … home_blocked` means the feed could not move and nothing of
+  the entry was applied: either blog is claimed, or the blog it is on said a no (Hidden, feed
+  only, translation off) that the named blog, which exists already, has not. Decide in the
+  console, then apply the list again.
 - **Review the blogs members add:** Discover → To review lists each private, unclaimed blog that
   someone reads and a live feed has filled, with its language, its posts of the last 30 days, its
   latest post, its readers and when it was added. List it, or Not for Discover; either takes it

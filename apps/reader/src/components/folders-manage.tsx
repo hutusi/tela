@@ -21,7 +21,7 @@ import {
 import { Link } from 'react-router'
 import { useLocale, useTranslations } from 'use-intl'
 import { checkFolderName } from '../lib/folders'
-import { displayHost } from '../lib/format'
+import { blogAddress } from '../lib/format'
 import { postedAgo } from '../lib/subscriptions'
 import { useDismiss } from '../lib/use-dismiss'
 import { CHECK, CHEVRON_DOWN, Glyph } from './glyph'
@@ -587,7 +587,7 @@ function SubscriptionRow({
 /** A row's second line: its address, its language, and how it posts. */
 export function rowMeta(row: ManagedRow, activity: string): string {
   return [
-    row.site ? displayHost(row.site.homeUrl) : null,
+    row.site ? blogAddress(row.site.homeUrl) : null,
     row.site?.primaryLang ? languageBadge(row.site.primaryLang) : null,
     activity,
   ]

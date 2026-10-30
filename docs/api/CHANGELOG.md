@@ -3,6 +3,17 @@
 Changes to Tela's API for apps, newest first. See [policy.md](policy.md) for how changes are made
 and announced.
 
+## 2026-10-30
+
+- **A blog can be a path.** On a host many blogs share (`world.hey.com`, `buttondown.com`), each
+  writer's blog is their path, and a few sections of a site are blogs of their own (Anthropic's
+  Research and Engineering). A blog's `homeUrl` then carries that path
+  (`https://world.hey.com/dhh`); before, every blog on such a host was one, at the host's origin.
+  The field and its format did not change: derive a blog's address from `homeUrl` itself, not
+  from its host.
+- **Discovery at a site's own address** also offers the feeds of the blogs Tela lists in sections
+  of it, and at a section's address that section's. The format did not change.
+
 ## 2026-10-28 (later)
 
 - **Discovery finds a listed blog's feeds from the blog's address.** When an address declares no

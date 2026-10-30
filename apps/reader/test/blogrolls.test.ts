@@ -411,7 +411,11 @@ describe('Subscribe to all', () => {
 
   test('a blog is named as a sentence names it: its name, else its host', () => {
     expect(blogLabel({ name: 'Kerb', homeUrl: 'https://kerb.example/' })).toBe('Kerb')
-    expect(blogLabel({ name: null, homeUrl: 'https://www.kerb.example/x' })).toBe('kerb.example')
+    expect(blogLabel({ name: null, homeUrl: 'https://www.kerb.example/' })).toBe('kerb.example')
+    // A blog by path is told apart from the host's other blogs by its path (ADR 0069).
+    expect(blogLabel({ name: null, homeUrl: 'https://world.hey.com/kerb' })).toBe(
+      'world.hey.com/kerb',
+    )
   })
 })
 

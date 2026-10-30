@@ -4,7 +4,7 @@
  * or is marked as someone else's (`nofollow`, `ugc`, `sponsored`, which comment sections put on a
  * commenter's link). Deciding what counts is the claim check's job, in `sites.ts`.
  */
-import { FORMER_PUBLIC_HOSTS } from '@tela/shared'
+import { type BlogRules, FORMER_PUBLIC_HOSTS, sameBlog, siteKeyOf } from '@tela/shared'
 import { findAll, getAttributeValue } from 'domutils'
 import { parseDocument } from 'htmlparser2'
 
@@ -91,16 +91,14 @@ export function readProofs(
 }
 
 /**
- * Does a website, as typed into a GitHub profile, name this blog? By host, without `www.`: a path
- * on it is still the blog, and a scheme is often left out (`hutusi.com`).
+ * Does a website, as typed into a GitHub profile, name this blog? By the blog it is on, whatever
+ * its scheme or `www.`: a path on it is still the blog, and a scheme is often left out
+ * (`hutusi.com`). On a shared host the blog is the writer's path, so another writer's website on
+ * the same host names their blog, not this one (ADR 0069).
  */
-export function namesSite(website: string, homeUrl: string): boolean {
+export function namesSite(website: string, homeUrl: string, rules?: BlogRules): boolean {
   if (!website) return false
-  const bare = (host: string) => host.toLowerCase().replace(/^www\./, '')
-  try {
-    const url = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(website) ? website : `https://${website}`)
-    return bare(url.hostname) === bare(new URL(homeUrl).hostname)
-  } catch {
-    return false
-  }
+  const typed = /^[a-z][a-z0-9+.-]*:\/\//i.test(website) ? website : `https://${website}`
+  const blog = siteKeyOf(typed, rules)
+  return blog !== null && sameBlog(blog, homeUrl)
 }

@@ -27,7 +27,10 @@ export const sites = sqliteTable(
   'sites',
   {
     id: integer().primaryKey({ autoIncrement: true }),
-    /** Normalized origin; the identity of a blog. */
+    /**
+     * The identity of a blog, its site key: the normalized origin, or for a blog by path on a
+     * shared host or in a named section that origin and its path (`siteKeyOf`, ADR 0069).
+     */
     homeUrl: text().notNull().unique(),
     title: text(),
     description: text(),
@@ -112,6 +115,7 @@ export const feeds = sqliteTable(
     contentMode: text({ enum: CONTENT_MODES }).notNull().default('unknown'),
     hubUrl: text(),
     addedBy: text().references(() => user.id, { onDelete: 'set null' }),
+    /** The site key of the address that last served the feed (ADR 0011, by path ADR 0069). */
     servedOrigin: text(),
     /**
      * The feed this one turned out to be another address for: the same blog, listing the same

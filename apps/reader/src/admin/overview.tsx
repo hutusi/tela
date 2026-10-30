@@ -18,7 +18,7 @@ import type {
 import { useEffect, useRef } from 'react'
 import { Link } from 'react-router'
 import { useLocale, useTranslations } from 'use-intl'
-import { displayHost, relativeTime, shortDate } from '../lib/format'
+import { blogAddress, displayHost, relativeTime, shortDate } from '../lib/format'
 import { useLive } from '../lib/use-live'
 import { historyWords, type Translate } from './act'
 import { adminGet, NotAdmin } from './api'
@@ -143,11 +143,11 @@ export function OverviewView({
       count: queues.claims.count,
       rows: queues.claims.rows.map((row: AdminClaimRow) => ({
         id: row.id,
-        title: row.siteTitle ?? displayHost(row.homeUrl),
+        title: row.siteTitle ?? blogAddress(row.homeUrl),
         sub:
           [row.claimant ? `@${row.claimant.handle}` : null, row.error]
             .filter(Boolean)
-            .join(' · ') || displayHost(row.homeUrl),
+            .join(' · ') || blogAddress(row.homeUrl),
         status: statusOf(claims, row, row.status === 'failed' ? 'bad' : 'info'),
       })),
     },
@@ -188,8 +188,8 @@ export function OverviewView({
       count: queues.candidates.count,
       rows: queues.candidates.rows.map((row: AdminSiteRow) => ({
         id: row.id,
-        title: row.title ?? displayHost(row.homeUrl),
-        sub: `${displayHost(row.homeUrl)} · ${t('overview.readers', { n: row.readerCount })}`,
+        title: row.title ?? blogAddress(row.homeUrl),
+        sub: `${blogAddress(row.homeUrl)} · ${t('overview.readers', { n: row.readerCount })}`,
         status: statusOf(discover, row, 'neutral'),
       })),
     },

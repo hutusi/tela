@@ -1471,7 +1471,7 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
       const made = await ensureFeed(db, {
         feedUrl,
         host: 'blog.example',
-        siteOrigin: 'https://blog.example',
+        siteHome: 'https://blog.example',
         now: T0,
       })
       expect(made.created).toBe(true)
@@ -1479,7 +1479,7 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         await ensureFeed(db, {
           feedUrl,
           host: 'blog.example',
-          siteOrigin: 'https://elsewhere.example',
+          siteHome: 'https://elsewhere.example',
           now: T0,
         }),
       ).toEqual({ ...made, created: false })
@@ -1536,7 +1536,7 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
       await ensureFeed(db, {
         feedUrl: 'https://known.example/feed',
         host: 'known.example',
-        siteOrigin: 'https://known.example',
+        siteHome: 'https://known.example',
         now: T0,
       })
       const result = await importFeeds(db, {
@@ -1574,7 +1574,7 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
       const feed = (name: string) => ({
         feedUrl: `https://${name}.example/feed`,
         host: `${name}.example`,
-        siteOrigin: `https://${name}.example`,
+        siteHome: `https://${name}.example`,
         addedBy: 'u1',
         now: T0,
       })

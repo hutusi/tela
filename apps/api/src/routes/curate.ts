@@ -5,8 +5,8 @@
  * unreachable feed does not stop the rest. Applying an entry again changes nothing that is
  * already right.
  */
-import { bumpSeq, currentSeq, first } from '@tela/data'
-import { isTopic } from '@tela/shared'
+import { bumpSeq, currentSeq, fileFeedUnder, first, isFenceRefusal } from '@tela/data'
+import { isTopic, siteKeyOf } from '@tela/shared'
 import { sql } from 'drizzle-orm'
 import type { ApiDeps } from '../deps'
 import { fetchSoon } from './feeds'
@@ -29,9 +29,18 @@ export async function curate(
   featured: boolean,
   /** The blog's name where its feed gives a poor one; the feed's stands when this is null. */
   title: string | null = null,
+  /**
+   * The blog the feed belongs to, where Tela filed it elsewhere before: a section that became a
+   * blog of its own (ADR 0069). A new feed is filed by the home it declares, and needs none.
+   */
+  home: string | null = null,
 ): Promise<CurateResult> {
   const { db } = deps
-  const added = await deps.ingest.addFeed({ feedUrl, actorId: null })
+  const found = await deps.ingest.addFeed({ feedUrl, actorId: null })
+  if ('error' in found) return found
+  const added = home ? await refile(deps, found, home) : found
+  // Everything below is about the blog the list names: written to whichever blog the feed is on,
+  // a blocked move would give that blog the entry's name, topics and listing.
   if ('error' in added) return added
   const chosen = [...new Set(topics.filter(isTopic))]
   const site = await first<{ listing: string; claimed_by: string | null }>(
@@ -91,4 +100,47 @@ export async function curate(
     title: after?.title ?? null,
     topics: stored.map((t) => t.topic),
   }
+}
+
+/**
+ * Move a curated feed to the blog the list names, as its first fetch moves a feed to the home it
+ * declares (`fileFeedUnder`): renaming the blog it is on when it is that blog's only feed, so the
+ * blog keeps its readers and its address, or else onto the named one. A blog split off a hidden
+ * one is hidden too, so `curate` then leaves it alone. Answers where the feed is now, or
+ * `home_blocked` when it is not on the named blog: a claim on either blog, a no the blog it would
+ * leave said and the named one has not, or a change since the decision was read.
+ */
+async function refile(
+  deps: ApiDeps,
+  added: { feedId: number; siteId: number; created: boolean },
+  home: string,
+): Promise<{ feedId: number; siteId: number; created: boolean } | { error: string }> {
+  const { db } = deps
+  const key = siteKeyOf(home, deps.blogRules)
+  const site = await first<{ home_url: string; claimed_by: string | null }>(
+    db,
+    sql`select home_url, claimed_by from sites where id = ${added.siteId}`,
+  )
+  if (!key || !site) return added
+  const filed = await fileFeedUnder(
+    db,
+    { id: added.feedId, siteId: added.siteId },
+    { homeUrl: site.home_url, claimedBy: site.claimed_by },
+    key,
+    deps.clock.now(),
+  )
+  try {
+    if (filed.statements.length > 0) await db.batch([bumpSeq(db), ...filed.statements] as never)
+  } catch (err) {
+    // Curate holds no lease on these blogs: a claim verified, or the blog changed, since the
+    // reads above, and the batch refused the move. The feed stays where it is.
+    if (!isFenceRefusal(err)) throw err
+  }
+  const now = await first<{ site_id: number; home_url: string }>(
+    db,
+    sql`select s.id as site_id, s.home_url from feeds f join sites s on s.id = f.site_id
+      where f.id = ${added.feedId}`,
+  )
+  if (now?.home_url !== key) return { error: 'home_blocked' }
+  return { ...added, siteId: now.site_id }
 }

@@ -3,10 +3,9 @@ import {
   findFeedLinks,
   findMetaRefresh,
   looksLikeFeed,
-  normalizeOrigin,
   parseFeedText,
 } from '@tela/content'
-import type { FeedFormat } from '@tela/shared'
+import { type BlogRules, type FeedFormat, siteKeyOf } from '@tela/shared'
 import { type HttpClient, HttpError, type HttpErrorKind, type HttpResponse } from './http'
 import { FEED_MAX_BYTES } from './items'
 
@@ -21,6 +20,8 @@ export type DiscoveredFeed = {
 export type DiscoverOptions = {
   /** How many declared or well-known candidates to verify by fetching. */
   maxCandidates?: number
+  /** Which blogs are by path (ADR 0069); unset is `BLOG_RULES`. */
+  rules?: BlogRules | undefined
 }
 
 function withScheme(input: string): string {
@@ -86,15 +87,17 @@ async function getPage(http: HttpClient, url: string): Promise<HttpResponse | nu
  * multilingual root, byvoid.com to `/zht/`), else the blog's home, which declares the feed a
  * page of it may not (paulgraham.com/articles.html). Null when the typed page is the home.
  */
-function secondPage(page: HttpResponse | null, url: string): string | null {
+function secondPage(page: HttpResponse | null, url: string, rules?: BlogRules): string | null {
   const ok = page?.status === 200 ? page : null
   const refresh = ok?.body ? findMetaRefresh(ok.body, ok.finalUrl) : null
   if (refresh) return refresh
   const at = page?.finalUrl ?? url
-  const origin = normalizeOrigin(at)
-  if (!origin) return null
-  const home = `${origin}/`
-  return new URL(at).href.split('#')[0] === home ? null : home
+  // The blog's home: its origin's, or a writer's own page on a shared host (ADR 0069).
+  const key = siteKeyOf(at, rules)
+  if (!key) return null
+  const home = new URL(key).pathname === '/' ? `${key}/` : key
+  const trim = (href: string) => href.split('#')[0]?.replace(/\/+$/, '')
+  return trim(new URL(at).href) === trim(home) ? null : home
 }
 
 /**
@@ -141,7 +144,7 @@ export async function discoverFeeds(
   await declared(page)
   let second: HttpResponse | null = null
   if (found.length === 0) {
-    const next = secondPage(page, url)
+    const next = secondPage(page, url, options.rules)
     second = next ? await getPage(http, next) : null
     await declared(second)
   }
@@ -149,8 +152,8 @@ export async function discoverFeeds(
     // The well-known paths on the typed page's origin first, so a site found before the second
     // page existed is found the same; then on the second page's, when it answered from another
     // (a refresh to the blog's new domain).
-    const origins = new Set([normalizeOrigin(page?.finalUrl ?? url)])
-    if (second?.status === 200) origins.add(normalizeOrigin(second.finalUrl))
+    const origins = new Set([siteKeyOf(page?.finalUrl ?? url, options.rules)])
+    if (second?.status === 200) origins.add(siteKeyOf(second.finalUrl, options.rules))
     for (const candidate of [...origins].flatMap((o) => (o ? candidateFeedUrls(o) : []))) {
       await consider(candidate)
       if (found.length > 0) break

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { monthYear, relativeTime, shortDate } from '../src/lib/format'
+import { blogAddress, displayHost, monthYear, relativeTime, shortDate } from '../src/lib/format'
 
 const HOUR = 3_600_000
 const DAY = 24 * HOUR
@@ -60,5 +60,16 @@ describe('formatters', () => {
     }
     expect(built.filter((b) => b.startsWith('relative')).length).toBe(2) // narrow and long
     expect(built.filter((b) => b.startsWith('date')).length).toBe(2) // with the year and without
+  })
+})
+
+describe("a blog's address", () => {
+  test('is its host, and for a blog by path its path too (ADR 0069)', () => {
+    expect(blogAddress('https://www.hutusi.com')).toBe('hutusi.com')
+    expect(blogAddress('https://world.hey.com/dhh')).toBe('world.hey.com/dhh')
+    expect(blogAddress('https://www.anthropic.com/research/')).toBe('anthropic.com/research')
+    expect(blogAddress('not a url')).toBe('not a url')
+    // A feed's address stays its host.
+    expect(displayHost('https://world.hey.com/dhh/feed.atom')).toBe('world.hey.com')
   })
 })
