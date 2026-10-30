@@ -780,10 +780,18 @@ test.describe('Following, a profile and a blog page on a phone', () => {
       translatedExcerpt: null,
       article,
     }
+    // A blog by path with no name yet is shown by its address, path and all (ADR 0069).
+    const unnamed = {
+      ...post,
+      siteId: 990_002,
+      siteTitle: null,
+      homeUrl: 'https://devblogs.microsoft.com/a-writer-with-a-rather-long-path',
+      article: { ...article, id: 990_002, feedId: 990_002 },
+    }
     const person = { id: 'mobile-anna', handle: 'anna_mobile', displayName: 'Anna', avatar: null }
     const items = [
       { kind: 'recommended', key: 'r:mobile', at, person, note: 'The last line is perfect.', post },
-      { kind: 'liked', key: 'l:mobile', at, person, count: 1, posts: [post] },
+      { kind: 'liked', key: 'l:mobile', at, person, count: 2, posts: [post, unnamed] },
     ]
     await page.route(/\/api\/v1\/following(\?|$)/, (route) =>
       route.fulfill({ json: { items, next: null } }),
@@ -804,6 +812,14 @@ test.describe('Following, a profile and a blog page on a phone', () => {
       await expect(card).toContainText(article.title)
       await expect(card.getByTestId('following-card-foot')).toBeHidden()
       await expect(card.getByRole('link')).toHaveCount(1)
+      // A long address takes at most part of a liked row, and the post keeps its title.
+      const sources = page.getByTestId('following-liked-source')
+      await expect(sources).toHaveCount(2)
+      const longest = (await restingBox(sources.nth(1))).width
+      const row = (await restingBox(sources.nth(1).locator('xpath=..'))).width
+      expect(longest, `the address at ${width}px`).toBeLessThanOrEqual(row * 0.4 + 1)
+      const title = await restingBox(sources.nth(1).locator('xpath=..').getByRole('link'))
+      expect(title.width, `the liked post's title at ${width}px`).toBeGreaterThan(row * 0.25)
       // Following's own aside stays, below the feed.
       await expect(page.getByTestId('people-you-follow')).toBeVisible()
       await noSidewaysScroll(page, `/following at ${width}px`)

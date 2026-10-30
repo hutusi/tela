@@ -469,7 +469,13 @@ function Activity({
                   >
                     {titleOf(post, lang, never).title}
                   </PostLink>
-                  <span className="text-[12.5px] whitespace-nowrap text-muted">{source}</span>
+                  {/* At most part of the row, so a blog's long path leaves its post a title. */}
+                  <span
+                    className="max-w-[40%] truncate text-[12.5px] text-muted"
+                    data-testid="following-liked-source"
+                  >
+                    {source}
+                  </span>
                 </li>
               )
             })}
