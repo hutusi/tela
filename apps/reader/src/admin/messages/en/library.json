@@ -181,6 +181,7 @@
     "region": "Region",
     "format": "Format",
     "address": "Address",
+    "inTela": "Open in Tela",
     "mergedInto": "Merged into",
     "blogs": "Blogs",
     "publicSince": "Public since",

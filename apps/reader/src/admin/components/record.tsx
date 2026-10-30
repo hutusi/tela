@@ -52,6 +52,29 @@ export function KeyValues({ rows }: { rows: readonly (readonly [string, React.Re
   )
 }
 
+/** A link out of the console, opened in a tab of its own: the console stays where it was. */
+export function OutLink({
+  href,
+  testId,
+  children,
+}: {
+  href: string
+  testId?: string
+  children: React.ReactNode
+}) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-ink underline decoration-thumb underline-offset-2 hover:decoration-ink"
+      {...(testId ? { 'data-testid': testId } : {})}
+    >
+      {children}
+    </a>
+  )
+}
+
 /** A small uppercase label over a part of the record. */
 export function Section({ label, children }: { label: string; children: React.ReactNode }) {
   return (

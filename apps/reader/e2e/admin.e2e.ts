@@ -163,6 +163,17 @@ test('an admin hides a featured blog from Discover, and takes it back with Undo'
   const row = page.locator(`[data-testid="admin-row"][data-row-id="${siteId}"]`)
   await row.click()
   await expect(page.getByTestId('admin-record')).toBeVisible()
+  // Where to look at it, each in a tab of its own: the blog's site, and Tela's page for it, which
+  // is public while Discover shows the blog.
+  const site = page.getByTestId('admin-record').getByTestId('admin-blog-site')
+  await expect(site).toHaveAttribute('href', /^https?:\/\//)
+  await expect(site).toHaveAttribute('target', '_blank')
+  const opened = page.context().waitForEvent('page')
+  await page.getByTestId('admin-record').getByTestId('admin-blog-tela').click()
+  const tab = await opened
+  await expect(tab).toHaveURL(new RegExp(`/s/${siteId}$`))
+  await expect(tab.getByTestId('site-page')).toBeVisible()
+  await tab.close()
   await page
     .getByTestId('admin-record')
     .locator('[data-testid="admin-record-action"][data-action="site.hide"]')
@@ -196,6 +207,9 @@ test('a blog a member added waits under To review; List lists it, and Undo puts 
   await expect(row).toContainText('To review')
   await row.click()
   const record = page.getByTestId('admin-record')
+  // Its own site to judge it by, and no Tela page: that shows only what Discover shows.
+  await expect(record.getByTestId('admin-blog-site')).toHaveAttribute('href', /^https?:\/\//)
+  await expect(record.getByTestId('admin-blog-tela')).toHaveCount(0)
   // How many read it, never who: the record names no member.
   await expect(record).toContainText('A member added this blog.')
   await expect(record).not.toContainText('@')

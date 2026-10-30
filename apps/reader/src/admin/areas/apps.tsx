@@ -20,7 +20,7 @@ import { displayHost, personColor, relativeTime } from '../../lib/format'
 import { adminGet, adminSearch } from '../api'
 import type { AnyAreaSpec, AreaSpec, RecordProps, Status } from '../area'
 import type { AppFormStart } from '../components/app-form'
-import { History, KeyValues, Note, Section } from '../components/record'
+import { History, KeyValues, Note, OutLink, Section } from '../components/record'
 import { fullDate, type MembersT, PersonLink } from './people'
 
 /** A search is posted: an app is found by its developer's address too (`adminSearch`). */
@@ -83,16 +83,7 @@ function describeWith(t: MembersT) {
 
 /** A link out of the console, to the app's own pages, opened apart from it. */
 function Out({ href }: { href: string }) {
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="text-ink underline decoration-thumb underline-offset-2 hover:decoration-ink"
-    >
-      {displayHost(href)}
-    </a>
-  )
+  return <OutLink href={href}>{displayHost(href)}</OutLink>
 }
 
 function AppRecord({ row, detail, open }: RecordProps<AdminAppRow, AdminAppDetail>) {

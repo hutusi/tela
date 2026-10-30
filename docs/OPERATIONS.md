@@ -1139,8 +1139,11 @@ tela-api over the network, unlike the rest of the reader, and every change it ma
   removing a claim break the item's lease in the same batch, so a job already running writes
   nothing over the choice.
 - **Discover** opens on To review, the blogs members added that wait for a decision (ADR 0041),
-  and badges how many there are; see *Curation*. A listing change reaches the public pages within
-  about five minutes: the edge caches them per colo, and nothing purges that cache.
+  and badges how many there are; see *Curation*. A blog's record (in Sites too) links to the blog
+  itself, and to its page on Tela while it is listed or featured; Tela's page shows no other blog,
+  so a blog under review is judged on its own site. Both open in a tab of their own. A listing
+  change reaches the public pages within about five minutes: the edge caches them per colo, and
+  nothing purges that cache.
 - **Blogrolls in Discover** (ADR 0050). A public blogroll reaches Discover's Blogrolls tab by
   itself once three of its blogs are shown to others (a blog the operator rejected is not shown).
   The Discover area's *Blogrolls* filter lists every public one, with its owner's handle, how many

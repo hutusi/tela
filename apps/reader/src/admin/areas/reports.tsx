@@ -20,7 +20,7 @@ import { actionLook } from '../act'
 import { adminGet, adminList } from '../api'
 import type { AnyAreaSpec, AreaSpec, RecordProps, Status } from '../area'
 import { ActionButton } from '../components/buttons'
-import { History, KeyValues, Note, Section, useWhen } from '../components/record'
+import { History, KeyValues, Note, OutLink, Section, useWhen } from '../components/record'
 import { type MembersT, PersonLink } from './people'
 
 const loadReports = (filter: AdminFilter<'reports'>, q: string, signal?: AbortSignal) =>
@@ -111,14 +111,7 @@ function ReportRecord({
   // meet it on the consent page and in Connected apps, which its record in Apps stands in for.
   const page =
     target.kind === 'app' ? null : target.path ? (
-      <a
-        href={target.path}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-ink underline decoration-thumb underline-offset-2 hover:decoration-ink"
-      >
-        {target.path}
-      </a>
+      <OutLink href={target.path}>{target.path}</OutLink>
     ) : (
       t('reports.notPublic')
     )

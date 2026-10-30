@@ -31,6 +31,7 @@ import type { AnyAreaSpec, AreaSpec, Column, RecordProps, Status } from '../area
 import { History, KeyValues, Note, Section, StatusPill, useWhen } from '../components/record'
 import { parseLedgerState } from '../state'
 import {
+  BlogLinks,
   BlogTile,
   blogName,
   count,
@@ -41,6 +42,7 @@ import {
   RecordLink,
   restoreDone,
   restoreLabel,
+  shown,
   type Translate,
   topicWords,
   useDescribe,
@@ -100,8 +102,6 @@ export function discoverStatus(t: Translate, row: AdminSiteRow): Status {
 }
 
 /** Listed or featured: where a blog with no topics shows only under All. */
-const shown = (listing: AdminSiteRow['listing']) => listing === 'listed' || listing === 'featured'
-
 /**
  * The toast's words for an action that leaves a blog in Discover with no topics: it is filed
  * only under All until it has one, which the record's chips set in a click each.
@@ -353,6 +353,8 @@ function DiscoverRecord({
   ) : (
     t('listing.unclaimed')
   )
+  // Built apart from the rows, as values rather than items of a list React would key.
+  const address = <BlogLinks site={site} />
   const latest = site.latestTitle
     ? t('kv.latestValue', { title: site.latestTitle, when: when(site.latestAt) })
     : null
@@ -360,6 +362,7 @@ function DiscoverRecord({
     <div className="flex flex-col gap-5">
       <KeyValues
         rows={[
+          [t('kv.address'), address],
           [t('kv.listing'), discoverWords(t, site)],
           [t('kv.owner'), ownerLink],
           [t('kv.language'), languageOf(t, site.primaryLang, locale)],

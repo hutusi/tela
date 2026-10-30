@@ -20,12 +20,49 @@ import { blogAddress } from '../../lib/format'
 import { nameIn } from '../../lib/language-name'
 import { adminGet, adminList } from '../api'
 import type { AnyAreaSpec, AreaSpec, RecordProps, Status } from '../area'
-import { History, KeyValues, Note, Section, StatusPill, useWhen } from '../components/record'
+import {
+  History,
+  KeyValues,
+  Note,
+  OutLink,
+  Section,
+  StatusPill,
+  useWhen,
+} from '../components/record'
 
 export type Translate = ReturnType<typeof useTranslations>
 
 /** A blog's name: its title, or its address when it has none. */
 export const blogName = (title: string | null, homeUrl: string) => title || blogAddress(homeUrl)
+
+/** Whether Discover shows the blog, and so whether Tela's page for it is public. */
+export const shown = (listing: AdminSiteRow['listing']) =>
+  listing === 'listed' || listing === 'featured'
+
+/**
+ * Where to look at a blog under review: its own site, and Tela's page for it, both in a tab of
+ * their own. Tela's page shows a listed or featured blog only (`readSitePage`), so a blog waiting
+ * for review, or hidden, has its own site alone: a link to Tela's would say it does not exist.
+ */
+export function BlogLinks({
+  site,
+}: {
+  site: Pick<AdminSiteRow, 'siteId' | 'homeUrl' | 'listing'>
+}) {
+  const t = useTranslations('admin.library')
+  return (
+    <span className="flex flex-wrap items-baseline gap-x-3">
+      <OutLink href={site.homeUrl} testId="admin-blog-site">
+        {blogAddress(site.homeUrl)}
+      </OutLink>
+      {shown(site.listing) ? (
+        <OutLink href={`/s/${site.siteId}`} testId="admin-blog-tela">
+          {t('kv.inTela')}
+        </OutLink>
+      ) : null}
+    </span>
+  )
+}
 
 /** The square a library row starts with: the blog's favicon, or its coloured initial. */
 export function BlogTile({
@@ -325,6 +362,8 @@ function SiteRecord({ row, detail, act, open, busy }: RecordProps<AdminSiteRow, 
       </RecordLink>
     </span>
   )
+  // Built apart from the rows, as values rather than items of a list React would key.
+  const address = <BlogLinks site={site} />
   // Whether Tela may fetch the blog's pages (ADR 0061), as its writer can say on the Dashboard.
   const pages = (
     <span className="flex flex-wrap items-baseline gap-x-3">
@@ -341,6 +380,7 @@ function SiteRecord({ row, detail, act, open, busy }: RecordProps<AdminSiteRow, 
     <div className="flex flex-col gap-5">
       <KeyValues
         rows={[
+          [t('kv.address'), address],
           [t('kv.owner'), owner],
           [
             t('kv.listing'),
