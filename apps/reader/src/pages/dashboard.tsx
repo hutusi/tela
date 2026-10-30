@@ -472,7 +472,7 @@ function SiteDashboard({
           <SettingRow
             label={t('feedOnly')}
             hint={t.rich('feedOnlyHint', {
-              link: (chunks) => <Link to="/writers#opt-out">{chunks}</Link>,
+              link: (chunks) => <Link to="/bot">{chunks}</Link>,
             })}
           >
             <Switch

@@ -37,6 +37,7 @@ describe('llms.txt', () => {
       '/discover/blogrolls',
       '/discover/readers',
       '/writers',
+      '/bot',
       '/about',
       '/privacy',
       '/terms',

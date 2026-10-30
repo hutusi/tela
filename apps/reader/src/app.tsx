@@ -14,6 +14,7 @@ import { useForgetBlogrolls } from './lib/use-forget-blogrolls'
 import { forgetPublic } from './lib/use-public'
 import { AddPage } from './pages/add'
 import { BlogrollPage } from './pages/blogroll'
+import { BotPage } from './pages/bot'
 import { ClaimPage, ClaimSitePage } from './pages/claim'
 import { ConnectPage } from './pages/connect'
 import { DashboardPage } from './pages/dashboard'
@@ -337,6 +338,7 @@ function Routed({ rendered }: { rendered: string | null }) {
                         <Route path="/discover/blogrolls" element={<BlogrollsPage />} />
                         <Route path="/discover/readers" element={<ReadersPage />} />
                         <Route path="/writers" element={<WritersPage />} />
+                        <Route path="/bot" element={<BotPage />} />
                         <Route
                           path="/following"
                           element={

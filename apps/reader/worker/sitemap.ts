@@ -104,7 +104,7 @@ export function sitemapIndex(origin: string, summary: SitemapSummary): string {
 
 /**
  * Tela's own pages: the front page, Discover's tabs and each topic of its Blogs, the info pages
- * (dated as their copy is) and For writers.
+ * (dated as their copy is), For writers and How Tela reads your blog.
  */
 export function ownPages(): SitemapPage[] {
   const updated = Date.parse(`${INFO_UPDATED}T00:00:00Z`)
@@ -114,6 +114,7 @@ export function ownPages(): SitemapPage[] {
     ...TOPICS.map((topic) => ({ path: blogsHref({ topic }), lastmod: null })),
     ...INFO_PAGES.map((page) => ({ path: `/${page}`, lastmod: updated })),
     { path: '/writers', lastmod: null },
+    { path: '/bot', lastmod: null },
   ]
 }
 

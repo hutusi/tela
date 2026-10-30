@@ -116,6 +116,16 @@ describe('the writer card', () => {
     expect(html).toMatch(/<span aria-hidden="true"[^>]*data-testid="writer-card-follow"/)
   })
 
+  test("is drawn as Tela Public draws it: upright, on the theme's own ground, green only in the logo (ADR 0070)", () => {
+    for (const draft of [null, { name: 'Ada', handle: 'ada', host: 'ada.dev' }]) {
+      const html = render(<WriterCard draft={draft} sample={SAMPLE} />)
+      expect(html).not.toContain('italic')
+      expect(html).not.toContain('paper')
+      expect(html).not.toContain('accent')
+      expect(html).toContain('bg-surface')
+    }
+  })
+
   test("shows a title in the reader's language, and a bio and a note as written", () => {
     const html = render(<WriterCard draft={null} sample={SAMPLE} />, 'zh-Hans')
     expect(html).toContain('一间可以带着走的厨房')

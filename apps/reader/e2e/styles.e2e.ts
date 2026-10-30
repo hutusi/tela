@@ -817,3 +817,82 @@ test.describe('stylesheet', () => {
     expect(await size()).toBe('19.5px')
   })
 })
+
+// The front page, For writers and How Tela reads your blog, as Tela Public draws them (ADR 0070):
+// type on the page's own ground in either theme, links in ink, nothing slanted, and no page wider
+// than the window at a phone's width, the header's breakpoint or a desktop's.
+test.describe('the public pages', () => {
+  for (const scheme of ['light', 'dark'] as const) {
+    test(`fit every width, in ink and upright (${scheme})`, async ({ browser }) => {
+      const visitor = await browser.newContext({
+        storageState: { cookies: [], origins: [] },
+        colorScheme: scheme,
+      })
+      try {
+        const page = await visitor.newPage()
+        for (const path of ['/', '/writers', '/bot']) {
+          for (const width of [412, 768, 1280]) {
+            await page.setViewportSize({ width, height: 900 })
+            await page.goto(path)
+            await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+            const wider = await page.evaluate(
+              () => document.documentElement.scrollWidth - window.innerWidth,
+            )
+            expect([path, width, wider]).toEqual([path, width, 0])
+          }
+          const main = page.locator('main')
+          const slanted = await main.evaluate(
+            (m) =>
+              [...m.querySelectorAll('*')].filter((e) => getComputedStyle(e).fontStyle !== 'normal')
+                .length,
+          )
+          expect([path, slanted]).toEqual([path, 0])
+          // No link in the page is green: green is the logo's alone (Tela Public).
+          const accent = await page.evaluate(() => {
+            const probe = document.createElement('span')
+            probe.className = 'text-accent'
+            document.body.append(probe)
+            const colour = getComputedStyle(probe).color
+            probe.remove()
+            return colour
+          })
+          const green = await main
+            .locator('a')
+            .evaluateAll(
+              (links, colour) =>
+                links.filter((a) => getComputedStyle(a).color === colour).map((a) => a.textContent),
+              accent,
+            )
+          expect([path, green]).toEqual([path, []])
+        }
+      } finally {
+        await visitor.close()
+      }
+    })
+  }
+
+  test('a Chinese page sets its title a step smaller, at its own weight', async ({ browser }) => {
+    const visitor = await browser.newContext({
+      storageState: { cookies: [], origins: [] },
+      viewport: { width: 1280, height: 900 },
+    })
+    try {
+      const page = await visitor.newPage()
+      const title = () =>
+        page
+          .getByRole('heading', { level: 1 })
+          .evaluate((h) => [
+            Number.parseFloat(getComputedStyle(h).fontSize),
+            getComputedStyle(h).fontWeight,
+          ])
+      await page.goto('/bot?hl=en')
+      const [en, enWeight] = await title()
+      await page.goto('/bot?hl=zh-Hans')
+      const [zh, zhWeight] = await title()
+      expect(Number(zh) / Number(en)).toBeCloseTo(0.82, 2)
+      expect([enWeight, zhWeight]).toEqual(['500', '600'])
+    } finally {
+      await visitor.close()
+    }
+  })
+})

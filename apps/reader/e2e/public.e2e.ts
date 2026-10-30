@@ -389,10 +389,10 @@ test.describe('recommendations, profile, dashboard, settings', () => {
     await feedOnly.click()
     await expect(feedOnly).toHaveAttribute('aria-checked', 'false')
     await expect(page.getByTestId('toast')).toHaveText(/^Tela may fetch the pages of .+ again\.$/)
-    // Its hint leads to For writers, at what the switch does.
+    // Its hint leads to How Tela reads your blog (ADR 0070), where feeds and pages are told apart.
     await site.getByRole('link', { name: 'How Tela reads your blog' }).click()
-    await expect(page).toHaveURL('/writers#opt-out')
-    await expect(page.getByTestId('writers-opt-out-feedOnly')).toBeVisible()
+    await expect(page).toHaveURL('/bot')
+    await expect(page.getByTestId('writers-reading-pages')).toBeVisible()
   })
 
   test('settings validate the handle and the profile link follows it', async ({ page }) => {

@@ -577,10 +577,10 @@
   },
   "writers": {
     "title": "Pour les auteurs",
-    "description": "Votre carte de visite d’auteur indépendant sur Tela, comment Tela lit votre blog, et comment le revendiquer ou tenir Tela à l’écart.",
+    "description": "Votre carte de visite sur Tela, comment revendiquer votre blog, et comment tenir Tela à l’écart.",
     "kicker": "Pour les auteurs",
     "hero": {
-      "title": "La <em>carte de visite</em> de votre écriture indépendante.",
+      "title": "Votre carte de visite.",
       "lede": "Une page sur Tela avec votre nom, les blogs que vous écrivez et les articles que vous recommandez. Les lecteurs vous y trouvent, vous suivent et s’abonnent à votre blog en un clic."
     },
     "form": {
@@ -640,8 +640,7 @@
       "title": "Ce que fait votre carte",
       "link": {
         "title": "Un seul lien pour tout ce que vous écrivez",
-        "body": "Votre carte, à l’adresse /@identifiant, réunit tous les blogs que vous revendiquez, avec votre nom et une ligne sur vous.",
-        "pill": "Retrouvez-moi sur Tela"
+        "body": "Votre carte, à l’adresse /@identifiant, réunit tous les blogs que vous revendiquez, avec votre nom et une ligne sur vous."
       },
       "blogroll": {
         "title": "Votre blogroll",
@@ -649,9 +648,7 @@
       },
       "readers": {
         "title": "Lecteurs",
-        "body": "Les lecteurs vous suivent, s’abonnent à votre blog en un clic et peuvent le lire traduit à côté de l’original. Votre tableau de bord montre combien de personnes vous lisent, quels articles leur ont plu et les mots qu’elles ont laissés.",
-        "blogReaders": "{n, plural, one {# lecteur} other {# lecteurs}} sur Tela",
-        "followers": "{n, plural, one {# abonné} other {# abonnés}}"
+        "body": "Les lecteurs vous suivent, s’abonnent à votre blog en un clic et peuvent le lire traduit à côté de l’original. Votre tableau de bord montre combien de personnes vous lisent, quels articles leur ont plu et les mots qu’elles ont laissés."
       }
     },
     "how": {
@@ -687,6 +684,7 @@
     "reading": {
       "title": "Comment Tela lit votre blog",
       "intro": "Tela est un lecteur de flux. Il lit le flux RSS, Atom ou JSON que votre blog publie déjà, comme n’importe quel lecteur de flux, et demande le moins possible à votre serveur.",
+      "description": "Ce que Tela récupère d’un blog et à quelle fréquence, ce qu’il en montre, et ce qui reste à son auteur.",
       "agent": {
         "title": "Il dit qui il est",
         "body": "Chaque requête porte l’agent utilisateur de Tela, <code>Tela/0.1 (+https://telaread.com; feed reader)</code>, ou pour les images <code>Tela/0.1 (+https://telaread.com; image proxy)</code>."
@@ -710,7 +708,9 @@
       "pages": {
         "title": "Vos pages, seulement si le flux est court",
         "body": "Si votre flux ne contient que des résumés, Tela récupère une fois la page publique de chaque nouvel article, peu après que le flux l’a annoncé, pour en montrer le texte intégral aux abonnés dans le lecteur, puis de nouveau seulement si le résumé change. Il lit une fois votre page d’accueil, à l’ajout de votre blog, pour en trouver l’icône. Dans les deux cas, il consulte d’abord votre robots.txt."
-      }
+      },
+      "check": "Pour vérifier, Tela lit votre page d’accueil et, pour un lien sans <code>rel=\"me\"</code>, une adresse que votre blog n’a pas, pour voir sa page 404.",
+      "robots": "Comme pour tout robot, un groupe qui nomme Tela remplace celui qui vaut pour tous (<code>User-agent: *</code>). Votre flux reste lu, comme par tout lecteur de flux : c’est ce qu’un abonné a demandé."
     },
     "shows": {
       "title": "Ce que Tela montre",
@@ -742,7 +742,6 @@
         "title": "Votre GitHub",
         "body": "Rien à ajouter si vous vous connectez avec GitHub, que votre profil GitHub indique votre blog comme site web et que votre blog renvoie à ce profil de l’une des façons ci-dessus."
       },
-      "check": "Pour vérifier, Tela lit votre page d’accueil et, pour un lien sans <code>rel=\"me\"</code>, une adresse que votre blog n’a pas, pour voir sa page 404.",
       "gives": "Un blog revendiqué figure dans Découvrir sous votre nom. Votre tableau de bord montre combien de personnes le lisent sur Tela, quels articles elles ont aimés et recommandés, et les notes qu’elles ont laissées ; vous y choisissez ses thèmes, s’il est traduit, et si Tela n’utilise que votre flux."
     },
     "optOut": {
@@ -758,8 +757,7 @@
       },
       "robots": {
         "title": "robots.txt",
-        "body": "Pour tenir Tela à l’écart de vos pages sans rien revendiquer, ajoutez ceci à votre robots.txt. Tela le relit dans la journée.",
-        "after": "Comme pour tout robot, un groupe qui nomme Tela remplace celui qui vaut pour tous (<code>User-agent: *</code>). Votre flux reste lu, comme par tout lecteur de flux : c’est ce qu’un abonné a demandé."
+        "body": "Pour tenir Tela à l’écart de vos pages sans rien revendiquer, ajoutez ceci à votre robots.txt. Tela le relit dans la journée."
       },
       "email": {
         "title": "Quitter Tela",
@@ -767,8 +765,8 @@
       }
     },
     "cta": {
-      "count": "{n, plural, one {# blog est} other {# blogs sont}} déjà sur Tela. <em>Et le vôtre ?</em>",
-      "title": "<em>Où est votre blog ?</em>",
+      "count": "{n, plural, one {# blog est} other {# blogs sont}} déjà sur Tela. Et le vôtre ?",
+      "title": "Où est votre blog ?",
       "make": "Créer votre carte"
     }
   },

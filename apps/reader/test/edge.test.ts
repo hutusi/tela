@@ -1012,27 +1012,59 @@ describe('public pages', () => {
       // A visitor's page: the form, never a member's links.
       expect(html).toContain('data-testid="writers-form"')
       expect(html).not.toContain('data-testid="writers-member"')
-      // Each section under its anchor, the same in every language, and robots.txt's two lines.
-      for (const id of ['reading', 'shows', 'claiming', 'opt-out'])
-        expect(html).toContain(`id="${id}"`)
+      // Each section under its anchor, the same in every language, and robots.txt's two lines;
+      // how Tela reads a blog is a page of its own now (ADR 0070), linked from here.
+      for (const id of ['does', 'how', 'claiming', 'opt-out']) expect(html).toContain(`id="${id}"`)
+      for (const id of ['reading', 'shows', 'yours']) expect(html).not.toContain(`id="${id}"`)
+      expect(html).toContain('href="/bot"')
       expect(html).toContain('User-agent: Tela\nDisallow: /')
       expect(html).toContain('<code class="')
-      expect(html).toContain('Tela/0.1 (+https://telaread.com; feed reader)')
       expect(html).toContain('href="mailto:me@hutu.si"')
       expect(html).not.toContain('id="tela-data"')
       expect(html).not.toContain('name="robots"')
     }
     const en = await (await page('/writers?utm_source=x')).text()
-    expect(en).toMatch(
-      /<meta name="description" content="Your calling card as an independent writer/,
-    )
+    expect(en).toMatch(/<h1[^>]*>Your calling card\.<\/h1>/)
+    expect(en).toMatch(/<meta name="description" content="Your calling card on Tela/)
     expect(en).toContain('Only use what my feed provides')
-    expect(en).toContain('fetches each new post’s public page once, soon after the feed lists it')
     const zh = await (await page('/writers', { cookie: 'tela_locale=zh-Hans' })).text()
     expect(zh).toContain('只用我的订阅源提供的内容')
     const fr = await (await page('/writers', { cookie: 'tela_locale=fr' })).text()
     expect(fr).toContain('N’utiliser que ce que fournit mon flux')
     // Nothing asked of tela-api, and one page per language: the campaign's query is not a page.
+    expect(apiCalls).toEqual([])
+    expect(cache.size).toBe(4)
+  })
+
+  test('How Tela reads your blog renders here in all four languages, from the bundle alone (ADR 0070)', async () => {
+    const titles: Record<string, string> = {
+      en: 'How Tela reads your blog',
+      'zh-Hans': 'Tela 如何读取你的博客',
+      'zh-Hant': 'Tela 如何讀取你的部落格',
+      fr: 'Comment Tela lit votre blog',
+    }
+    for (const [locale, title] of Object.entries(titles)) {
+      const res = await page('/bot', { cookie: `tela_locale=${locale}` })
+      expect(res.status).toBe(200)
+      expect(res.headers.get('content-language')).toBe(locale)
+      const html = await res.text()
+      expect(html).toContain(`<html lang="${locale}"`)
+      expect(html).toContain(`<title>${title} · Tela</title>`)
+      expect(html).toContain('data-testid="bot-page"')
+      // The sections For writers' old anchors pointed at, under the same anchors.
+      for (const id of ['reading', 'shows', 'yours']) expect(html).toContain(`id="${id}"`)
+      expect(html).toContain('Tela/0.1 (+https://telaread.com; feed reader)')
+      expect(html).toContain('<code class="')
+      expect(html).toContain('href="/writers"')
+      expect(html).not.toContain('id="tela-data"')
+      expect(html).not.toContain('name="robots"')
+    }
+    const en = await (await page('/bot?utm_source=x')).text()
+    expect(en).toMatch(/<meta name="description" content="What Tela fetches from a blog/)
+    expect(en).toContain('fetches each new post’s public page once, soon after the feed lists it')
+    // The two notes that moved here from For writers' claiming and robots.txt.
+    expect(en).toContain('one address your blog doesn’t have, to see its 404 page')
+    expect(en).toContain('a group naming Tela takes the place of the one for everyone')
     expect(apiCalls).toEqual([])
     expect(cache.size).toBe(4)
   })

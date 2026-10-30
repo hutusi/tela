@@ -163,6 +163,8 @@ describe('public pages at the edge', () => {
       expect(route(`/${page}`)).toEqual({ kind: 'info', page, api: null, key: `/info/${page}` })
     // So does For writers (ADR 0061), whatever is in its query.
     expect(route('/writers?utm_source=x')).toEqual({ kind: 'writers', api: null, key: '/writers' })
+    // And How Tela reads your blog (ADR 0070).
+    expect(route('/bot?utm_source=x')).toEqual({ kind: 'bot', api: null, key: '/bot' })
     for (const path of [
       '/discover/',
       '/discover/week',
@@ -178,6 +180,8 @@ describe('public pages at the edge', () => {
       '/info/about',
       '/writers/',
       '/writers/x',
+      '/bot/',
+      '/bot/x',
     ])
       expect(route(path)).toBeNull()
     expect(handleFrom('/%40someone')).toBe('someone')
@@ -240,6 +244,7 @@ describe('public pages at the edge', () => {
       '/privacy',
       '/terms',
       '/writers',
+      '/bot',
     ]
     for (const page of pages) {
       const url = new URL(page, 'https://tela.test')

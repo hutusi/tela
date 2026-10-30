@@ -17,7 +17,7 @@ const ACTIVE: [NavKey, RegExp][] = [
   ['reading', /^\/reading/],
   ['discover', /^\/(discover|s\/)/],
   ['following', /^\/following/],
-  ['writers', /^\/writers/],
+  ['writers', /^\/(writers|bot)(\/|$)/],
 ]
 
 // Below `sm` the gaps and the pills' sides are the phone's (Tela v5): the member's three pills

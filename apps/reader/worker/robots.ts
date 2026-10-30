@@ -69,7 +69,7 @@ export const TRAINING_AGENTS = [
  * Tela's own copy: what a training crawler may read. Not the front page: its edition is writers'
  * titles and excerpts, as Discover is.
  */
-export const OWN_PAGES = ['/about', '/privacy', '/terms', '/writers', '/llms.txt'] as const
+export const OWN_PAGES = ['/about', '/privacy', '/terms', '/writers', '/bot', '/llms.txt'] as const
 
 /**
  * What no crawler reads: the API, members' objects and pictures, and the app's own pages, which
@@ -104,6 +104,7 @@ export function robotsTxt({ origin, noindex }: { origin: string; noindex: boolea
     '# Search engines and AI search and answer tools are welcome on every public page.',
     "# AI training crawlers may read Tela's own pages, not the pages that show writers' work.",
     `# For writers: ${origin}/writers`,
+    `# How Tela reads a blog: ${origin}/bot`,
     '',
     ...agents(['*', ...ANSWER_AGENTS]),
     `Content-Signal: ${CONTENT_SIGNAL}`,

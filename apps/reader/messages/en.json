@@ -577,10 +577,10 @@
   },
   "writers": {
     "title": "For writers",
-    "description": "Your calling card as an independent writer on Tela, how Tela reads your blog, and how to claim it or keep Tela out.",
+    "description": "Your calling card on Tela, how to claim your blog, and how to keep Tela out.",
     "kicker": "For writers",
     "hero": {
-      "title": "Your <em>calling card</em> as an independent writer.",
+      "title": "Your calling card.",
       "lede": "One page on Tela with your name, the blogs you write and the posts you recommend. Readers find you there, follow you, and subscribe to your blog in one click."
     },
     "form": {
@@ -640,8 +640,7 @@
       "title": "What your card does",
       "link": {
         "title": "One link for everything you write",
-        "body": "Your card at /@handle lists every blog you claim, with your name and a line about you.",
-        "pill": "Find me on Tela"
+        "body": "Your card at /@handle lists every blog you claim, with your name and a line about you."
       },
       "blogroll": {
         "title": "Your blogroll",
@@ -649,9 +648,7 @@
       },
       "readers": {
         "title": "Readers",
-        "body": "Readers follow you, subscribe to your blog in one click, and can read it translated beside the original. Your Dashboard shows how many read you, which posts they liked, and the notes they left.",
-        "blogReaders": "{n, plural, one {# reader} other {# readers}} on Tela",
-        "followers": "{n, plural, one {# follower} other {# followers}}"
+        "body": "Readers follow you, subscribe to your blog in one click, and can read it translated beside the original. Your Dashboard shows how many read you, which posts they liked, and the notes they left."
       }
     },
     "how": {
@@ -687,6 +684,7 @@
     "reading": {
       "title": "How Tela reads your blog",
       "intro": "Tela is a feed reader. It reads the RSS, Atom or JSON feed your blog already publishes, as any feed reader does, and asks your server for as little as it can.",
+      "description": "What Tela fetches from a blog and how often, what it shows of it, and what stays the writer's.",
       "agent": {
         "title": "It says who it is",
         "body": "Every request carries Tela’s user agent, <code>Tela/0.1 (+https://telaread.com; feed reader)</code>, or for images <code>Tela/0.1 (+https://telaread.com; image proxy)</code>."
@@ -710,7 +708,9 @@
       "pages": {
         "title": "Your pages, only when the feed is short",
         "body": "If your feed carries only summaries, Tela fetches each new post’s public page once, soon after the feed lists it, to show the full text to subscribers in the reader, and again only if the summary changes. It reads your home page once, when your blog is added, to find its icon. Both ask your robots.txt first."
-      }
+      },
+      "check": "To check, Tela reads your home page and, for a link without <code>rel=\"me\"</code>, one address your blog doesn’t have, to see its 404 page.",
+      "robots": "As with any crawler, a group naming Tela takes the place of the one for everyone (<code>User-agent: *</code>). Your feed is still read, as every feed reader reads it: a subscriber asked for it."
     },
     "shows": {
       "title": "What Tela shows",
@@ -742,7 +742,6 @@
         "title": "Your GitHub",
         "body": "Nothing to add, if you sign in with GitHub, your GitHub profile names your blog as its website, and your blog links to that profile in one of the ways above."
       },
-      "check": "To check, Tela reads your home page and, for a link without <code>rel=\"me\"</code>, one address your blog doesn’t have, to see its 404 page.",
       "gives": "A claimed blog is listed in Discover under your name. Your Dashboard shows how many read it on Tela, which posts they liked and recommended, and the notes they left; there you choose its topics, whether it is translated, and whether Tela uses only your feed."
     },
     "optOut": {
@@ -758,8 +757,7 @@
       },
       "robots": {
         "title": "robots.txt",
-        "body": "To keep Tela off your pages without claiming anything, add this to your robots.txt. Tela reads it again within a day.",
-        "after": "As with any crawler, a group naming Tela takes the place of the one for everyone (<code>User-agent: *</code>). Your feed is still read, as every feed reader reads it: a subscriber asked for it."
+        "body": "To keep Tela off your pages without claiming anything, add this to your robots.txt. Tela reads it again within a day."
       },
       "email": {
         "title": "Leave Tela",
@@ -767,8 +765,8 @@
       }
     },
     "cta": {
-      "count": "{n, plural, one {# blog is} other {# blogs are}} already on Tela. <em>Where's yours?</em>",
-      "title": "<em>Where's your blog?</em>",
+      "count": "{n, plural, one {# blog is} other {# blogs are}} already on Tela. Where's yours?",
+      "title": "Where's your blog?",
       "make": "Make your card"
     }
   },

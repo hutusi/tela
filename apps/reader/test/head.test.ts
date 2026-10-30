@@ -249,6 +249,17 @@ describe('each kind of page', () => {
     expect(og(fr, 'og:image')).toBe(`${ORIGIN}/og/fr.png`)
   })
 
+  test('How Tela reads your blog is indexed at its own path, in every language (ADR 0070)', () => {
+    const html = render('/bot?utm_source=x', {})
+    expect(canonical(html)).toBe(`${ORIGIN}/bot`)
+    expect(robots(html)).toBeNull()
+    expect(alternates(html)).toContainEqual(['zh-Hant', `${ORIGIN}/bot?hl=zh-Hant`])
+    expect(og(html, 'og:title')).toBe('How Tela reads your blog')
+    const zh = render('/bot?hl=zh-Hans', {}, 'zh-Hans')
+    expect(canonical(zh)).toBe(`${ORIGIN}/bot?hl=zh-Hans`)
+    expect(og(zh, 'og:title')).toBe('Tela 如何读取你的博客')
+  })
+
   test("Discover's tabs are collections of what they show, posts at their own addresses", () => {
     const week: WeekData = {
       since: 0,
