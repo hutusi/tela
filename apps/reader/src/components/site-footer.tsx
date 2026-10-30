@@ -1,7 +1,7 @@
 /**
  * The public pages' footer: who makes Tela, and the pages that say what it is, what it offers
- * writers and what it keeps. Laid out as the design's front page closes (Tela Landing): the name
- * in serif, the maker, and the links at the right, on the front page's 1280px measure. A visitor
+ * writers and what it keeps. Laid out as Tela Public closes its pages (ADR 0070): the name in
+ * serif, the maker, and the links at the right, on the public pages' 1120px measure. A visitor
  * on a phone finds the language and the theme here first (Tela v5), since their header has room
  * for neither. The edge renders it too, as a guest, in the language it renders the page in.
  */
@@ -20,10 +20,10 @@ export function SiteFooter({ year }: { year: number }) {
   const visitor = useVisitor()
   return (
     <footer
-      className="border-t border-line text-[13px] leading-[1.2] text-muted"
+      className="border-t border-line text-[13.5px] leading-[1.2] text-muted"
       data-testid="site-footer"
     >
-      <div className="mx-auto flex w-full max-w-[1280px] flex-wrap items-center gap-x-6 gap-y-3 px-4 py-[22px] md:px-14">
+      <div className="mx-auto flex w-full max-w-[1120px] flex-wrap items-center gap-x-6 gap-y-3 px-5 pt-[26px] pb-10 md:px-12">
         {visitor ? <PhoneChoices /> : null}
         <span className="font-serif text-[19px] leading-none font-semibold text-ink">Tela</span>
         <p className="m-0">

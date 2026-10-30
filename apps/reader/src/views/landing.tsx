@@ -4,27 +4,42 @@
  * `window` or `document`, and the root does not fade in, since the edge's copy is already on
  * screen when the SPA replaces it. Only the edition waits for data; the rest is copy.
  *
- * The layout is the design's (Tela Landing, 2A Night / 2B Day; DESIGN.md): a two-column hero, an
- * uppercase strip over the edition, bordered cards three to a row with the lead across two, and a
- * full-width writers strip.
+ * The layout is Claude Design's Tela Public (ADR 0070, DESIGN.md): the date over a large serif
+ * title, then the edition as type under an ink rule, the lead beside a column of three with the
+ * rest in columns under both, and a line for writers.
  */
 import { Link } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { type DoorRequest, opensSheet, useFrontDoor } from '../components/front-door'
 import { SiteFooter } from '../components/site-footer'
 import { bylineName, editionTitles, frontHref, pickLead, type TitlesMode } from '../lib/edition'
-import { blogAddress, relativeTime, swatchColor } from '../lib/format'
+import { blogAddress, relativeTime } from '../lib/format'
 import { nameIn } from '../lib/language-name'
 import { PostLink } from './post-link'
+import {
+  BODY,
+  HEAD,
+  LINK,
+  META,
+  PAGE,
+  PILL,
+  PILL_QUIET,
+  POST_TITLE,
+  QUIET_LINK,
+  STANDFIRST,
+  TEXT_LINK,
+  TITLE,
+} from './public-type'
 import type { FrontData, FrontPost, MemberControls } from './types'
 
-const accent = (chunks: React.ReactNode) => <em className="font-normal text-accent">{chunks}</em>
+/** The rule between the side column's posts. */
+const RULE = 'h-px bg-line'
 
-/** The hero and the writers strip: the headline's column, then the one beside it, from `lg`. */
-const SPLIT = 'grid lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:gap-16'
+/** A post's place in the edition: the lead, the column beside it, or the columns under both. */
+type Place = 'lead' | 'side' | 'rest'
 
-/** A link above the card's own: the card is one link to the post, laid over all of it. */
-const ABOVE = 'relative z-[1]'
+/** How many posts the column beside the lead takes; the rest go into the columns under both. */
+const SIDE = 3
 
 /**
  * The strip's date: "Thursday, 1 October" in English, day before month as the design sets it,
@@ -73,7 +88,9 @@ export function LandingView({
   const posts = data?.edition.posts ?? []
   const lead = pickLead(posts)
   const rest = posts.filter((p) => p !== lead)
-  // What the strip says of the edition: nothing for an empty one, rather than "the latest from 0
+  const side = rest.slice(0, SIDE)
+  const under = rest.slice(SIDE)
+  // What the edition's head says of it: nothing for an empty one, rather than "the latest from 0
   // blogs" beside "No posts yet".
   const span =
     posts.length === 0
@@ -81,143 +98,146 @@ export function LandingView({
       : data?.edition.span === 'week'
         ? t('week', { blogs: data.week.blogs, languages: data.week.languages })
         : t('latest', { n: posts.length })
+  const post = (p: FrontPost, place: Place) => (
+    <Post
+      key={p.article.id}
+      post={p}
+      place={place}
+      titles={titles}
+      reading={reading}
+      locale={locale}
+      now={now}
+      member={member}
+    />
+  )
 
   return (
     <>
-      {/* No slanted Chinese: an italic span or title in a script with no italic face stays upright,
-          and its Latin keeps EB Garamond's own italic. */}
-      <main className="mx-auto w-full max-w-[1280px] flex-1 px-4 pb-14 leading-[1.2] [font-synthesis-style:none] md:px-14">
-        <section className={`${SPLIT} items-end gap-8 pt-12 pb-10 md:pt-20 md:pb-14`}>
-          <h1 className="m-0 font-serif text-[44px] leading-none font-medium tracking-[-0.025em] text-balance break-keep md:text-[64px] lg:text-[80px]">
-            {/* A count only once there is one: "a confluence of 0 blogs" is no welcome. */}
-            {data && data.counts.blogs > 0
-              ? t.rich('hero', { count: data.counts.blogs, em: accent })
-              : t.rich('heroPlain', { em: accent })}
-          </h1>
-          <div className="flex flex-col gap-6 lg:pb-2">
-            <p className="m-0 text-[17px] leading-[1.55] text-pretty text-ink-2 md:text-[18px]">
-              {t('intro')}
-            </p>
-            <div className="flex flex-wrap items-center gap-2.5">
-              <Link
-                to="/join"
-                onClick={opens({ mode: 'join' })}
-                className="rounded-full bg-primary px-[26px] py-[13px] text-[15px] font-semibold text-on-primary hover:no-underline hover:brightness-110"
-                data-testid="front-join"
-              >
-                {t('join')}
-              </Link>
-              <Link
-                to="/login"
-                onClick={opens({ mode: 'login' })}
-                className="rounded-full border border-thumb px-[22px] py-[13px] text-[15px] font-medium text-ink hover:border-ink hover:no-underline"
-                data-testid="front-login"
-              >
-                {t('logIn')}
-              </Link>
-            </div>
-          </div>
-        </section>
-
-        <div
-          className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-t border-line py-[18px]"
-          data-testid="front-strip"
+      {/* No slanted Chinese: a title in a script with no italic face stays upright. */}
+      <main
+        className={`${PAGE} pt-[clamp(28px,5vw,60px)] pb-[clamp(72px,10vw,120px)] [font-synthesis-style:none]`}
+      >
+        <p className={`m-0 ${META}`} data-testid="front-date">
+          {stripDate(now, locale)}
+        </p>
+        <h1
+          className={`${TITLE} mt-3 max-w-[15em] [font-size:calc(clamp(38px,6.2vw,68px)*var(--hs))]`}
         >
-          <p className="m-0 min-w-0 text-[11px] font-semibold tracking-[0.1em] text-muted uppercase">
-            <span>{stripDate(now, locale)}</span>
-            {span ? (
-              <>
-                <span aria-hidden="true"> · </span>
-                {span}
-              </>
-            ) : !data && loading ? (
-              <>
-                <span aria-hidden="true"> · </span>
-                <span className="inline-block h-2.5 w-48 animate-pulse rounded bg-hover align-middle" />
-              </>
-            ) : null}
-          </p>
-          <nav
-            aria-label={t('titlesIn')}
-            className="flex shrink-0 items-center gap-2.5 text-[13px] text-muted"
-            data-testid="titles-toggle"
+          {/* A count only once there is one: "a confluence of 0 blogs" is no welcome. */}
+          {data && data.counts.blogs > 0 ? t('hero', { count: data.counts.blogs }) : t('heroPlain')}
+        </h1>
+        <p
+          className={`${STANDFIRST} mt-[18px] max-w-[34em] text-ink-2 [font-size:calc(clamp(18px,2vw,21px)*var(--bs))]`}
+        >
+          {t('intro')}
+        </p>
+        <div className="mt-[22px] flex flex-wrap items-center gap-2.5">
+          <Link
+            to="/join"
+            onClick={opens({ mode: 'join' })}
+            className={PILL}
+            data-testid="front-join"
           >
-            <span>{t('titlesIn')}</span>
-            <span className="inline-flex rounded-full border border-thumb p-0.5">
-              {(['original', 'translated'] as const).map((mode) => (
-                <Link
-                  key={mode}
-                  to={frontHref(mode)}
-                  aria-current={titles === mode ? 'page' : undefined}
-                  data-testid={`titles-${mode}`}
-                  className={`rounded-full px-3.5 py-[5px] font-medium hover:no-underline ${
-                    titles === mode ? 'bg-ink text-paper' : 'text-ink-2 hover:text-ink'
-                  }`}
-                >
-                  {mode === 'original' ? t('original') : nameIn(reading, locale)}
-                </Link>
-              ))}
-            </span>
-          </nav>
+            {t('join')}
+          </Link>
+          <Link
+            to="/login"
+            onClick={opens({ mode: 'login' })}
+            className={PILL_QUIET}
+            data-testid="front-login"
+          >
+            {t('logIn')}
+          </Link>
         </div>
 
-        {data === null ? (
-          loading ? (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3" aria-busy>
-              {[0, 1, 2, 3, 4].map((i) => (
-                <div
-                  key={i}
-                  className={`animate-pulse rounded-xl border border-line bg-hover ${
-                    i === 0 ? 'h-[300px] md:col-span-2' : 'h-[210px]'
-                  }`}
-                />
-              ))}
-            </div>
-          ) : null
-        ) : posts.length === 0 ? (
-          <p className="mt-2 leading-normal text-muted">{t('empty')}</p>
-        ) : (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3" data-testid="front-edition">
-            {lead ? (
-              <PostCard
-                post={lead}
-                lead
-                titles={titles}
-                reading={reading}
-                locale={locale}
-                now={now}
-                member={member}
-              />
+        <section className="mt-[clamp(40px,6.4vw,76px)] border-t border-ink pt-3.5">
+          <div
+            className="flex flex-wrap items-center justify-between gap-x-7 gap-y-2.5"
+            data-testid="front-strip"
+          >
+            {span ? (
+              <h2 className={`${HEAD} leading-[1.3] [font-size:calc(26px*var(--hs))]`}>{span}</h2>
+            ) : !data && loading ? (
+              <span className="inline-block h-6 w-72 max-w-full animate-pulse rounded bg-hover" />
             ) : null}
-            {rest.map((post) => (
-              <PostCard
-                key={post.article.id}
-                post={post}
-                lead={false}
-                titles={titles}
-                reading={reading}
-                locale={locale}
-                now={now}
-                member={member}
-              />
-            ))}
+            <nav
+              aria-label={t('titlesIn')}
+              className="ml-auto flex shrink-0 items-center gap-2.5 text-[13px] text-muted"
+              data-testid="titles-toggle"
+            >
+              <span>{t('titlesIn')}</span>
+              <span className="inline-flex rounded-full border border-thumb p-0.5">
+                {(['original', 'translated'] as const).map((mode) => (
+                  <Link
+                    key={mode}
+                    to={frontHref(mode)}
+                    aria-current={titles === mode ? 'page' : undefined}
+                    data-testid={`titles-${mode}`}
+                    className={`rounded-full px-3 py-1 font-medium hover:no-underline ${
+                      titles === mode
+                        ? 'bg-ink text-paper hover:text-paper'
+                        : 'text-ink-2 hover:text-ink'
+                    }`}
+                  >
+                    {mode === 'original' ? t('original') : nameIn(reading, locale)}
+                  </Link>
+                ))}
+              </span>
+            </nav>
           </div>
-        )}
+
+          {data === null ? (
+            loading ? (
+              <div className="mt-[26px] flex flex-col gap-3" aria-busy>
+                <div className="h-10 w-3/4 animate-pulse rounded bg-hover" />
+                <div className="h-10 w-1/2 animate-pulse rounded bg-hover" />
+                <div className="h-4 w-1/3 animate-pulse rounded bg-hover" />
+                <div className="mt-3 h-24 w-full max-w-[34em] animate-pulse rounded bg-hover" />
+              </div>
+            ) : null
+          ) : posts.length === 0 ? (
+            <p className={`mt-[26px] ${BODY} text-muted`}>{t('empty')}</p>
+          ) : (
+            <div data-testid="front-edition">
+              <div className="mt-[26px] flex flex-wrap gap-x-[clamp(32px,5vw,72px)] gap-y-9">
+                {lead ? post(lead, 'lead') : null}
+                {side.length > 0 ? (
+                  <div className="flex min-w-0 flex-[5_1_300px] flex-col">
+                    {side.map((p, i) => (
+                      <div key={p.article.id} className="flex flex-col">
+                        {i > 0 ? <div className={`${RULE} my-[22px]`} /> : null}
+                        {post(p, 'side')}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+              {under.length > 0 ? (
+                <>
+                  <div className={`${RULE} mt-9 mb-7`} />
+                  <div className="columns-[3_15rem] gap-x-[clamp(32px,4vw,48px)] [column-rule:1px_solid_var(--color-line)]">
+                    {under.map((p) => post(p, 'rest'))}
+                  </div>
+                </>
+              ) : null}
+            </div>
+          )}
+        </section>
 
         <section
-          className={`${SPLIT} mt-16 items-center gap-6 border-t border-line pt-10 pb-2`}
+          className="mt-10 flex flex-wrap gap-x-[clamp(32px,5vw,72px)] gap-y-2.5 border-t border-line pt-6"
           data-testid="writers-strip"
         >
-          <h2 className="m-0 font-serif text-[34px] leading-[1.05] font-medium tracking-[-0.015em] break-keep md:text-[44px]">
+          <h2 className={`${HEAD} flex-[0_1_240px] leading-[1.3] [font-size:calc(24px*var(--hs))]`}>
             {t('writers.title')}
           </h2>
-          <div className="flex flex-col items-start gap-4">
-            <p className="m-0 text-[16px] leading-[1.55] text-ink-2">{t('writers.intro')}</p>
-            <Link
-              to="/writers"
-              className="rounded-full border border-thumb px-5 py-2.5 font-medium text-ink hover:border-ink hover:no-underline"
-            >
+          <div className="flex max-w-[36em] min-w-0 flex-[1_1_360px] flex-col items-start gap-3">
+            <p className={`${STANDFIRST} text-ink-2 [font-size:calc(18px*var(--bs))]`}>
+              {t('writers.intro')}
+            </p>
+            <Link to="/writers" className={`${TEXT_LINK} text-[15px]`}>
               {t('writers.cta')}
+              <span aria-hidden="true"> →</span>
             </Link>
           </div>
         </section>
@@ -227,9 +247,32 @@ export function LandingView({
   )
 }
 
-function PostCard({
+/**
+ * A title's size by its place: the lead's large, then smaller down the page. A feed that gives its
+ * posts no titles has its first paragraph for one, so a title stops at four lines, and the other
+ * title under it at two.
+ */
+const TITLE_SIZE: Record<Place, string> = {
+  lead: 'm-0 line-clamp-4 font-serif leading-(--lh-t) text-balance text-ink [overflow-wrap:break-word] [font-weight:var(--hw)] [letter-spacing:var(--track)] [font-size:calc(clamp(30px,4.2vw,44px)*var(--ts))]',
+  side: `${POST_TITLE} line-clamp-4 [font-size:calc(24px*var(--ts))]`,
+  rest: `${POST_TITLE} line-clamp-4 [font-size:calc(21px*var(--ts))]`,
+}
+
+/** The other title, under the first, in its own language. */
+const OTHER_SIZE: Record<Place, string> = {
+  lead: 'line-clamp-3 [font-size:calc(19px*var(--ts))]',
+  side: 'line-clamp-2 [font-size:calc(16px*var(--ts))]',
+  rest: 'line-clamp-2 [font-size:calc(15.5px*var(--ts))]',
+}
+
+/**
+ * A post as type: its title (the link to it), the title in the other language beneath, and a
+ * byline of the blog, who wrote it and when; the lead adds its excerpt. No card, swatch, language
+ * label or reading time (Tela Public).
+ */
+function Post({
   post,
-  lead,
+  place,
   titles,
   reading,
   locale,
@@ -237,120 +280,82 @@ function PostCard({
   member,
 }: {
   post: FrontPost
-  lead: boolean
+  place: Place
   titles: TitlesMode
   reading: string
   locale: string
   now: number
   member: MemberControls | undefined
 }) {
-  const t = useTranslations('front')
   const { article, site, claimant } = post
   const shown = editionTitles(article, titles, reading, locale)
   const source = site.title ?? blogAddress(site.homeUrl)
   // Who wrote it, beside the blog: the member who claimed it, linked to their card, or the feed's
-  // own byline on the lead, which has the room.
-  const author = lead ? bylineName(article.author, source) : null
-  const byline = claimant ? (
-    <Link
-      to={`/@${claimant.handle}`}
-      className={`${ABOVE} truncate text-ink-2 hover:text-ink hover:underline`}
-    >
-      {claimant.displayName ?? `@${claimant.handle}`}
-    </Link>
-  ) : author ? (
-    <span className="truncate">{author}</span>
-  ) : null
-  const other = shown.small ? (
-    <p
-      lang={shown.small.lang}
-      className="m-0 font-serif text-[16px] leading-[1.35] text-muted italic"
-      data-testid="front-other-title"
-    >
-      {shown.small.text}
-    </p>
-  ) : null
+  // own byline. The columns under the lead name only the blog.
+  const author = place === 'rest' ? null : bylineName(article.author, source)
+  const byline =
+    place === 'rest' ? null : claimant ? (
+      <Link to={`/@${claimant.handle}`} className={QUIET_LINK}>
+        {claimant.displayName ?? `@${claimant.handle}`}
+      </Link>
+    ) : (
+      author
+    )
   return (
     <article
-      className={`relative flex min-w-0 flex-col rounded-xl border border-line bg-surface hover:border-muted ${
-        lead
-          ? 'gap-4 p-6 md:col-span-2 md:min-h-[300px] md:p-8'
-          : 'gap-2.5 p-[22px] md:min-h-[210px]'
+      className={`flex min-w-0 flex-col ${
+        place === 'lead'
+          ? 'flex-[7_1_420px] gap-2.5'
+          : place === 'side'
+            ? 'gap-[7px]'
+            : 'break-inside-avoid gap-1.5 pb-[26px]'
       }`}
-      data-testid={lead ? 'front-lead' : 'front-post'}
+      data-testid={place === 'lead' ? 'front-lead' : 'front-post'}
     >
-      <div
-        className={`flex min-w-0 items-center gap-2 text-ink-2 ${lead ? 'text-[13px]' : 'text-[12.5px]'}`}
-      >
-        <span
-          aria-hidden="true"
-          className={`shrink-0 rounded-[3px] ${lead ? 'size-[11px]' : 'size-2.5'}`}
-          style={{ background: swatchColor(article.feedId) }}
-        />
-        <Link
-          to={`/s/${site.id}`}
-          className={`${ABOVE} truncate font-medium text-ink hover:text-ink hover:underline`}
-        >
-          {source}
-        </Link>
-        {byline ? (
-          <>
-            <span aria-hidden="true">·</span>
-            {byline}
-          </>
-        ) : null}
-        {shown.label ? (
-          <span
-            className="ml-auto shrink-0 pl-2 text-[11px] font-semibold tracking-[0.08em] uppercase"
-            data-testid="front-lang"
-          >
-            {shown.label}
-          </span>
-        ) : null}
-      </div>
-      <h2
-        lang={shown.big.lang}
-        className={`m-0 font-serif font-medium text-ink ${
-          lead
-            ? 'text-[34px] leading-[1.04] tracking-[-0.02em] text-balance md:text-[48px]'
-            : 'mt-1 text-[28px] leading-[1.15] text-pretty'
-        }`}
-        data-testid="front-title"
-      >
+      <h3 lang={shown.big.lang} className={TITLE_SIZE[place]} data-testid="front-title">
         <PostLink
           article={article}
           source={source}
           member={member}
           vouched={site.vouched}
-          className="text-ink after:absolute after:inset-0 after:rounded-xl hover:text-ink hover:no-underline"
+          className={LINK}
         >
           {shown.big.text}
         </PostLink>
-      </h2>
-      {lead ? null : other}
-      {lead && shown.excerpt ? (
+      </h3>
+      {shown.small ? (
+        <p
+          lang={shown.small.lang}
+          className={`m-0 font-serif leading-(--lh-h) text-muted ${OTHER_SIZE[place]}`}
+          data-testid="front-other-title"
+        >
+          {shown.small.text}
+        </p>
+      ) : null}
+      <div
+        className={`${place === 'lead' ? 'text-[13.5px]' : 'text-[13px]'} leading-normal text-muted [overflow-wrap:anywhere]`}
+      >
+        <Link to={`/s/${site.id}`} className={`${QUIET_LINK} font-medium`}>
+          {source}
+        </Link>
+        {byline ? (
+          <>
+            {' '}
+            <span className="whitespace-nowrap">·&nbsp;{byline}</span>
+          </>
+        ) : null}{' '}
+        <span className="whitespace-nowrap">
+          ·&nbsp;{relativeTime(article.sortAt, locale, now)}
+        </span>
+      </div>
+      {place === 'lead' && shown.excerpt ? (
         <p
           lang={shown.excerpt.lang}
-          className="m-0 line-clamp-4 max-w-[640px] font-serif text-[18px] leading-[1.45] text-pretty text-ink-2 md:text-[20px]"
+          className="m-0 mt-1.5 line-clamp-4 max-w-[34em] font-serif leading-(--lh-p) text-pretty text-body [font-size:calc(20px*var(--ts))]"
         >
           {shown.excerpt.text}
         </p>
       ) : null}
-      {lead ? other : null}
-      <div
-        className={`mt-auto flex items-center justify-between gap-3 text-muted ${
-          lead ? 'text-[13px]' : 'text-[12.5px]'
-        }`}
-      >
-        <span>
-          {t('minutes', { n: article.readingMinutes || 1 })}
-          <span aria-hidden="true"> · </span>
-          {relativeTime(article.sortAt, locale, now)}
-        </span>
-        <span aria-hidden="true" className={lead ? 'font-medium text-accent' : undefined}>
-          {lead ? t('readPost') : t('read')}
-        </span>
-      </div>
     </article>
   )
 }

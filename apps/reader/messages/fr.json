@@ -39,8 +39,8 @@
   },
   "front": {
     "description": "Des blogs indépendants du monde entier, chacun dans sa langue, avec des titres traduits dans la vôtre.",
-    "hero": "Une confluence de <em>{count, plural, one {# blog indépendant.} other {# blogs indépendants.}}</em>",
-    "heroPlain": "Une confluence de <em>blogs indépendants.</em>",
+    "hero": "Une confluence de {count, plural, one {# blog indépendant.} other {# blogs indépendants.}}",
+    "heroPlain": "Une confluence de blogs indépendants.",
     "intro": "Tela réunit des blogs et des sites personnels du monde entier en un seul océan d’idées, traduits au fil de votre lecture en chinois simplifié ou traditionnel, en anglais ou en français.",
     "join": "Rejoindre Tela",
     "logIn": "Se connecter",
@@ -48,15 +48,12 @@
     "latest": "Les derniers articles de {n, plural, one {# blog} other {# blogs}}",
     "titlesIn": "Titres en",
     "original": "Langue d’origine",
-    "minutes": "{n} min",
     "empty": "Aucun article pour l’instant. Les blogs que Tela rassemble apparaîtront ici dès qu’ils publieront.",
     "writers": {
       "title": "Vous tenez un blog ? Faites-en votre carte de visite.",
       "intro": "Revendiquez votre blog sur Tela et obtenez une page à votre nom, avec votre blog et les articles que vous recommandez. Votre blog reste où il est.",
       "cta": "Créer votre carte"
-    },
-    "read": "Lire →",
-    "readPost": "Lire l’article →"
+    }
   },
   "footer": {
     "label": "À propos de Tela",
