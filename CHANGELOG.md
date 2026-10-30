@@ -9,6 +9,12 @@ everything so far sits under `[Unreleased]`.
 
 ### Changed
 
+- **The public pages, quieter** (ADR 0070). The front page, For writers and How Tela reads your
+  blog follow Claude Design's *Tela Public*: serif heads in sentence case, the week's posts as
+  type with rules between them instead of cards, no colour squares, language tags or reading
+  times, nothing in italics, links in ink, and Chinese headings set a step smaller at their own
+  weight. For writers' headline is "Your calling card.", and how Tela reads a blog, what it shows
+  and what stays the writer's have a page of their own at `/bot`.
 - **A blog can be a path** (ADR 0069). On a host other blogs share (world.hey.com,
   buttondown.com, devblogs.microsoft.com) each writer's blog is their own, where every writer
   there was one blog before, and a claim there is the writer's, proved by `rel="me"`, a meta tag

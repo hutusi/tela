@@ -69,7 +69,7 @@ bun run dev           # the reader with tela-api and tela-jobs beside it, and te
   members subscribing to it.
 - **Claim your feed**: prove ownership with a meta tag, a `rel="me"` link or GitHub; claimed blogs
   are listed and can opt out of translation, or ask Tela to use only what the feed provides. Tela's
-  page fetches obey robots.txt, and For writers (`/writers`) explains how Tela reads a blog.
+  page fetches obey robots.txt, and How Tela reads your blog (`/bot`) explains what it fetches.
 - **Recommendations**: recommend a post with a note; the note appears on your public profile
   (`/@handle`) and in the author's dashboard next to likes and reader counts.
 - **Search**: the device first, then blogs by name, address or description and older posts in your
