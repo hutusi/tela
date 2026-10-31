@@ -338,10 +338,11 @@ function Post({
         <Link to={`/s/${site.id}`} className={`${QUIET_LINK} font-medium`}>
           {source}
         </Link>
+        {/* The dot stays with what follows it; a name may be long enough to need to break. */}
         {byline ? (
           <>
             {' '}
-            <span className="whitespace-nowrap">·&nbsp;{byline}</span>
+            <span>·&nbsp;{byline}</span>
           </>
         ) : null}{' '}
         <span className="whitespace-nowrap">

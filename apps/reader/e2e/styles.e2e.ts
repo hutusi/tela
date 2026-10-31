@@ -871,6 +871,65 @@ test.describe('the public pages', () => {
     })
   }
 
+  test("a long byline breaks inside a phone's width", async ({ browser }) => {
+    const visitor = await browser.newContext({
+      storageState: { cookies: [], origins: [] },
+      viewport: { width: 360, height: 800 },
+    })
+    try {
+      const page = await visitor.newPage()
+      // An edition of its own, since the stack's may be empty this early: five posts whose feeds
+      // name several authors and no one has claimed, so the lead and the column beside it carry
+      // the byline.
+      const AUTHORS = 'Christopher Montgomery-Fitzwilliam, Anna-Katharina Oberhauser and Editors'
+      const post = (id: number) => ({
+        article: {
+          id,
+          feedId: id,
+          url: `https://blog-${id}.example/post`,
+          title: `A post about the long names of things, number ${id}`,
+          author: AUTHORS,
+          publishedAt: 0,
+          fetchedAt: 0,
+          sortAt: Date.now() - id * 3_600_000,
+          sourceLang: 'en',
+          excerpt: 'A short excerpt of the post.',
+          contentKey: null,
+          wordCount: 900,
+          readingMinutes: 4,
+          extractState: 'done',
+          likeCount: 0,
+          recommendCount: 0,
+          seq: 1,
+        },
+        site: {
+          id,
+          title: `Blog ${id}`,
+          homeUrl: `https://blog-${id}.example`,
+          faviconKey: null,
+          primaryLang: 'en',
+        },
+        claimant: null,
+      })
+      await page.route('**/api/v1/public/front', (route) =>
+        route.fulfill({
+          json: {
+            counts: { blogs: 5 },
+            week: { blogs: 5, languages: 1, posts: 5 },
+            edition: { span: 'week', posts: [1, 2, 3, 4, 5].map(post) },
+          },
+        }),
+      )
+      await page.goto('/')
+      await expect(page.getByText(AUTHORS).first()).toBeVisible()
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth),
+      ).toBe(0)
+    } finally {
+      await visitor.close()
+    }
+  })
+
   test('a Chinese page sets its title a step smaller, at its own weight', async ({ browser }) => {
     const visitor = await browser.newContext({
       storageState: { cookies: [], origins: [] },
