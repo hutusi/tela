@@ -1016,6 +1016,7 @@ describe('public pages', () => {
       // how Tela reads a blog is a page of its own now (ADR 0070), linked from here.
       for (const id of ['does', 'how', 'claiming', 'opt-out']) expect(html).toContain(`id="${id}"`)
       for (const id of ['reading', 'shows', 'yours']) expect(html).not.toContain(`id="${id}"`)
+      for (const id of ['claiming-meta', 'opt-out-robots']) expect(html).toContain(`id="${id}"`)
       expect(html).toContain('href="/bot"')
       expect(html).toContain('User-agent: Tela\nDisallow: /')
       expect(html).toContain('<code class="')
@@ -1053,6 +1054,9 @@ describe('public pages', () => {
       expect(html).toContain('data-testid="bot-page"')
       // The sections For writers' old anchors pointed at, under the same anchors.
       for (const id of ['reading', 'shows', 'yours']) expect(html).toContain(`id="${id}"`)
+      // And each point one of its own, which an old link to For writers is sent on to.
+      for (const id of ['reading-often', 'shows-translation', 'yours-ads'])
+        expect(html).toContain(`id="${id}"`)
       expect(html).toContain('Tela/0.1 (+https://telaread.com; feed reader)')
       expect(html).toContain('<code class="')
       expect(html).toContain('href="/writers"')

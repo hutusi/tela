@@ -170,9 +170,11 @@ test.describe('For writers, for a visitor', () => {
   test('sends an old link to a section that moved on to How Tela reads your blog (ADR 0070)', async ({
     page,
   }) => {
-    await page.goto('/writers#reading-often')
-    await expect(page).toHaveURL(/\/bot#reading-often$/)
-    await expect(page.getByTestId('writers-reading-often')).toBeInViewport()
+    // A point far down the page, so landing on it means the page scrolled to it.
+    await page.goto('/writers#shows-translation')
+    await expect(page).toHaveURL(/\/bot#shows-translation$/)
+    await expect(page.getByTestId('writers-shows-translation')).toBeInViewport()
+    expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(400)
     // The header's For writers pill still says where the visitor is.
     await expect(page.getByTestId('nav-writers')).toHaveClass(/(^|\s)bg-hover(\s|$)/)
   })

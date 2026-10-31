@@ -2,7 +2,8 @@
  * A section of For writers or of How Tela reads your blog (ADR 0070): one 680px column, a rule
  * over each section, a serif head, an opening paragraph, then its points, each a short sans
  * heading over running text. Each section keeps its anchor (`#claiming`, `#reading`…), the same in
- * every language, and each point a test id after it.
+ * every language, and each point one of its own under it (`#reading-often`, `#opt-out-robots`),
+ * which a link can name and an old one is sent on to (`pages/writers.tsx`).
  */
 import type { ReactNode } from 'react'
 import { useTranslations } from 'use-intl'
@@ -90,7 +91,8 @@ export function DocItem({
 }) {
   return (
     <li
-      className={`mt-5 ${n ? 'grid grid-cols-[28px_minmax(0,1fr)] gap-x-3.5' : ''}`}
+      id={id}
+      className={`mt-5 scroll-mt-14 ${n ? 'grid grid-cols-[28px_minmax(0,1fr)] gap-x-3.5' : ''}`}
       data-testid={`writers-${id}`}
     >
       {n ? (
