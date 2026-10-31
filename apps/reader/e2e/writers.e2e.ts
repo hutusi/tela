@@ -175,6 +175,12 @@ test.describe('For writers, for a visitor', () => {
     await expect(page).toHaveURL(/\/bot#shows-translation$/)
     await expect(page.getByTestId('writers-shows-translation')).toBeInViewport()
     expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(400)
+    // An address that fixed the language still does after the move (ADR 0060).
+    await page.goto('/writers?hl=fr#shows-translation')
+    await expect(page).toHaveURL(/\/bot\?hl=fr#shows-translation$/)
+    await expect(page.locator('html')).toHaveAttribute('lang', 'fr')
+    await page.reload()
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Comment Tela lit votre blog')
     // The header's For writers pill still says where the visitor is.
     await expect(page.getByTestId('nav-writers')).toHaveClass(/(^|\s)bg-hover(\s|$)/)
   })

@@ -12,7 +12,7 @@ import { I18n } from '../src/i18n'
 import { claimPath, finishCard, isProvisional, keepClaim, takeClaim } from '../src/lib/claim-card'
 import { SAMPLE } from '../src/lib/sample-card'
 import { blogHost, blogUrl, foldName, suggestHandle } from '../src/lib/suggest-handle'
-import { availabilityOf } from '../src/pages/writers'
+import { availabilityOf, movedTo } from '../src/pages/writers'
 
 describe('suggestHandle', () => {
   test('takes the first name, folded to what a handle holds', () => {
@@ -287,5 +287,15 @@ describe('the card through signing in', () => {
     const to = await finishCard({ handle: 'ada', name: 'Ada', url: 'https://ada.dev' })
     expect(to).toBe('/claim?url=https%3A%2F%2Fada.dev')
     expect(puts).toEqual([])
+  })
+})
+
+describe('a link to a section that moved to /bot (ADR 0070)', () => {
+  test('keeps the anchor, and the language the address fixed', () => {
+    expect(movedTo('', '#reading')).toBe('/bot#reading')
+    expect(movedTo('?hl=fr', '#shows-translation')).toBe('/bot?hl=fr#shows-translation')
+    // Written as `?hl=` takes it (ADR 0060), and nothing else from the old query.
+    expect(movedTo('?utm_source=x&hl=zh-hans', '#yours')).toBe('/bot?hl=zh-Hans#yours')
+    expect(movedTo('?hl=xx&utm_source=x', '#reading-often')).toBe('/bot#reading-often')
   })
 })

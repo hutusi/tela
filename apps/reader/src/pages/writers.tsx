@@ -6,6 +6,7 @@
 import { useEffect } from 'react'
 import { useLocation, useNavigate, useNavigationType } from 'react-router'
 import { useTranslations } from 'use-intl'
+import { pinnedLocale } from '../i18n'
 import { safeDecode } from '../lib/safe-decode'
 import { useTitle } from '../lib/title'
 import { usePublic } from '../lib/use-public'
@@ -18,9 +19,17 @@ export { type Availability, availabilityOf } from '../views/writers'
 
 /**
  * The sections that moved to How Tela reads your blog (ADR 0070), by their anchors and their
- * points' (`#reading-agent`): a link to them here is sent on to the same anchor there.
+ * points' (`#reading-agent`): a link to them here is sent on to the same anchor there, in the
+ * language the address fixed, if it fixed one (`?hl=`, ADR 0060), so that reloading or sharing
+ * the new address reads as the old one did.
  */
 const MOVED = /^#(reading|shows|yours)(-|$)/
+
+/** Where a link to a moved section goes: `/bot`, with the address's `?hl=` and anchor. */
+export function movedTo(search: string, hash: string): string {
+  const hl = pinnedLocale(search)
+  return `/bot${hl ? `?hl=${hl}` : ''}${hash}`
+}
 
 /** The part of the front page's JSON this page reads: how many blogs are public. */
 type FrontCounts = { counts?: { blogs?: unknown } }
@@ -42,16 +51,16 @@ export function WritersPage() {
 
   // An anchor reached from another screen of the app is a render, not a load, so the section is found here; one the browser loaded, it
   // found itself, in the edge's copy (as on the info pages).
-  const { hash } = useLocation()
+  const { hash, search } = useLocation()
   const navigation = useNavigationType()
   const navigate = useNavigate()
   useEffect(() => {
-    if (MOVED.test(hash)) navigate(`/bot${hash}`, { replace: true })
+    if (MOVED.test(hash)) navigate(movedTo(search, hash), { replace: true })
     else if (hash.length > 1) {
       const id = safeDecode(hash.slice(1))
       if (id) document.getElementById(id)?.scrollIntoView()
     } else if (navigation !== 'POP') window.scrollTo(0, 0)
-  }, [hash, navigation, navigate])
+  }, [hash, search, navigation, navigate])
 
   return (
     <WritersView
