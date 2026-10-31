@@ -1,11 +1,11 @@
 /**
  * Public pages, rendered at the edge (ADR 0025, 0035): the front page, Discover's tabs (ADR 0044;
  * Blogrolls, ADR 0050), a blog's page, a member's profile, a public blogroll (ADR 0050), About,
- * Privacy and Terms, and For writers (ADR 0061), for visitors who have no shell cached yet and for
- * link previews. The same views the SPA renders, with a guest session and an empty store; the
- * page's data is handed over in `#tela-data`, so the SPA's first render needs no request of its
- * own. About, Privacy, Terms and For writers take no data at all (ADR 0035): their copy is in the
- * bundle. Each page's head says where it is in every language (`?hl=`), how it previews, whether
+ * Privacy and Terms, For writers (ADR 0061) and How Tela reads your blog (ADR 0070), for visitors
+ * who have no shell cached yet and for link previews. The same views the SPA renders, with a guest
+ * session and an empty store; the page's data is handed over in `#tela-data`, so the SPA's first
+ * render needs no request of its own. About, Privacy, Terms, For writers and How Tela reads your
+ * blog take no data at all (ADR 0035): their copy is in the bundle. Each page's head says where it is in every language (`?hl=`), how it previews, whether
  * it is indexed, and what it is in schema.org's terms (ADR 0060, `lib/head.ts`).
  */
 import { hlLocale, UI_LOCALES, type UiLocale } from '@tela/shared'
@@ -54,6 +54,7 @@ import { LocalStore } from './store/local'
 import { Objects } from './store/objects'
 import { UiContext } from './ui'
 import { BlogrollView } from './views/blogroll'
+import { BotView } from './views/bot'
 import { DiscoverView } from './views/discover'
 import { articlesList, DiscoverArticlesView } from './views/discover-articles'
 import { DiscoverBlogrollsView } from './views/discover-blogrolls'
@@ -109,6 +110,7 @@ export type PublicRoute =
   | { kind: 'blogroll'; id: string; api: string }
   | { kind: 'info'; page: InfoPageId; api: null; key: string }
   | { kind: 'writers'; api: null; key: string }
+  | { kind: 'bot'; api: null; key: string }
 
 /** The public page a URL names, and the endpoint its data comes from; null for anything else. */
 export function publicRoute(url: URL): PublicRoute | null {
@@ -150,6 +152,8 @@ export function publicRoute(url: URL): PublicRoute | null {
   // For writers, as a visitor sees it: its copy is in the bundle, and the count of blogs the app
   // fetches once it takes the page over (ADR 0061).
   if (url.pathname === '/writers') return { kind: 'writers', api: null, key: '/writers' }
+  // How Tela reads your blog (ADR 0070): copy only, like For writers.
+  if (url.pathname === '/bot') return { kind: 'bot', api: null, key: '/bot' }
   const info = url.pathname.slice(1)
   if (isInfoPage(info)) return { kind: 'info', page: info, api: null, key: `/info/${info}` }
   const site = url.pathname.match(/^\/s\/(\d{1,12})$/)
@@ -196,6 +200,8 @@ function pageAddress(route: PublicRoute): string {
       return `/${route.page}`
     case 'writers':
       return '/writers'
+    case 'bot':
+      return '/bot'
     case 'redirect':
       return route.redirect
   }
@@ -286,6 +292,14 @@ function headOf(
     return {
       title: t('writers.title'),
       description: t('writers.description'),
+      path,
+      robots: null,
+    }
+  }
+  if (route.kind === 'bot') {
+    return {
+      title: t('writers.reading.title'),
+      description: t('writers.reading.description'),
       path,
       robots: null,
     }
@@ -508,6 +522,8 @@ export function renderPublicPage(input: {
       <InfoView page={route.page} locale={locale} year={new Date(now).getFullYear()} />
     ) : route.kind === 'writers' ? (
       <WritersView visitor ownHandle={null} blogs={null} locale={locale} now={now} />
+    ) : route.kind === 'bot' ? (
+      <BotView year={new Date(now).getFullYear()} />
     ) : data === null || route.kind === 'redirect' ? (
       <NotFoundPage />
     ) : route.kind === 'week' ? (
@@ -586,7 +602,7 @@ export function renderPublicPage(input: {
   // unless the language named is their own.
   const pinned = hlLocale(url.searchParams.get('hl')) === locale
   const meta = headTags(head, { origin: url.origin, locale, pinned }).join('\n    ')
-  // A page without data (About, Privacy, Terms, For writers) hands nothing over.
+  // A page without data (About, Privacy, Terms, For writers, /bot) hands nothing over.
   const handover =
     data === null || route.api === null
       ? ''

@@ -35,6 +35,7 @@ export function llmsTxt(origin: string): string {
     const pages = [
       [l('nav.discover'), tabHref('week')],
       [l('writers.title'), '/writers'],
+      [l('writers.reading.title'), '/bot'],
       [l('info.tabs.about'), '/about'],
       [l('info.tabs.privacy'), '/privacy'],
       [l('info.tabs.terms'), '/terms'],
@@ -58,7 +59,8 @@ export function llmsTxt(origin: string): string {
     ...DISCOVER_TABS.map(
       (tab) => `- [Discover: ${t(`discover.tabs.${tab}`)}](${at(tabHref(tab))}): ${TABS[tab]}`,
     ),
-    `- [${t('writers.title')}](${at('/writers')}): how Tela fetches a blog, how a writer claims theirs, and how to opt out`,
+    `- [${t('writers.title')}](${at('/writers')}): a writer's card on Tela, how a writer claims their blog, and how to opt out`,
+    `- [${t('writers.reading.title')}](${at('/bot')}): how Tela fetches a blog's feed, pages and images, and what it shows of them`,
     `- [${t('info.tabs.about')}](${at('/about')}): what Tela is and who runs it`,
     `- [${t('info.tabs.privacy')}](${at('/privacy')}): what Tela keeps and why`,
     `- [${t('info.tabs.terms')}](${at('/terms')}): the terms of use`,

@@ -2,6 +2,8 @@
 
 Status: accepted (2026-10-25). Amends 0022: eager extraction now asks the writer first, by a
 switch or by robots.txt. Completes 0035's note on `/writers`: it is rendered at the edge.
+Superseded in part by 0070 (2026-10-31): how Tela reads a blog and what it shows are their own
+page, `/bot`; claiming and opting out stay on For writers.
 
 ## Context
 

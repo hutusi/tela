@@ -105,23 +105,25 @@ test.describe('with JavaScript', () => {
     const spanish = page.locator('article', { hasText: FRESH.es.titles[0] })
     await expect(spanish.getByTestId('front-title')).toHaveText(FRESH.es.titles[0])
     await expect(spanish.getByTestId('front-title')).toHaveAttribute('lang', 'es')
-    await expect(spanish.getByTestId('front-lang')).toHaveText('Español')
+    // No language label beside a post (ADR 0070): each title says its language to the browser.
+    await expect(spanish.getByTestId('front-lang')).toHaveCount(0)
     // The mock translator marks what it translated with the target's tag.
     await expect(spanish.getByTestId('front-other-title')).toHaveText(`en:${FRESH.es.titles[0]}`)
+    await expect(spanish.getByTestId('front-other-title')).toHaveAttribute('lang', 'en')
 
     await page.getByTestId('titles-translated').click()
     await expect(page).toHaveURL(/\/\?titles=translated$/)
     await expect(spanish.getByTestId('front-title')).toHaveText(`en:${FRESH.es.titles[0]}`)
     await expect(spanish.getByTestId('front-title')).toHaveAttribute('lang', 'en')
     await expect(spanish.getByTestId('front-other-title')).toHaveText(FRESH.es.titles[0])
-    await expect(spanish.getByTestId('front-lang')).toHaveText('Spanish')
+    await expect(spanish.getByTestId('front-other-title')).toHaveAttribute('lang', 'es')
     // A post in the reader's own language has the one title either way.
     const english = page.locator('article', { hasText: FRESH.en.titles[0] })
     await expect(english.getByTestId('front-other-title')).toHaveCount(0)
 
     await page.getByTestId('titles-original').click()
     await expect(page).toHaveURL(/\/$/)
-    await expect(spanish.getByTestId('front-lang')).toHaveText('Español')
+    await expect(spanish.getByTestId('front-title')).toHaveAttribute('lang', 'es')
     // A visitor's post opens on the blog itself.
     await expect(spanish.getByTestId('front-title').getByRole('link')).toHaveAttribute(
       'href',

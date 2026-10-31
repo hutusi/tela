@@ -1,29 +1,43 @@
 /**
  * For writers (`/writers`): a writer's calling card, made as they type. Beside the form is a
- * sample card, labelled as one (`lib/sample-card.ts`, ADR 0037), and the sections under it draw
- * from the same sample; every line of the page says only what Tela does today. "Claim your card"
- * opens the sheet in claim mode, which makes the card on the way in and goes on to claim the blog
- * (`lib/claim-card.ts`). A member gets the ways on to their card and their blog instead.
+ * sample card, labelled as one (`lib/sample-card.ts`, ADR 0037), and the Following page under it
+ * draws from the same sample; every line of the page says only what Tela does today. "Claim your
+ * card" opens the sheet in claim mode, which makes the card on the way in and goes on to claim the
+ * blog (`lib/claim-card.ts`). A member gets the ways on to their card and their blog instead.
  *
- * Then how Tela reads a blog, what it shows, how a claim is proved, and how a writer keeps Tela
- * out (ADR 0061), each under an anchor the Dashboard and the info pages link to. Rendered by the
- * SPA and by the edge, which needs no data for it: it renders for a visitor, without the count of
- * blogs, which the app fetches once it takes the page over.
+ * Then, in one column (Tela Public, ADR 0070), what the card does, how it works, how a claim is
+ * proved and how a writer keeps Tela out (ADR 0061), each under an anchor the Dashboard and the
+ * info pages link to; how Tela reads a blog is its own page, `/bot`. Rendered by the SPA and by
+ * the edge, which needs no data for it: it renders for a visitor, without the count of blogs,
+ * which the app fetches once it takes the page over.
  */
 import { HANDLE, RESERVED_HANDLES, type UiLocale } from '@tela/shared'
-import { type ReactNode, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { useFrontDoor } from '../components/front-door'
-import { CHECK, EXTERNAL, Glyph } from '../components/glyph'
+import { CHECK, Glyph } from '../components/glyph'
 import { PersonAvatar } from '../components/person-avatar'
 import { SiteFooter } from '../components/site-footer'
-import { Swatch } from '../components/swatch'
 import { WriterCard } from '../components/writer-card'
 import { relativeTime } from '../lib/format'
 import { scrollMotion } from '../lib/motion'
 import { SAMPLE, type SampleActivity } from '../lib/sample-card'
 import { blogHost, blogUrl, suggestHandle } from '../lib/suggest-handle'
+import { DOC_COLUMN, DocItem, DocItems, DocSection, useDocText } from './doc'
+import {
+  BODY,
+  HEAD,
+  INTRO,
+  META,
+  PAGE,
+  PILL,
+  PILL_QUIET,
+  PRE,
+  STANDFIRST,
+  TEXT_LINK,
+  TITLE,
+} from './public-type'
 
 /** What tela-api says of a handle (`GET /api/v1/public/handles/:handle`). */
 export type Availability = {
@@ -89,27 +103,16 @@ function useAvailability(handle: string | null): Availability | null {
 }
 
 const FIELD =
-  'h-[50px] w-full rounded-xl border border-thumb bg-field px-[18px] text-[15px] text-ink outline-none placeholder:text-muted focus:border-ink'
-const PRIMARY =
-  'inline-flex h-12 shrink-0 items-center justify-center rounded-full bg-primary px-[26px] text-[15px] font-semibold whitespace-nowrap text-on-primary hover:text-on-primary hover:no-underline hover:brightness-125 disabled:opacity-60'
-const QUIET =
-  'inline-flex h-12 shrink-0 items-center justify-center rounded-full border border-thumb px-[22px] text-[15px] font-medium text-ink hover:border-ink hover:text-ink hover:no-underline'
-const SECTION = 'border-t border-line py-16 md:py-[88px]'
-const H2 =
-  'm-0 mb-10 font-serif text-[36px] leading-[1.05] font-medium tracking-[-0.015em] md:mb-12 md:text-[46px]'
-/** A section's heading with a paragraph under it before its points. */
-const H2_LED =
-  'm-0 mb-5 font-serif text-[36px] leading-[1.05] font-medium tracking-[-0.015em] text-balance md:text-[46px]'
-const LABEL = 'text-[11px] font-semibold tracking-[0.1em] uppercase'
-/** A small card under a point of "What your card does", as the design draws its illustrations. */
-const SKETCH = 'mt-2.5 rounded-xl border border-line bg-surface px-[18px] py-1.5'
+  'h-[46px] w-full rounded-[10px] border border-thumb bg-field px-3.5 text-[15px] text-ink outline-none placeholder:text-muted focus:border-ink'
+/** A section's head beside its illustration, and the closing call's. */
+const SIDE_HEAD = `${HEAD} leading-[1.25] [font-size:calc(clamp(24px,3vw,30px)*var(--hs))]`
+/** The hero's two columns and the Following page's: words on the left, the picture on the right. */
+const PAIR = 'flex flex-wrap items-start gap-x-[clamp(40px,6vw,80px)]'
+const WORDS = 'min-w-0 max-w-[560px]'
+const PICTURE = 'flex min-w-0 max-w-[480px] flex-col gap-2.5'
 
-/** A run of prose's code: a header, a user agent, a tag. */
-const CODE = 'rounded bg-hover px-1 py-px font-mono text-[0.88em] [overflow-wrap:anywhere]'
-const code = (chunks: ReactNode) => <code className={CODE}>{chunks}</code>
 /** What a writer adds to robots.txt to keep Tela off every page (ADR 0061). */
 const ROBOTS_SNIPPET = 'User-agent: Tela\nDisallow: /'
-const CONTACT = 'me@hutu.si'
 
 export type WritersViewProps = {
   /** No member here: the form. A member gets the ways on to their card and blog instead. */
@@ -124,6 +127,7 @@ export type WritersViewProps = {
 
 export function WritersView({ visitor, ownHandle, blogs, locale, now }: WritersViewProps) {
   const t = useTranslations('writers')
+  const text = useDocText()
   const door = useFrontDoor()
 
   const [name, setName] = useState('')
@@ -146,95 +150,103 @@ export function WritersView({ visitor, ownHandle, blogs, locale, now }: WritersV
     nameField.current?.focus({ preventScroll: true })
   }
 
-  const { writer } = SAMPLE
-  const accent = (chunks: React.ReactNode) => <em className="text-accent italic">{chunks}</em>
   // The sample says it is one wherever it is shown: here, and on the activity card's label.
   const caption = draft
     ? t('card.captionDraft')
     : visitor
       ? t('card.captionSample')
       : t('card.captionSampleMember')
+  const point = (section: string, key: string) => (
+    <DocItem key={key} id={`${section}-${key}`} title={t(`${section}.${key}.title`)}>
+      {text(`${section}.${key}.body`)}
+    </DocItem>
+  )
 
   return (
     <>
+      {/* No slanted Chinese: a name or a title in a script with no italic face stays upright. */}
       <main
-        className="mx-auto w-full max-w-[1200px] flex-1 animate-fade px-4 sm:px-6 md:px-10"
+        className={`${PAGE} animate-fade pt-[clamp(32px,5.6vw,64px)] pb-[clamp(72px,10vw,120px)] [font-synthesis-style:none]`}
         data-testid="writers-page"
       >
-        <section className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,460px),1fr))] items-center gap-x-20 gap-y-14 pt-12 pb-20 md:pt-20 md:pb-[104px]">
-          <div className="flex min-w-0 flex-col">
-            <div className={`${LABEL} text-accent`}>{t('kicker')}</div>
-            <h1 className="mt-[18px] mb-[22px] font-serif text-[44px] leading-[1.02] font-medium tracking-[-0.025em] text-balance sm:text-[56px] lg:text-[68px]">
-              {t.rich('hero.title', { em: accent })}
+        <section className={`${PAIR} gap-y-10`}>
+          <div className={`${WORDS} flex-[1_1_420px]`}>
+            <p className={`m-0 ${META}`}>{t('kicker')}</p>
+            <h1 className={`${TITLE} mt-3 [font-size:calc(clamp(42px,6vw,64px)*var(--hs))]`}>
+              {t('hero.title')}
             </h1>
-            <p className="m-0 max-w-[520px] text-[17px] leading-[1.55] text-pretty text-ink-2 md:text-[18px]">
+            <p
+              className={`${STANDFIRST} mt-4 text-body [font-size:calc(clamp(18.5px,2vw,21px)*var(--bs))]`}
+            >
               {t('hero.lede')}
             </p>
             {visitor ? (
               <form
                 ref={form}
                 onSubmit={claim}
-                className="mt-9 flex max-w-[500px] flex-col gap-2.5"
+                className="mt-8 border-t border-ink pt-3.5"
                 data-testid="writers-form"
               >
-                <h2 className={`${LABEL} m-0 text-muted`}>{t('form.title')}</h2>
-                <input
-                  ref={nameField}
-                  name="name"
-                  autoComplete="name"
-                  required
-                  maxLength={80}
-                  value={name}
-                  onChange={(e) => {
-                    setName(e.target.value)
-                    setPicked(null)
-                  }}
-                  placeholder={t('form.name')}
-                  aria-label={t('form.name')}
-                  data-testid="writers-name"
-                  className={FIELD}
-                />
-                <label className="flex h-[50px] items-center rounded-xl border border-thumb bg-field px-[18px] text-[15px] focus-within:border-ink">
-                  <span className="text-muted" aria-hidden="true">
-                    https://
-                  </span>
+                <h2 className={`${HEAD} leading-[1.3] [font-size:calc(24px*var(--hs))]`}>
+                  {t('form.title')}
+                </h2>
+                <div className="mt-4 flex flex-col gap-2.5">
                   <input
-                    name="blog"
-                    type="text"
-                    inputMode="url"
-                    autoComplete="url"
-                    autoCapitalize="off"
-                    spellCheck={false}
+                    ref={nameField}
+                    name="name"
+                    autoComplete="name"
                     required
-                    value={blog}
+                    maxLength={80}
+                    value={name}
                     onChange={(e) => {
-                      setBlog(e.target.value)
+                      setName(e.target.value)
                       setPicked(null)
                     }}
-                    placeholder={t('form.blogPlaceholder')}
-                    aria-label={t('form.blog')}
-                    data-testid="writers-blog"
-                    className="h-full min-w-0 flex-1 bg-transparent px-1 text-ink outline-none placeholder:text-muted"
+                    placeholder={t('form.name')}
+                    aria-label={t('form.name')}
+                    data-testid="writers-name"
+                    className={FIELD}
                   />
-                </label>
-                <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
+                  <label className="flex h-[46px] items-center rounded-[10px] border border-thumb bg-field px-3.5 text-[15px] focus-within:border-ink">
+                    <span className="text-muted" aria-hidden="true">
+                      https://
+                    </span>
+                    <input
+                      name="blog"
+                      type="text"
+                      inputMode="url"
+                      autoComplete="url"
+                      autoCapitalize="off"
+                      spellCheck={false}
+                      required
+                      value={blog}
+                      onChange={(e) => {
+                        setBlog(e.target.value)
+                        setPicked(null)
+                      }}
+                      placeholder={t('form.blogPlaceholder')}
+                      aria-label={t('form.blog')}
+                      data-testid="writers-blog"
+                      className="h-full min-w-0 flex-1 bg-transparent px-0.5 text-ink outline-none placeholder:text-muted"
+                    />
+                  </label>
                   <p
                     aria-live="polite"
-                    className="m-0 min-h-[18px] min-w-0 flex-1 basis-[220px] text-[13px] leading-[18px]"
+                    className="m-0 min-h-5 text-[14px] leading-[1.45] text-ink-2"
                     data-testid="writers-availability"
                     data-status={availability?.status ?? (handle ? 'unknown' : 'none')}
                   >
                     {!typed ? null : !handle ? (
                       <span className="text-muted">{t('availability.none')}</span>
                     ) : availability?.status === 'available' ? (
-                      <span className="inline-flex items-center gap-1 text-accent">
+                      <span className="inline-flex items-center gap-1">
                         <Glyph size={12} className="block shrink-0">
                           {CHECK}
                         </Glyph>
                         {t('availability.available', { handle })}
                       </span>
                     ) : availability ? (
-                      <span className="text-ink-2">
+                      <span>
                         {t(`availability.${availability.status}`, { handle })}
                         {availability.suggestion ? (
                           <>
@@ -246,7 +258,7 @@ export function WritersView({ visitor, ownHandle, blogs, locale, now }: WritersV
                                   type="button"
                                   onClick={() => setPicked(availability.suggestion)}
                                   data-testid="writers-suggestion"
-                                  className="font-medium text-accent underline underline-offset-2 hover:text-accent-strong"
+                                  className="font-medium text-ink underline decoration-underline underline-offset-[3px] hover:decoration-current"
                                 >
                                   {chunks}
                                 </button>
@@ -257,20 +269,26 @@ export function WritersView({ visitor, ownHandle, blogs, locale, now }: WritersV
                       </span>
                     ) : null}
                   </p>
-                  <button type="submit" className={PRIMARY} data-testid="writers-claim">
-                    {t('form.submit')}
-                  </button>
+                  <div>
+                    <button type="submit" className={PILL} data-testid="writers-claim">
+                      {t('form.submit')}
+                    </button>
+                  </div>
                 </div>
               </form>
             ) : (
-              <div className="mt-9 flex max-w-[500px] flex-col gap-4" data-testid="writers-member">
-                <p className="m-0 text-[15px] text-ink-2">{t('member.intro')}</p>
-                <div className="flex flex-wrap gap-3">
-                  <Link to="/claim" className={PRIMARY} data-testid="writers-claim-blog">
+              <div className="mt-8 border-t border-ink pt-3.5" data-testid="writers-member">
+                <p className={`${BODY} text-ink-2`}>{t('member.intro')}</p>
+                <div className="mt-4 flex flex-wrap gap-2.5">
+                  <Link to="/claim" className={PILL} data-testid="writers-claim-blog">
                     {t('member.claim')}
                   </Link>
                   {ownHandle ? (
-                    <Link to={`/@${ownHandle}`} className={QUIET} data-testid="writers-your-card">
+                    <Link
+                      to={`/@${ownHandle}`}
+                      className={PILL_QUIET}
+                      data-testid="writers-your-card"
+                    >
                       {t('member.card')}
                     </Link>
                   ) : null}
@@ -278,29 +296,25 @@ export function WritersView({ visitor, ownHandle, blogs, locale, now }: WritersV
               </div>
             )}
           </div>
-          <div className="flex min-w-0 flex-col items-center gap-3.5">
-            <WriterCard draft={draft} sample={SAMPLE} />
-            <span className="text-center text-[13px] text-muted" data-testid="writer-card-caption">
+          <div className={`${PICTURE} flex-[1_1_380px]`}>
+            <span className={META} data-testid="writer-card-caption">
               {caption}
             </span>
+            <WriterCard draft={draft} sample={SAMPLE} />
           </div>
         </section>
 
         <section
-          className={`${SECTION} grid grid-cols-[repeat(auto-fit,minmax(min(100%,420px),1fr))] items-center gap-x-20 gap-y-12`}
+          className={`${PAIR} mt-[clamp(56px,7vw,80px)] gap-y-7 border-t border-line pt-3.5`}
           data-testid="writers-find"
         >
-          <div className="flex flex-col gap-[18px]">
-            <h2 className="m-0 font-serif text-[38px] leading-[1.04] font-medium tracking-[-0.02em] text-balance md:text-[50px]">
-              {t('find.title')}
-            </h2>
-            <p className="m-0 max-w-[480px] text-[16px] leading-[1.6] text-ink-2 md:text-[17px]">
-              {t('find.intro')}
-            </p>
+          <div className={`${WORDS} flex-[1_1_360px]`}>
+            <h2 className={SIDE_HEAD}>{t('find.title')}</h2>
+            <p className={INTRO}>{t('find.intro')}</p>
           </div>
-          <div className="min-w-0 rounded-2xl border border-line bg-surface px-5 py-2 sm:px-6">
-            <div className={`${LABEL} pt-4 pb-1 text-muted`}>{t('find.label')}</div>
-            <ul className="m-0 list-none p-0">
+          <div className={`${PICTURE} flex-[1_1_380px]`}>
+            <span className={META}>{t('find.label')}</span>
+            <ul className="m-0 list-none rounded-[14px] border border-line bg-surface px-[22px] py-1.5">
               {SAMPLE.activity.map((a, i) => (
                 <ActivityRow
                   key={`${a.kind}-${a.who.handle}`}
@@ -313,130 +327,66 @@ export function WritersView({ visitor, ownHandle, blogs, locale, now }: WritersV
           </div>
         </section>
 
-        <section className={SECTION}>
-          <h2 className={H2}>{t('does.title')}</h2>
-          <ol className="m-0 grid list-none grid-cols-[repeat(auto-fit,minmax(min(100%,280px),1fr))] gap-x-10 gap-y-12 p-0">
-            {(['link', 'blogroll', 'readers'] as const).map((k, i) => (
-              <li key={k} className="flex min-w-0 flex-col gap-3">
-                <span className="font-serif text-[22px] text-accent" aria-hidden="true">
-                  {String(i + 1).padStart(2, '0')}
-                </span>
-                <h3 className="m-0 font-serif text-[27px] leading-[1.15] font-medium">
-                  {t(`does.${k}.title`)}
-                </h3>
-                <p className="m-0 text-[15px] leading-[1.55] text-ink-2">{t(`does.${k}.body`)}</p>
-                {k === 'link' ? (
-                  <span
-                    className="mt-2.5 flex max-w-full items-center gap-2.5 self-start rounded-full border border-line bg-surface py-2 pr-2 pl-[18px] text-[14px]"
-                    data-testid="writers-link-pill"
-                  >
-                    <span className="text-ink-2">{t('does.link.pill')}</span>
-                    <span className="truncate font-semibold text-ink">@{writer.handle}</span>
-                    <span className="rounded-full bg-hover px-2.5 py-[7px] text-ink-2">
-                      <Glyph size={12} className="block">
-                        {EXTERNAL}
-                      </Glyph>
-                    </span>
-                  </span>
-                ) : null}
-                {k === 'blogroll' ? (
-                  <ul className={`${SKETCH} m-0 list-none`} data-testid="writers-roll">
-                    {SAMPLE.roll.map((blog, j) => (
-                      <li
-                        key={blog.name}
-                        className={`flex items-center gap-2.5 py-[11px] ${j ? 'border-t border-line' : ''}`}
-                      >
-                        <span
-                          aria-hidden="true"
-                          className="size-2.5 shrink-0 rounded-[3px]"
-                          style={{ background: blog.color }}
-                        />
-                        <span className="min-w-0 flex-1 truncate font-serif text-[17px]">
-                          {blog.name}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-                {k === 'readers' ? (
-                  <ul className={`${SKETCH} m-0 list-none`} data-testid="writers-readers">
-                    <li className="flex items-center gap-2.5 py-[11px]">
-                      <Swatch id={0} color={SAMPLE.blog.color} title={SAMPLE.blog.name} size={28} />
-                      <span className="flex min-w-0 flex-1 flex-col">
-                        <span className="truncate text-[14px] font-medium">{SAMPLE.blog.name}</span>
-                        <span className="text-[12.5px] text-muted">
-                          {t('does.readers.blogReaders', { n: SAMPLE.blogReaders })}
-                        </span>
-                      </span>
-                    </li>
-                    <li className="flex items-center gap-2.5 border-t border-line py-[11px]">
-                      <PersonAvatar handle={writer.handle} displayName={writer.name} size={28} />
-                      <span className="flex min-w-0 flex-1 flex-col">
-                        <span className="truncate text-[14px] font-medium">{writer.name}</span>
-                        <span className="text-[12.5px] text-muted">
-                          {t('does.readers.followers', { n: SAMPLE.counts.followers })}
-                        </span>
-                      </span>
-                    </li>
-                  </ul>
-                ) : null}
-              </li>
-            ))}
-          </ol>
-        </section>
+        <div className={DOC_COLUMN}>
+          <DocSection id="does" title={t('does.title')}>
+            <DocItems>
+              {(['link', 'blogroll', 'readers'] as const).map((k) => point('does', k))}
+            </DocItems>
+          </DocSection>
+          <DocSection id="how" title={t('how.title')}>
+            <DocItems numbered>
+              {(['name', 'connect', 'follow'] as const).map((k, i) => (
+                <DocItem key={k} id={`how-${k}`} n={i + 1} title={t(`how.${k}.title`)}>
+                  <p className={BODY}>{t(`how.${k}.body`)}</p>
+                </DocItem>
+              ))}
+            </DocItems>
+          </DocSection>
+          <DocSection
+            id="claiming"
+            title={t('claiming.title')}
+            intro={text('claiming.intro', INTRO)}
+          >
+            <DocItems>
+              {(['link', 'meta', 'github'] as const).map((k) => point('claiming', k))}
+            </DocItems>
+            {text('claiming.gives', `${BODY} mt-5`)}
+          </DocSection>
+          <DocSection id="opt-out" title={t('optOut.title')} intro={text('optOut.intro', INTRO)}>
+            <DocItems>
+              {(['translation', 'feedOnly', 'robots', 'email'] as const).map((k) => (
+                <DocItem key={k} id={`opt-out-${k}`} title={t(`optOut.${k}.title`)}>
+                  {text(`optOut.${k}.body`)}
+                  {k === 'robots' ? (
+                    <pre className={PRE} data-testid="writers-robots-snippet">
+                      {ROBOTS_SNIPPET}
+                    </pre>
+                  ) : null}
+                </DocItem>
+              ))}
+            </DocItems>
+          </DocSection>
+          <div className="mt-10 border-t border-line pt-[18px]">
+            <Link to="/bot" className={`${TEXT_LINK} text-[15px]`} data-testid="writers-to-bot">
+              {t('reading.title')}
+              <span aria-hidden="true"> →</span>
+            </Link>
+          </div>
+        </div>
 
-        <section className={SECTION}>
-          <h2 className={H2}>{t('how.title')}</h2>
-          <ol className="m-0 grid list-none grid-cols-[repeat(auto-fit,minmax(min(100%,280px),1fr))] gap-10 p-0">
-            {(['name', 'connect', 'follow'] as const).map((k, i) => (
-              <li key={k} className="flex flex-col gap-2.5 border-t-2 border-ink pt-5">
-                <span
-                  aria-hidden="true"
-                  className="font-serif text-[56px] leading-[0.9] text-accent"
-                >
-                  {i + 1}
-                </span>
-                <h3 className="m-0 mt-2 text-[17px] font-semibold">{t(`how.${k}.title`)}</h3>
-                <p className="m-0 text-[15px] leading-[1.55] text-ink-2">{t(`how.${k}.body`)}</p>
-              </li>
-            ))}
-          </ol>
-        </section>
-
-        <section className="grid items-start gap-x-12 gap-y-8 border-t border-line py-14 sm:grid-cols-2 md:py-[72px] lg:grid-cols-4">
-          <h2 className="m-0 font-serif text-[30px] leading-[1.1] font-medium tracking-[-0.01em] md:text-[34px]">
-            {t('yours.title')}
-          </h2>
-          {(['nothing', 'ads', 'translation'] as const).map((k) => (
-            <div key={k} className="flex flex-col gap-1">
-              <h3 className="m-0 text-[15.5px] font-semibold">{t(`yours.${k}.title`)}</h3>
-              <p className="m-0 text-[14.5px] leading-normal text-ink-2">{t(`yours.${k}.body`)}</p>
-            </div>
-          ))}
-        </section>
-
-        <WritersDetails />
-
-        <section className="flex flex-col items-center gap-7 border-t border-line pt-20 pb-24 text-center md:pt-24 md:pb-28">
+        <section className="mt-[clamp(56px,7vw,88px)] flex flex-col items-start gap-[22px] border-t border-ink pt-7">
           <h2
-            className="m-0 max-w-[780px] font-serif text-[40px] leading-[1.04] font-medium tracking-[-0.02em] text-balance md:text-[58px]"
+            className={`${HEAD} max-w-[24em] leading-[1.25] [font-size:calc(clamp(26px,3.4vw,34px)*var(--hs))]`}
             data-testid="writers-cta-title"
           >
-            {blogs !== null
-              ? t.rich('cta.count', { n: blogs, em: accent })
-              : t.rich('cta.title', { em: accent })}
+            {blogs !== null ? t('cta.count', { n: blogs }) : t('cta.title')}
           </h2>
           {visitor ? (
-            <button
-              type="button"
-              onClick={toForm}
-              className={`${PRIMARY} h-[52px] px-[30px]`}
-              data-testid="writers-make"
-            >
+            <button type="button" onClick={toForm} className={PILL} data-testid="writers-make">
               {t('cta.make')}
             </button>
           ) : (
-            <Link to="/claim" className={`${PRIMARY} h-[52px] px-[30px]`}>
+            <Link to="/claim" className={PILL}>
               {t('member.claim')}
             </Link>
           )}
@@ -447,102 +397,10 @@ export function WritersView({ visitor, ownHandle, blogs, locale, now }: WritersV
   )
 }
 
-const DETAIL_GRID =
-  'm-0 grid list-none grid-cols-[repeat(auto-fit,minmax(min(100%,300px),1fr))] gap-x-12 gap-y-9 p-0'
-const DETAIL_H3 = 'm-0 text-[16px] font-semibold'
-const DETAIL_P = 'm-0 text-[15px] leading-[1.6] text-pretty text-ink-2'
-const DETAIL_INTRO = 'm-0 mb-10 max-w-[680px] text-[16px] leading-[1.6] text-ink-2 md:text-[17px]'
-
-/** One point of a section below the card: a short heading, then what it means. */
-function Detail({ id, title, children }: { id: string; title: string; children: ReactNode }) {
-  return (
-    <li className="flex min-w-0 flex-col gap-2" data-testid={`writers-${id}`}>
-      <h3 className={DETAIL_H3}>{title}</h3>
-      {children}
-    </li>
-  )
-}
-
 /**
- * What a writer needs to know before they let Tela near their blog, or after: how it reads, what
- * it shows, how a claim is proved, and every way to say no (ADR 0061). Each section has its own
- * anchor (`#reading`, `#shows`, `#claiming`, `#opt-out`), the same in every language.
- */
-function WritersDetails() {
-  const t = useTranslations('writers')
-  const mail = (chunks: ReactNode) => <a href={`mailto:${CONTACT}`}>{chunks}</a>
-  const p = (key: string) => <p className={DETAIL_P}>{t.rich(key, { code, mail })}</p>
-  return (
-    <>
-      <section id="reading" className={`${SECTION} scroll-mt-14`} data-testid="writers-reading">
-        <h2 className={H2_LED}>{t('reading.title')}</h2>
-        <p className={DETAIL_INTRO}>{t('reading.intro')}</p>
-        <ul className={DETAIL_GRID}>
-          {(['agent', 'often', 'changed', 'errors', 'images', 'pages'] as const).map((k) => (
-            <Detail key={k} id={`reading-${k}`} title={t(`reading.${k}.title`)}>
-              {p(`reading.${k}.body`)}
-            </Detail>
-          ))}
-        </ul>
-      </section>
-
-      <section id="shows" className={`${SECTION} scroll-mt-14`} data-testid="writers-shows">
-        <h2 className={H2}>{t('shows.title')}</h2>
-        <ul className={DETAIL_GRID}>
-          {(['public', 'members', 'translation'] as const).map((k) => (
-            <Detail key={k} id={`shows-${k}`} title={t(`shows.${k}.title`)}>
-              {p(`shows.${k}.body`)}
-            </Detail>
-          ))}
-        </ul>
-      </section>
-
-      <section id="claiming" className={`${SECTION} scroll-mt-14`} data-testid="writers-claiming">
-        <h2 className={H2_LED}>{t('claiming.title')}</h2>
-        <p className={DETAIL_INTRO}>{t('claiming.intro')}</p>
-        <ul className={DETAIL_GRID}>
-          {(['link', 'meta', 'github'] as const).map((k) => (
-            <Detail key={k} id={`claiming-${k}`} title={t(`claiming.${k}.title`)}>
-              {p(`claiming.${k}.body`)}
-            </Detail>
-          ))}
-        </ul>
-        <div className="mt-10 flex max-w-[680px] flex-col gap-3">
-          {p('claiming.check')}
-          {p('claiming.gives')}
-        </div>
-      </section>
-
-      <section id="opt-out" className={`${SECTION} scroll-mt-14`} data-testid="writers-opt-out">
-        <h2 className={H2_LED}>{t('optOut.title')}</h2>
-        <p className={DETAIL_INTRO}>{t('optOut.intro')}</p>
-        <ul className={DETAIL_GRID}>
-          {(['translation', 'feedOnly', 'robots', 'email'] as const).map((k) => (
-            <Detail key={k} id={`opt-out-${k}`} title={t(`optOut.${k}.title`)}>
-              {p(`optOut.${k}.body`)}
-              {k === 'robots' ? (
-                <>
-                  <pre
-                    className="m-0 overflow-x-auto rounded-lg border border-line bg-surface px-4 py-3 text-[13px]"
-                    data-testid="writers-robots-snippet"
-                  >
-                    {ROBOTS_SNIPPET}
-                  </pre>
-                  {p('optOut.robots.after')}
-                </>
-              ) : null}
-            </Detail>
-          ))}
-        </ul>
-      </section>
-    </>
-  )
-}
-
-/**
- * One row of the sample's Following page, as the page draws the real one: who, what, when, then
- * the post or the blog, and the note a recommendation carried. Text only: the sample's posts are
- * no one's, so nothing here links.
+ * One row of the sample's Following page, as the page draws the real one: who did what, when,
+ * then the post or the blog, and the note a recommendation carried, upright. Text only: the
+ * sample's posts are no one's, so nothing here links.
  */
 function ActivityRow({
   item,
@@ -558,25 +416,23 @@ function ActivityRow({
   const { who } = item
   return (
     <li
-      className={`grid grid-cols-[34px_minmax(0,1fr)] gap-3 py-4 ${first ? '' : 'border-t border-line'}`}
+      className={`grid grid-cols-[32px_minmax(0,1fr)] gap-3 py-4 ${first ? '' : 'border-t border-line-soft'}`}
       data-testid="writers-activity"
       data-kind={item.kind}
     >
-      <PersonAvatar handle={who.handle} displayName={who.name} size={34} />
+      <PersonAvatar handle={who.handle} displayName={who.name} size={32} />
       <div className="flex min-w-0 flex-col gap-[5px]">
-        <div className="text-[13.5px] leading-[1.45] text-ink-2">
-          <b className="font-semibold text-ink">{who.name}</b>
-          <span className="text-muted"> {item.writes.name}</span>
-          {' · '}
-          {t(`find.${item.kind}`, { source: item.blog.name })}
-          <span className="text-muted"> · {when}</span>
+        <div className="text-[13.5px] leading-[1.45] text-ink-2 [overflow-wrap:anywhere]">
+          <b className="font-medium text-ink">{who.name}</b>{' '}
+          {t(`find.${item.kind}`, { source: item.blog.name })}{' '}
+          <span className="whitespace-nowrap text-muted">·&nbsp;{when}</span>
         </div>
-        <span className="font-serif text-[19px] leading-[1.25] font-medium text-ink">
+        <span className="font-serif leading-(--lh-h) text-ink [font-size:calc(19px*var(--ts))] [font-weight:var(--hw)]">
           {item.post ? t(`sample.posts.${item.post}`) : item.blog.name}
         </span>
         {item.note ? (
           <p
-            className="m-0 border-l-2 border-accent pl-3 font-serif text-[16.5px] leading-[1.4] text-ink-2 italic"
+            className="m-0 font-serif leading-(--lh-h) text-body [font-size:calc(16.5px*var(--ts))]"
             data-testid="writers-note"
           >
             {tc('quoted', { text: item.note })}

@@ -21,8 +21,9 @@
   // and Blogrolls, ADR 0050). "/l/*" is a blogroll's page (ADR 0050), and its feeds,
   // `/l/<id>.rss` and `/l/<id>.opml`; Discover's two feeds are listed by name (ADR 0062). Each
   // sitemap is named on its own, at the root where a sitemap must sit to list the whole site,
-  // and so is llms.txt (ADR 0060). "/writers" is For writers, exactly that path (ADR 0061);
-  // "/join" never is, since its `?code=` must not reach a log.
+  // and so is llms.txt (ADR 0060). "/writers" is For writers, exactly that path (ADR 0061), and
+  // "/bot" is How Tela reads your blog (ADR 0070); "/join" never is, since its `?code=` must not
+  // reach a log.
   "assets": {
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
@@ -52,7 +53,8 @@
       "/about",
       "/privacy",
       "/terms",
-      "/writers"
+      "/writers",
+      "/bot"
     ]
   },
   "r2_buckets": [{ "binding": "BLOBS", "bucket_name": "tela-content" }],

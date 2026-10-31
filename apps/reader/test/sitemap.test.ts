@@ -238,6 +238,7 @@ describe('the sitemaps at the edge', () => {
       `${ORIGIN}/privacy`,
       `${ORIGIN}/terms`,
       `${ORIGIN}/writers`,
+      `${ORIGIN}/bot`,
     ])
     expect(asked).toEqual([])
   })

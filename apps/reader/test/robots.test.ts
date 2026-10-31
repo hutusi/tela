@@ -120,6 +120,7 @@ describe('robots.txt', () => {
         '/@ann',
         '/about',
         '/writers',
+        '/bot',
         '/sitemap.xml',
         '/llms.txt',
       ]) {
@@ -145,7 +146,7 @@ describe('robots.txt', () => {
 
   test("keeps training crawlers to Tela's own pages, off everything that shows writers' work", () => {
     for (const agent of TRAINING_AGENTS) {
-      for (const path of ['/about', '/privacy', '/terms', '/writers', '/llms.txt']) {
+      for (const path of ['/about', '/privacy', '/terms', '/writers', '/bot', '/llms.txt']) {
         expect([agent, path, allowed(OPEN, agent, path)]).toEqual([agent, path, true])
       }
       for (const path of [
@@ -165,6 +166,7 @@ describe('robots.txt', () => {
       }
     }
     expect(OWN_PAGES).toContain('/writers')
+    expect(OWN_PAGES).toContain('/bot')
   })
 
   test('reads the same to a parser that takes the first matching rule', () => {
@@ -176,6 +178,7 @@ describe('robots.txt', () => {
       '/@ann',
       '/about',
       '/writers',
+      '/bot',
       '/llms.txt',
       '/sitemap.xml',
       '/api/v1/public/discover',

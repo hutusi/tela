@@ -438,6 +438,13 @@ The account is on Workers Paid. Run wrangler from a real terminal (`wrangler log
        Engineering as two blogs, `/s/409` reading Anthropic Research; that Add, given
        `https://www.anthropic.com/engineering`, offers Engineering only, and given
        `https://www.anthropic.com`, both; and that the five new blogs have posts.
+   - The public pages to Tela Public (ADR 0070): tela-web only. No migration, no `MIN_CLIENT` bump,
+     and `run_worker_first` gains `/bot`.
+     - Rolling back: tela-web alone. An older build has no `/bot`, which its single-page fallback
+       answers with the app's Not found; For writers then holds the reading sections again.
+     - After deploy, check that `/`, `/writers` and `/bot` render with JavaScript off, that
+       `/writers#reading` lands on `/bot#reading` once the app runs, and that the sitemap and
+       robots.txt name `/bot`.
    - Protocol 2 (2026-09-29) keeps each device's copy in IndexedDB `tela-2`; earlier shells use
      `tela`, which the newer shell empties at each boot and marks as seen. A tela-web rollback
      leaves the `tela-2` copies in place, and the older shell starts over in `tela`. On the way
@@ -1359,13 +1366,14 @@ repository.
 
 ## Search engines and AI
 
-- **What is indexed** (ADR 0060): the landing page, Discover, the info pages, For writers, blogs
+- **What is indexed** (ADR 0060): the landing page, Discover, the info pages, For writers and How
+  Tela reads your blog (`/bot`), blogs
   an operator listed or curated, public blogrolls that Discover would list, and profiles of
   accounts in good standing at least 7 days old. Everything else says `noindex`. While
   `TELA_NOINDEX` is set, nothing is.
 - **robots.txt** welcomes search engines and AI answer tools (OAI-SearchBot, ChatGPT-User,
   Claude-SearchBot, Claude-User, PerplexityBot…) on every public page, and lets AI training
-  crawlers read only Tela's own copy (`/about`, `/privacy`, `/terms`, `/writers`, `/llms.txt`;
+  crawlers read only Tela's own copy (`/about`, `/privacy`, `/terms`, `/writers`, `/bot`, `/llms.txt`;
   not `/`, whose edition is writers' work): writers' titles and excerpts are not Tela's to give
   for training. It ends with
   `Content-Signal: search=yes, ai-input=yes, ai-train=no` and the sitemap.

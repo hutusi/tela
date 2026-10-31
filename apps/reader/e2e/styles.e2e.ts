@@ -817,3 +817,141 @@ test.describe('stylesheet', () => {
     expect(await size()).toBe('19.5px')
   })
 })
+
+// The front page, For writers and How Tela reads your blog, as Tela Public draws them (ADR 0070):
+// type on the page's own ground in either theme, links in ink, nothing slanted, and no page wider
+// than the window at a phone's width, the header's breakpoint or a desktop's.
+test.describe('the public pages', () => {
+  for (const scheme of ['light', 'dark'] as const) {
+    test(`fit every width, in ink and upright (${scheme})`, async ({ browser }) => {
+      const visitor = await browser.newContext({
+        storageState: { cookies: [], origins: [] },
+        colorScheme: scheme,
+      })
+      try {
+        const page = await visitor.newPage()
+        for (const path of ['/', '/writers', '/bot']) {
+          for (const width of [412, 768, 1280]) {
+            await page.setViewportSize({ width, height: 900 })
+            await page.goto(path)
+            await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+            const wider = await page.evaluate(
+              () => document.documentElement.scrollWidth - window.innerWidth,
+            )
+            expect([path, width, wider]).toEqual([path, width, 0])
+          }
+          const main = page.locator('main')
+          const slanted = await main.evaluate(
+            (m) =>
+              [...m.querySelectorAll('*')].filter((e) => getComputedStyle(e).fontStyle !== 'normal')
+                .length,
+          )
+          expect([path, slanted]).toEqual([path, 0])
+          // No link in the page is green: green is the logo's alone (Tela Public).
+          const accent = await page.evaluate(() => {
+            const probe = document.createElement('span')
+            probe.className = 'text-accent'
+            document.body.append(probe)
+            const colour = getComputedStyle(probe).color
+            probe.remove()
+            return colour
+          })
+          const green = await main
+            .locator('a')
+            .evaluateAll(
+              (links, colour) =>
+                links.filter((a) => getComputedStyle(a).color === colour).map((a) => a.textContent),
+              accent,
+            )
+          expect([path, green]).toEqual([path, []])
+        }
+      } finally {
+        await visitor.close()
+      }
+    })
+  }
+
+  test("a long byline breaks inside a phone's width", async ({ browser }) => {
+    const visitor = await browser.newContext({
+      storageState: { cookies: [], origins: [] },
+      viewport: { width: 360, height: 800 },
+    })
+    try {
+      const page = await visitor.newPage()
+      // An edition of its own, since the stack's may be empty this early: five posts whose feeds
+      // name several authors and no one has claimed, so the lead and the column beside it carry
+      // the byline.
+      const AUTHORS = 'Christopher Montgomery-Fitzwilliam, Anna-Katharina Oberhauser and Editors'
+      const post = (id: number) => ({
+        article: {
+          id,
+          feedId: id,
+          url: `https://blog-${id}.example/post`,
+          title: `A post about the long names of things, number ${id}`,
+          author: AUTHORS,
+          publishedAt: 0,
+          fetchedAt: 0,
+          sortAt: Date.now() - id * 3_600_000,
+          sourceLang: 'en',
+          excerpt: 'A short excerpt of the post.',
+          contentKey: null,
+          wordCount: 900,
+          readingMinutes: 4,
+          extractState: 'done',
+          likeCount: 0,
+          recommendCount: 0,
+          seq: 1,
+        },
+        site: {
+          id,
+          title: `Blog ${id}`,
+          homeUrl: `https://blog-${id}.example`,
+          faviconKey: null,
+          primaryLang: 'en',
+        },
+        claimant: null,
+      })
+      await page.route('**/api/v1/public/front', (route) =>
+        route.fulfill({
+          json: {
+            counts: { blogs: 5 },
+            week: { blogs: 5, languages: 1, posts: 5 },
+            edition: { span: 'week', posts: [1, 2, 3, 4, 5].map(post) },
+          },
+        }),
+      )
+      await page.goto('/')
+      await expect(page.getByText(AUTHORS).first()).toBeVisible()
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth),
+      ).toBe(0)
+    } finally {
+      await visitor.close()
+    }
+  })
+
+  test('a Chinese page sets its title a step smaller, at its own weight', async ({ browser }) => {
+    const visitor = await browser.newContext({
+      storageState: { cookies: [], origins: [] },
+      viewport: { width: 1280, height: 900 },
+    })
+    try {
+      const page = await visitor.newPage()
+      const title = () =>
+        page
+          .getByRole('heading', { level: 1 })
+          .evaluate((h) => [
+            Number.parseFloat(getComputedStyle(h).fontSize),
+            getComputedStyle(h).fontWeight,
+          ])
+      await page.goto('/bot?hl=en')
+      const [en, enWeight] = await title()
+      await page.goto('/bot?hl=zh-Hans')
+      const [zh, zhWeight] = await title()
+      expect(Number(zh) / Number(en)).toBeCloseTo(0.82, 2)
+      expect([enWeight, zhWeight]).toEqual(['500', '600'])
+    } finally {
+      await visitor.close()
+    }
+  })
+})

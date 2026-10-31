@@ -56,7 +56,7 @@ test.beforeAll(async () => {
 test.describe('For writers, without JavaScript (ADR 0061)', () => {
   test.use({ ...visitor(23), javaScriptEnabled: false })
 
-  test('is whole from the edge: the form, how Tela reads a blog, and every way to say no', async ({
+  test('is whole from the edge: the form, how a claim is proved, and every way to say no', async ({
     page,
   }) => {
     const res = await page.goto('/writers')
@@ -65,12 +65,8 @@ test.describe('For writers, without JavaScript (ADR 0061)', () => {
     await expect(page).toHaveTitle('For writers · Tela')
     await expect(page.locator('#tela-data')).toHaveCount(0)
     await expect(page.getByTestId('writers-form')).toBeVisible()
-    await expect(page.getByTestId('writers-reading-agent')).toContainText(
-      'Tela/0.1 (+https://telaread.com; feed reader)',
-    )
-    await expect(page.getByTestId('writers-reading-pages')).toContainText(
-      'fetches each new post’s public page once, soon after the feed lists it',
-    )
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Your calling card.')
+    await expect(page.getByTestId('writers-claiming-meta')).toContainText('tela-site-verification')
     await expect(page.getByTestId('writers-robots-snippet')).toHaveText(
       'User-agent: Tela\nDisallow: /',
     )
@@ -81,9 +77,31 @@ test.describe('For writers, without JavaScript (ADR 0061)', () => {
       'href',
       'mailto:me@hutu.si',
     )
+    // How Tela reads a blog is a page of its own (ADR 0070), a link away.
+    await expect(page.locator('#reading')).toHaveCount(0)
+    await expect(page.getByTestId('writers-to-bot')).toHaveAttribute('href', '/bot')
     // The anchor is in the page the edge sent, so the browser lands on it by itself.
     await page.goto('/writers#opt-out')
     await expect(page.locator('#opt-out')).toBeInViewport()
+  })
+
+  test('How Tela reads your blog is whole from the edge too (ADR 0070)', async ({ page }) => {
+    const res = await page.goto('/bot')
+    expect(res?.status()).toBe(200)
+    await expect(page).toHaveTitle('How Tela reads your blog · Tela')
+    await expect(page.locator('#tela-data')).toHaveCount(0)
+    await expect(page.getByTestId('writers-reading-agent')).toContainText(
+      'Tela/0.1 (+https://telaread.com; feed reader)',
+    )
+    await expect(page.getByTestId('writers-reading-pages')).toContainText(
+      'fetches each new post’s public page once, soon after the feed lists it',
+    )
+    await expect(page.getByTestId('writers-shows-public')).toContainText(
+      'never show a post in full',
+    )
+    await expect(page.getByTestId('bot-to-writers')).toHaveAttribute('href', '/writers')
+    await page.goto('/bot#shows')
+    await expect(page.locator('#shows')).toBeInViewport()
   })
 
   test('in the language the browser asks for', async ({ page, context }) => {
@@ -121,14 +139,11 @@ test.describe('For writers, for a visitor', () => {
     await expect(find.getByTestId('writers-activity')).toHaveCount(4)
     await expect(find.getByTestId('writers-activity').first()).toContainText('12m ago')
     await expect(find.getByTestId('writers-note')).toHaveCount(2)
-    await expect(page.getByTestId('writers-roll').locator('li')).toHaveCount(4)
-    await expect(page.getByTestId('writers-readers')).toContainText('61 readers on Tela')
 
     // None of it is anyone's: no link to a profile, a post or a blog that is not there.
-    for (const id of ['writer-card', 'writers-find', 'writers-roll', 'writers-readers']) {
+    for (const id of ['writer-card', 'writers-find']) {
       await expect(page.getByTestId(id).locator('a')).toHaveCount(0)
     }
-    await expect(page.getByTestId('writers-link-pill')).not.toHaveAttribute('href', /.*/)
 
     // The closing call goes back to the form, ready to type in.
     await page.getByTestId('writers-make').click()
@@ -150,6 +165,24 @@ test.describe('For writers, for a visitor', () => {
       '一张示例名片。输入你的名字，看看你的。',
     )
     await expect(page.getByTestId('writers-find')).toContainText('清晨六点，格兰大道上能听到什么')
+  })
+
+  test('sends an old link to a section that moved on to How Tela reads your blog (ADR 0070)', async ({
+    page,
+  }) => {
+    // A point far down the page, so landing on it means the page scrolled to it.
+    await page.goto('/writers#shows-translation')
+    await expect(page).toHaveURL(/\/bot#shows-translation$/)
+    await expect(page.getByTestId('writers-shows-translation')).toBeInViewport()
+    expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(400)
+    // An address that fixed the language still does after the move (ADR 0060).
+    await page.goto('/writers?hl=fr#shows-translation')
+    await expect(page).toHaveURL(/\/bot\?hl=fr#shows-translation$/)
+    await expect(page.locator('html')).toHaveAttribute('lang', 'fr')
+    await page.reload()
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Comment Tela lit votre blog')
+    // The header's For writers pill still says where the visitor is.
+    await expect(page.getByTestId('nav-writers')).toHaveClass(/(^|\s)bg-hover(\s|$)/)
   })
 
   test('checks the handle as the visitor types, and offers another when it is taken', async ({
